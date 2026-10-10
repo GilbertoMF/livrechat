@@ -27,6 +27,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
@@ -39,6 +43,8 @@ fun ChatScreen(
 ) {
     var textInput by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    var typingDebounceJob by remember { mutableStateOf<Job?>(null) }
 
     val currentFlow by viewModel.messagesFlow.collectAsState()
     val messages by currentFlow.collectAsState(initial = emptyList())
@@ -46,6 +52,14 @@ fun ChatScreen(
 
     LaunchedEffect(conversationId) {
         viewModel.selectConversation(conversationId)
+    }
+
+    DisposableEffect(conversationId) {
+        onDispose {
+            typingDebounceJob?.cancel()
+            viewModel.sendTyping(false)
+            viewModel.unselectConversation()
+        }
     }
 
     LaunchedEffect(messages.size) {
@@ -106,7 +120,17 @@ fun ChatScreen(
                         value = textInput,
                         onValueChange = {
                             textInput = it
-                            viewModel.sendTyping(it.isNotBlank())
+                            if (it.isNotBlank()) {
+                                viewModel.sendTyping(true)
+                                typingDebounceJob?.cancel()
+                                typingDebounceJob = scope.launch {
+                                    delay(2500)
+                                    viewModel.sendTyping(false)
+                                }
+                            } else {
+                                typingDebounceJob?.cancel()
+                                viewModel.sendTyping(false)
+                            }
                         },
                         placeholder = { Text("Digite uma mensagem...", fontSize = 14.sp) },
                         maxLines = 4,
@@ -119,6 +143,7 @@ fun ChatScreen(
                     IconButton(
                         onClick = {
                             if (textInput.isNotBlank()) {
+                                typingDebounceJob?.cancel()
                                 viewModel.sendMessage(conversationId, textInput.trim())
                                 textInput = ""
                                 viewModel.sendTyping(false)
@@ -231,7 +256,7 @@ fun MessageStatusIcon(status: String) {
             Icon(
                 imageVector = Icons.Default.DoneAll,
                 contentDescription = "Lido",
-                tint = BlueAccent,
+                tint = Color(0xFF34B7F1),
                 modifier = Modifier.size(15.dp)
             )
         }

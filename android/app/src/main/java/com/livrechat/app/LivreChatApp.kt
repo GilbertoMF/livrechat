@@ -4,9 +4,15 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import com.google.gson.JsonObject
 import com.livrechat.app.data.local.AppDatabase
 import com.livrechat.app.data.local.PreferencesManager
+import com.livrechat.app.data.local.entity.MessageEntity
 import com.livrechat.app.data.remote.ApiClient
+import com.livrechat.app.data.remote.ConnectionManager
+import com.livrechat.app.data.remote.WebSocketClient
+import com.livrechat.app.data.remote.WebSocketEventsListener
+import com.livrechat.app.notification.LivreChatNotificationManager
 
 class LivreChatApp : Application() {
 
@@ -19,6 +25,9 @@ class LivreChatApp : Application() {
     lateinit var apiClient: ApiClient
         private set
 
+    lateinit var connectionManager: ConnectionManager
+        private set
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -27,7 +36,29 @@ class LivreChatApp : Application() {
         preferencesManager = PreferencesManager(this)
         apiClient = ApiClient(preferencesManager)
 
-        createNotificationChannels()
+        LivreChatNotificationManager.initChannels(this)
+
+        val dummyListener = object : WebSocketEventsListener {
+            override fun onConnected() {}
+            override fun onDisconnected() {}
+            override fun onMessageReceived(message: MessageEntity) {}
+            override fun onMessageAck(messageId: String, clientMessageId: String?, status: String) {}
+            override fun onMessageReceipt(messageId: String, status: String, userId: String) {}
+            override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean) {}
+            override fun onIncomingCall(callerId: String, callerUsername: String, callerDisplayName: String, callerAvatarUrl: String?, sdp: String) {}
+            override fun onCallAnswered(calleeId: String, sdp: String) {}
+            override fun onIceCandidateReceived(fromUserId: String, candidate: JsonObject) {}
+            override fun onCallRinging(fromUserId: String) {}
+            override fun onCallRejected(fromUserId: String, reason: String) {}
+            override fun onCallEnded(fromUserId: String) {}
+        }
+        val ws = WebSocketClient(preferencesManager, dummyListener)
+        connectionManager = ConnectionManager(this, ws)
+        ws.setListener(connectionManager)
+
+        if (preferencesManager.isLoggedIn()) {
+            connectionManager.connect()
+        }
     }
 
     private fun createNotificationChannels() {

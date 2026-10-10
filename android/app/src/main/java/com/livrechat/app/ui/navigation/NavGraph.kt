@@ -188,7 +188,10 @@ fun LivreChatNavGraph(
 
         composable(Routes.QR_CODE) {
             QRCodeScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToChat = { convId, userId, name ->
+                    navController.navigate("chat/$convId/$userId/$name")
+                }
             )
         }
 

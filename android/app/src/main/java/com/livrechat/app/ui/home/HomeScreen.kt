@@ -45,6 +45,7 @@ fun HomeScreen(
     val conversations by chatViewModel.conversationsFlow.collectAsState(initial = emptyList())
     val callHistory by callViewModel.callHistoryFlow.collectAsState(initial = emptyList())
     val isConnected by chatViewModel.isConnected.collectAsState()
+    val typingStatus by chatViewModel.typingStatus.collectAsState()
 
     Scaffold(
         topBar = {
@@ -143,8 +144,10 @@ fun HomeScreen(
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
                         items(conversations, key = { it.id }) { conv ->
+                            val isTyping = typingStatus[conv.id] == true
                             ConversationItem(
                                 conversation = conv,
+                                isTyping = isTyping,
                                 onClick = {
                                     onNavigateToChat(conv.id, conv.otherUserId, conv.otherDisplayName)
                                 }
@@ -198,6 +201,7 @@ fun HomeScreen(
 @Composable
 fun ConversationItem(
     conversation: ConversationEntity,
+    isTyping: Boolean = false,
     onClick: () -> Unit
 ) {
     Row(
@@ -260,14 +264,25 @@ fun ConversationItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = conversation.lastMessageContent ?: "Sem mensagens ainda",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
+                if (isTyping) {
+                    Text(
+                        text = "digitando...",
+                        fontSize = 14.sp,
+                        color = Color(0xFF34B7F1),
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    Text(
+                        text = conversation.lastMessageContent ?: "Sem mensagens ainda",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
 
                 if (conversation.unreadCount > 0) {
                     Surface(

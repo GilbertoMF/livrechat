@@ -37,31 +37,36 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
     private val _isContactTyping = MutableStateFlow(false)
     val isContactTyping: StateFlow<Boolean> = _isContactTyping.asStateFlow()
 
-    private val _isConnected = MutableStateFlow(false)
-    val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
-
-    var webSocketClient: WebSocketClient? = null
+    private val connectionManager = app.connectionManager
+    val isConnected: StateFlow<Boolean> = connectionManager.isConnected
+    val typingStatus: StateFlow<Map<String, Boolean>> = connectionManager.typingStatus
 
     init {
-        initWebSocket()
+        connectionManager.registerListener(this)
         syncConversations()
-    }
-
-    private fun initWebSocket() {
-        if (prefs.isLoggedIn()) {
-            webSocketClient = WebSocketClient(prefs, this)
-            webSocketClient?.connect()
-        }
     }
 
     fun selectConversation(conversationId: String) {
         _currentConversationId.value = conversationId
+        connectionManager.setActiveConversation(conversationId)
         _messagesFlow.value = db.messageDao().getMessagesForConversationFlow(conversationId)
 
         viewModelScope.launch(Dispatchers.IO) {
             db.conversationDao().clearUnreadCount(conversationId)
+            // Marcar todas as mensagens recebidas como lidas e notificar remetente com 2 ticks azuis
+            val unreadList = db.messageDao().getUnreadIncomingMessages(conversationId)
+            db.messageDao().markAllIncomingAsRead(conversationId)
+            for (msg in unreadList) {
+                connectionManager.getClient().sendReceipt(msg.id, "read")
+                try { apiService.markMessageRead(msg.id) } catch (e: Exception) {}
+            }
             syncMessagesForConversation(conversationId)
         }
+    }
+
+    fun unselectConversation() {
+        _currentConversationId.value = null
+        connectionManager.setActiveConversation(null)
     }
 
     fun syncConversations() {
@@ -148,14 +153,14 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
             db.conversationDao().updateLastMessage(conversationId, text, now)
 
             // Try sending via WebSocket
-            val wsSent = webSocketClient?.sendChatMessage(
+            val wsSent = connectionManager.getClient().sendChatMessage(
                 conversationId = conversationId,
                 content = text,
                 iv = null,
                 messageType = "text",
                 replyToId = replyToId,
                 clientMessageId = clientMessageId
-            ) ?: false
+            )
 
             if (!wsSent) {
                 // Fallback to REST API
@@ -182,47 +187,30 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
 
     fun sendTyping(isTyping: Boolean) {
         val convId = _currentConversationId.value ?: return
-        webSocketClient?.sendTyping(convId, isTyping)
+        connectionManager.getClient().sendTyping(convId, isTyping)
     }
 
     fun markMessageRead(messageId: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            webSocketClient?.sendReceipt(messageId, "read")
+            connectionManager.getClient().sendReceipt(messageId, "read")
             apiService.markMessageRead(messageId)
         }
     }
 
     // WebSocketEventsListener implementations
-    override fun onConnected() {
-        _isConnected.value = true
-    }
-
-    override fun onDisconnected() {
-        _isConnected.value = false
-    }
+    override fun onConnected() {}
+    override fun onDisconnected() {}
 
     override fun onMessageReceived(message: MessageEntity) {
-        viewModelScope.launch(Dispatchers.IO) {
-            db.messageDao().insertOrUpdate(message)
-            db.conversationDao().updateLastMessage(message.conversationId, message.content, message.createdAt)
-            // Auto mark read if conversation is open
-            if (_currentConversationId.value == message.conversationId) {
-                markMessageRead(message.id)
-            }
-        }
+        // Handled centrally by ConnectionManager for Room & Notifications
     }
 
     override fun onMessageAck(messageId: String, clientMessageId: String?, status: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val targetId = clientMessageId ?: messageId
-            db.messageDao().updateStatus(targetId, status)
-        }
+        // Handled centrally by ConnectionManager
     }
 
     override fun onMessageReceipt(messageId: String, status: String, userId: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            db.messageDao().updateStatus(messageId, status)
-        }
+        // Handled centrally by ConnectionManager
     }
 
     override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean) {
@@ -240,6 +228,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
 
     override fun onCleared() {
         super.onCleared()
-        webSocketClient?.disconnect()
+        connectionManager.setActiveConversation(null)
+        connectionManager.unregisterListener(this)
     }
 }

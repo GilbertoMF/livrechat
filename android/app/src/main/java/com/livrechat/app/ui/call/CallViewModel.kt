@@ -59,14 +59,11 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
 
     private var timerJob: Job? = null
     private var webRTCManager: WebRTCManager? = null
-    var webSocketClient: WebSocketClient? = null
+    private val connectionManager = app.connectionManager
 
     init {
         webRTCManager = WebRTCManager(app, this)
-        if (prefs.isLoggedIn()) {
-            webSocketClient = WebSocketClient(prefs, this)
-            webSocketClient?.connect()
-        }
+        connectionManager.registerListener(this)
         loadIceServers()
     }
 
@@ -120,7 +117,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     fun rejectIncomingCall() {
         val info = _callInfo.value
         if (info != null) {
-            webSocketClient?.sendCallReject(info.contactUserId, "Chamada recusada")
+            connectionManager.getClient().sendCallReject(info.contactUserId, "Chamada recusada")
             recordCall(info, "rejected", 0)
         }
         cleanupCall()
@@ -130,7 +127,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
         val info = _callInfo.value
         val duration = _durationSeconds.value
         if (info != null) {
-            webSocketClient?.sendCallHangup(info.contactUserId, duration)
+            connectionManager.getClient().sendCallHangup(info.contactUserId, duration)
             recordCall(info, "completed", duration)
         }
         webRTCManager?.endCall()
@@ -195,9 +192,9 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     override fun onLocalDescriptionCreated(sdp: SessionDescription) {
         val info = _callInfo.value ?: return
         if (info.isOutgoing) {
-            webSocketClient?.sendCallOffer(info.contactUserId, sdp.description)
+            connectionManager.getClient().sendCallOffer(info.contactUserId, sdp.description)
         } else {
-            webSocketClient?.sendCallAnswer(info.contactUserId, sdp.description)
+            connectionManager.getClient().sendCallAnswer(info.contactUserId, sdp.description)
         }
     }
 
@@ -208,7 +205,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
             addProperty("sdpMLineIndex", candidate.sdpMLineIndex)
             addProperty("candidate", candidate.sdp)
         }
-        webSocketClient?.sendIceCandidate(info.contactUserId, json)
+        connectionManager.getClient().sendIceCandidate(info.contactUserId, json)
     }
 
     override fun onError(message: String) {
@@ -226,7 +223,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
             remoteSdp = sdp
         )
         _callState.value = CallState.RINGING
-        webSocketClient?.sendCallRinging(callerId)
+        connectionManager.getClient().sendCallRinging(callerId)
     }
 
     override fun onCallAnswered(calleeId: String, sdp: String) {
@@ -269,6 +266,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
 
     override fun onCleared() {
         super.onCleared()
+        connectionManager.unregisterListener(this)
         webRTCManager?.endCall()
     }
 }
