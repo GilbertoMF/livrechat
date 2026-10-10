@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
@@ -47,6 +48,8 @@ fun RegisterScreen(
     var displayName by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var showServerConfig by remember { mutableStateOf(false) }
+    var customServerUrl by remember { mutableStateOf("https://livrechat-server.onrender.com") }
 
     val uiState by viewModel.uiState.collectAsState()
 
@@ -145,6 +148,11 @@ fun RegisterScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Voltar")
                     }
+                },
+                actions = {
+                    IconButton(onClick = { showServerConfig = !showServerConfig }) {
+                        Icon(Icons.Default.Settings, contentDescription = "Configurar Servidor")
+                    }
                 }
             )
         }
@@ -157,6 +165,19 @@ fun RegisterScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            if (showServerConfig) {
+                OutlinedTextField(
+                    value = customServerUrl,
+                    onValueChange = {
+                        customServerUrl = it
+                        viewModel.setServerUrl(it)
+                    },
+                    label = { Text("Endereço do Servidor (API/WS)") },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+
             Text(
                 text = "Sem número de telefone",
                 fontSize = 22.sp,
