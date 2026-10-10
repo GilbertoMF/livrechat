@@ -1,16 +1,16 @@
 import { Server as HttpServer } from 'http';
-import { WebSocketServer, WebSocket } from 'ws';
+import WebSocket, { WebSocketServer } from 'ws';
 import url from 'url';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { CONFIG } from '../config/env';
 import { db, Message } from '../db/database';
 
-interface AuthenticatedSocket extends WebSocket {
+export type AuthenticatedSocket = WebSocket & {
   userId?: string;
   username?: string;
   isAlive?: boolean;
-}
+};
 
 export class WebSocketManager {
   private wss: WebSocketServer;
@@ -59,7 +59,7 @@ export class WebSocketManager {
         });
 
         // Handle Messages
-        ws.on('message', async (raw) => {
+        ws.on('message', async (raw: any) => {
           try {
             const data = JSON.parse(raw.toString());
             await this.handleIncomingEvent(ws, data);
@@ -88,7 +88,7 @@ export class WebSocketManager {
 
     // Heartbeat Interval to clean dead sockets
     setInterval(() => {
-      this.wss.clients.forEach((client) => {
+      this.wss.clients.forEach((client: any) => {
         const authWs = client as AuthenticatedSocket;
         if (authWs.isAlive === false) {
           return authWs.terminate();
@@ -335,7 +335,7 @@ export class WebSocketManager {
 
   public broadcast(payload: any) {
     const message = JSON.stringify(payload);
-    this.wss.clients.forEach(client => {
+    this.wss.clients.forEach((client: any) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(message);
       }
