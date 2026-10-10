@@ -1,0 +1,13 @@
+# Node
+node_modules/
+dist/
+data/
+.env
+
+# Android
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/

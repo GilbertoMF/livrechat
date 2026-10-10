@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LivreChat</string>
+    <string name="slogan">Mensagens e Voz Livres e Privadas</string>
+    <string name="welcome">Bem-vindo ao LivreChat</string>
+</resources>
