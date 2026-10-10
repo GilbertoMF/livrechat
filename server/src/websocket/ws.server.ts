@@ -230,7 +230,7 @@ export class WebSocketManager {
           callerId: senderId,
           callerUsername: senderWs.username,
           callerDisplayName: callerProfile?.display_name || senderWs.username,
-          callerAvatarUrl: callerProfile?.avatar_url || null,
+          callerAvatarUrl: callerProfile?.avatar_url || "",
           sdp
         });
 

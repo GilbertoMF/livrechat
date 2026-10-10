@@ -1,6 +1,9 @@
 package com.livrechat.app.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -24,6 +27,7 @@ import com.livrechat.app.ui.home.HomeScreen
 import com.livrechat.app.ui.settings.BackupRestoreScreen
 import com.livrechat.app.ui.settings.SettingsScreen
 import com.livrechat.app.ui.settings.SettingsViewModel
+import com.livrechat.app.webrtc.CallState
 
 object Routes {
     const val WELCOME = "welcome"
@@ -50,6 +54,18 @@ fun LivreChatNavGraph(
 ) {
     val isLoggedIn = LivreChatApp.instance.preferencesManager.isLoggedIn()
     val startDestination = if (isLoggedIn) Routes.HOME else Routes.WELCOME
+
+    val callState by callViewModel.callState.collectAsState()
+    val callInfo by callViewModel.callInfo.collectAsState()
+
+    LaunchedEffect(callState, callInfo) {
+        if (callState == CallState.RINGING && callInfo != null && !callInfo!!.isOutgoing) {
+            val currentRoute = navController.currentBackStackEntry?.destination?.route
+            if (currentRoute != Routes.INCOMING_CALL && currentRoute != Routes.ACTIVE_CALL) {
+                navController.navigate(Routes.INCOMING_CALL)
+            }
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -152,7 +168,11 @@ fun LivreChatNavGraph(
         composable(Routes.INCOMING_CALL) {
             IncomingCallScreen(
                 viewModel = callViewModel,
-                onCallAnswered = { navController.navigate(Routes.ACTIVE_CALL) },
+                onCallAnswered = {
+                    navController.navigate(Routes.ACTIVE_CALL) {
+                        popUpTo(Routes.INCOMING_CALL) { inclusive = true }
+                    }
+                },
                 onCallRejected = { navController.popBackStack() }
             )
         }

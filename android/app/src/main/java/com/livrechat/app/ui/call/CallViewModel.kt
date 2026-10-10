@@ -234,9 +234,9 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     }
 
     override fun onIceCandidateReceived(fromUserId: String, candidate: JsonObject) {
-        val sdpMid = candidate.get("sdpMid").asString
-        val sdpMLineIndex = candidate.get("sdpMLineIndex").asInt
-        val sdp = candidate.get("candidate").asString
+        val sdpMid = if (candidate.has("sdpMid") && !candidate.get("sdpMid").isJsonNull) candidate.get("sdpMid").asString else null
+        val sdpMLineIndex = if (candidate.has("sdpMLineIndex") && !candidate.get("sdpMLineIndex").isJsonNull) candidate.get("sdpMLineIndex").asInt else 0
+        val sdp = if (candidate.has("candidate") && !candidate.get("candidate").isJsonNull) candidate.get("candidate").asString else ""
         webRTCManager?.addRemoteIceCandidate(IceCandidate(sdpMid, sdpMLineIndex, sdp))
     }
 
