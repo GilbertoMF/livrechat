@@ -110,8 +110,11 @@ fun HomeScreen(
     var newImageStatusBase64 by remember { mutableStateOf("") }
     var newImageStatusCaption by remember { mutableStateOf("") }
     var showCreateMusicStatusDialog by remember { mutableStateOf(false) }
+    var showMusicCatalogPicker by remember { mutableStateOf(false) }
     var newMusicStatusAudioBase64 by remember { mutableStateOf("") }
     var newMusicStatusTitle by remember { mutableStateOf("") }
+    var newMusicStatusArtist by remember { mutableStateOf("") }
+    var newMusicStatusAlbumArt by remember { mutableStateOf("") }
     var newMusicStatusCaption by remember { mutableStateOf("") }
     var newMusicStatusBgColor by remember { mutableStateOf("#075E54") }
     var isPostingStatus by remember { mutableStateOf(false) }
@@ -316,6 +319,8 @@ fun HomeScreen(
                         withContext(Dispatchers.Main) {
                             newMusicStatusAudioBase64 = dataUri
                             newMusicStatusTitle = detectedTitle
+                            newMusicStatusArtist = ""
+                            newMusicStatusAlbumArt = ""
                             newMusicStatusCaption = ""
                             newMusicStatusBgColor = "#075E54"
                             showCreateMusicStatusDialog = true
@@ -599,7 +604,7 @@ fun HomeScreen(
                             .fillMaxWidth()
                             .clickable {
                                 showStatusOptionsDialog = false
-                                statusAudioPickerLauncher.launch("audio/*")
+                                showMusicCatalogPicker = true
                             }
                     ) {
                         Row(
@@ -617,8 +622,8 @@ fun HomeScreen(
                             }
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Música com Capa", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                Text("Card de música com player estilo WhatsApp", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Música de Cantores", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("Escolha músicas de cantores, astral ou pesquise", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                         }
@@ -801,6 +806,27 @@ fun HomeScreen(
         )
     }
 
+    // DIALOG: Seletor de Músicas de Cantores (Estilo WhatsApp / Instagram)
+    if (showMusicCatalogPicker) {
+        MusicPickerDialog(
+            onDismiss = { showMusicCatalogPicker = false },
+            onSelectTrack = { track ->
+                showMusicCatalogPicker = false
+                newMusicStatusAudioBase64 = track.previewUrl
+                newMusicStatusTitle = track.title
+                newMusicStatusArtist = track.artist
+                newMusicStatusAlbumArt = track.albumArtUrl
+                newMusicStatusCaption = ""
+                newMusicStatusBgColor = "#075E54"
+                showCreateMusicStatusDialog = true
+            },
+            onPickLocalFile = {
+                showMusicCatalogPicker = false
+                statusAudioPickerLauncher.launch("audio/*")
+            }
+        )
+    }
+
     // DIALOG: Criar Status com Música (Estilo WhatsApp)
     if (showCreateMusicStatusDialog) {
         val colorOptions = listOf("#075E54", "#128C7E", "#7B1FA2", "#C2185B", "#1976D2", "#212121", "#E65100")
@@ -915,10 +941,22 @@ fun HomeScreen(
                                     scope.launch {
                                         isPostingStatus = true
                                         val displayTitle = newMusicStatusTitle.ifBlank { "Música de Status" }
-                                        val combinedCaption = if (newMusicStatusCaption.isNotBlank()) {
-                                            "🎵 $displayTitle • ${newMusicStatusCaption.trim()}"
-                                        } else {
-                                            "🎵 $displayTitle"
+                                        val combinedCaption = buildString {
+                                            append("🎵 ")
+                                            append(displayTitle)
+                                            if (newMusicStatusArtist.isNotBlank()) {
+                                                append(" • ")
+                                                append(newMusicStatusArtist)
+                                            }
+                                            if (newMusicStatusAlbumArt.isNotBlank()) {
+                                                append(" [art:")
+                                                append(newMusicStatusAlbumArt)
+                                                append("]")
+                                            }
+                                            if (newMusicStatusCaption.isNotBlank()) {
+                                                append(" -- ")
+                                                append(newMusicStatusCaption.trim())
+                                            }
                                         }
                                         try {
                                             val res = apiService.createStatus(
@@ -977,19 +1015,34 @@ fun HomeScreen(
                             modifier = Modifier.padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = Color(0xFF25D366).copy(alpha = 0.25f),
-                                border = BorderStroke(2.dp, Color(0xFF25D366)),
-                                modifier = Modifier.size(80.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.Audiotrack,
+                            if (newMusicStatusAlbumArt.isNotBlank()) {
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    border = BorderStroke(2.dp, Color.White.copy(alpha = 0.35f)),
+                                    modifier = Modifier.size(100.dp)
+                                ) {
+                                    AsyncImage(
+                                        model = newMusicStatusAlbumArt,
                                         contentDescription = null,
-                                        tint = Color(0xFF25D366),
-                                        modifier = Modifier.size(42.dp)
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
                                     )
+                                }
+                            } else {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color(0xFF25D366).copy(alpha = 0.25f),
+                                    border = BorderStroke(2.dp, Color(0xFF25D366)),
+                                    modifier = Modifier.size(80.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Default.Audiotrack,
+                                            contentDescription = null,
+                                            tint = Color(0xFF25D366),
+                                            modifier = Modifier.size(42.dp)
+                                        )
+                                    }
                                 }
                             }
 
@@ -1007,11 +1060,22 @@ fun HomeScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
+                            if (newMusicStatusArtist.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = newMusicStatusArtist,
+                                    color = Color.White.copy(alpha = 0.85f),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 "Música no Status",
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontSize = 13.sp
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontSize = 12.sp
                             )
 
                             Spacer(modifier = Modifier.height(20.dp))
@@ -1024,18 +1088,31 @@ fun HomeScreen(
                                     } else {
                                         if (previewPlayer == null) {
                                             try {
-                                                val file = File(context.cacheDir, "preview_music_status.mp3")
-                                                val base64 = if (newMusicStatusAudioBase64.contains(",")) newMusicStatusAudioBase64.substringAfter(",") else newMusicStatusAudioBase64
-                                                val bytes = Base64.decode(base64, Base64.DEFAULT)
-                                                FileOutputStream(file).use { it.write(bytes) }
-                                                val mp = MediaPlayer().apply {
-                                                    setDataSource(file.absolutePath)
-                                                    setOnCompletionListener { isPlayingPreview = false }
-                                                    prepare()
-                                                    start()
+                                                if (newMusicStatusAudioBase64.startsWith("http")) {
+                                                    val mp = MediaPlayer().apply {
+                                                        setDataSource(newMusicStatusAudioBase64)
+                                                        setOnCompletionListener { isPlayingPreview = false }
+                                                        setOnPreparedListener {
+                                                            it.start()
+                                                            isPlayingPreview = true
+                                                        }
+                                                        prepareAsync()
+                                                    }
+                                                    previewPlayer = mp
+                                                } else {
+                                                    val file = File(context.cacheDir, "preview_music_status.mp3")
+                                                    val base64 = if (newMusicStatusAudioBase64.contains(",")) newMusicStatusAudioBase64.substringAfter(",") else newMusicStatusAudioBase64
+                                                    val bytes = Base64.decode(base64, Base64.DEFAULT)
+                                                    FileOutputStream(file).use { it.write(bytes) }
+                                                    val mp = MediaPlayer().apply {
+                                                        setDataSource(file.absolutePath)
+                                                        setOnCompletionListener { isPlayingPreview = false }
+                                                        prepare()
+                                                        start()
+                                                    }
+                                                    previewPlayer = mp
+                                                    isPlayingPreview = true
                                                 }
-                                                previewPlayer = mp
-                                                isPlayingPreview = true
                                             } catch (e: Exception) {
                                                 Toast.makeText(context, "Erro ao reproduzir prévia", Toast.LENGTH_SHORT).show()
                                             }
@@ -1657,17 +1734,22 @@ fun FullScreenStatusViewer(
                     }
                     "audio" -> {
                         val rawCaption = currentStatus.caption.orEmpty()
-                        val (musicTitle, userCaption) = remember(rawCaption) {
-                            if (rawCaption.startsWith("🎵 ")) {
-                                val withoutIcon = rawCaption.removePrefix("🎵 ")
-                                if (withoutIcon.contains(" • ")) {
-                                    withoutIcon.substringBefore(" • ") to withoutIcon.substringAfter(" • ")
-                                } else {
-                                    withoutIcon to ""
-                                }
-                            } else {
-                                (if (rawCaption.isNotBlank()) rawCaption else "Música de Status") to ""
+                        val (musicTitle, musicArtist, albumArt, userCaption) = remember(rawCaption) {
+                            var art = ""
+                            var rest = rawCaption
+                            if (rest.contains("[art:") && rest.contains("]")) {
+                                art = rest.substringAfter("[art:").substringBefore("]")
+                                rest = rest.substringBefore("[art:") + rest.substringAfter("]")
                             }
+                            var userC = ""
+                            if (rest.contains(" -- ")) {
+                                userC = rest.substringAfter(" -- ").trim()
+                                rest = rest.substringBefore(" -- ").trim()
+                            }
+                            val cleanTitleArtist = rest.removePrefix("🎵 ").trim()
+                            val title = if (cleanTitleArtist.contains(" • ")) cleanTitleArtist.substringBefore(" • ").trim() else cleanTitleArtist.ifBlank { "Música de Status" }
+                            val artist = if (cleanTitleArtist.contains(" • ")) cleanTitleArtist.substringAfter(" • ").trim() else ""
+                            listOf(title, artist, art, userC)
                         }
 
                         Column(
@@ -1688,25 +1770,41 @@ fun FullScreenStatusViewer(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     modifier = Modifier.padding(24.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(110.dp)
-                                            .background(Color.White.copy(alpha = 0.15f), CircleShape)
-                                            .border(2.5.dp, Color(0xFF25D366), CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
+                                    if (albumArt.isNotBlank()) {
                                         Surface(
-                                            shape = CircleShape,
-                                            color = Color.Black.copy(alpha = 0.4f),
-                                            modifier = Modifier.size(50.dp)
+                                            shape = RoundedCornerShape(18.dp),
+                                            shadowElevation = 8.dp,
+                                            border = BorderStroke(2.dp, Color.White.copy(alpha = 0.35f)),
+                                            modifier = Modifier.size(110.dp)
                                         ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Icon(
-                                                    Icons.Default.MusicNote,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFF25D366),
-                                                    modifier = Modifier.size(30.dp)
-                                                )
+                                            AsyncImage(
+                                                model = albumArt,
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        }
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(110.dp)
+                                                .background(Color.White.copy(alpha = 0.15f), CircleShape)
+                                                .border(2.5.dp, Color(0xFF25D366), CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Surface(
+                                                shape = CircleShape,
+                                                color = Color.Black.copy(alpha = 0.4f),
+                                                modifier = Modifier.size(50.dp)
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Icon(
+                                                        Icons.Default.MusicNote,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF25D366),
+                                                        modifier = Modifier.size(30.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -1723,6 +1821,19 @@ fun FullScreenStatusViewer(
                                         overflow = TextOverflow.Ellipsis
                                     )
 
+                                    if (musicArtist.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = musicArtist,
+                                            color = Color.White.copy(alpha = 0.85f),
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
                                     Spacer(modifier = Modifier.height(6.dp))
 
                                     Surface(
@@ -1730,7 +1841,7 @@ fun FullScreenStatusViewer(
                                         color = Color(0xFF25D366).copy(alpha = 0.2f)
                                     ) {
                                         Text(
-                                            text = "Áudio de Status",
+                                            text = if (musicArtist.isNotBlank()) "Música de Cantor" else "Áudio de Status",
                                             color = Color(0xFF25D366),
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold,
