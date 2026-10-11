@@ -30,7 +30,7 @@ fun IncomingCallScreen(
     val callState by viewModel.callState.collectAsState()
 
     LaunchedEffect(callState) {
-        if (callState == CallState.CONNECTED) {
+        if (callState == CallState.CONNECTED || callState == CallState.CONNECTING) {
             onCallAnswered()
         } else if (callState == CallState.ENDED || callState == CallState.IDLE) {
             onCallRejected()
@@ -116,7 +116,10 @@ fun IncomingCallScreen(
                 // Answer Button
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     FloatingActionButton(
-                        onClick = { viewModel.answerIncomingCall() },
+                        onClick = {
+                            viewModel.answerIncomingCall()
+                            onCallAnswered()
+                        },
                         containerColor = SuccessGreen,
                         contentColor = Color.White,
                         shape = CircleShape,

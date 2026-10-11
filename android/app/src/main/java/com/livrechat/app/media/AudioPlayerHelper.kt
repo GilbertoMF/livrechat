@@ -1,9 +1,14 @@
 package com.livrechat.app.media
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.MediaPlayer
+import android.os.Build
 import android.util.Base64
 import android.util.Log
+import com.livrechat.app.util.ProximitySensorHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -16,10 +21,14 @@ import java.io.File
 import java.io.FileOutputStream
 
 class AudioPlayerHelper(private val context: Context) {
+    private val TAG = "AudioPlayerHelper"
     private var mediaPlayer: MediaPlayer? = null
     private var currentPlayingMessageId: String? = null
     private val scope = CoroutineScope(Dispatchers.Main)
     private var progressJob: Job? = null
+
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val proximityHelper = ProximitySensorHelper(context)
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -29,6 +38,43 @@ class AudioPlayerHelper(private val context: Context) {
 
     private val _progress = MutableStateFlow(0f)
     val progress: StateFlow<Float> = _progress.asStateFlow()
+
+    var onAudioCompleted: ((messageId: String) -> Unit)? = null
+
+    init {
+        proximityHelper.onProximityChanged = { isNear ->
+            if (_isPlaying.value) {
+                routeAudio(isNear)
+            }
+        }
+    }
+
+    private fun routeAudio(isNearEar: Boolean) {
+        try {
+            if (isNearEar) {
+                // Route to EARPIECE (auricular de cima)
+                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                audioManager.isSpeakerphoneOn = false
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val earpiece = audioManager.availableCommunicationDevices.firstOrNull {
+                        it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+                    }
+                    if (earpiece != null) {
+                        audioManager.setCommunicationDevice(earpiece)
+                    }
+                }
+            } else {
+                // Route to LOUDSPEAKER (alto-falante principal)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    audioManager.clearCommunicationDevice()
+                }
+                audioManager.mode = AudioManager.MODE_NORMAL
+                audioManager.isSpeakerphoneOn = true
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro ao rotear áudio: ${e.message}")
+        }
+    }
 
     fun playAudio(messageId: String, content: String) {
         if (currentPlayingMessageId == messageId && _isPlaying.value) {
@@ -40,7 +86,18 @@ class AudioPlayerHelper(private val context: Context) {
 
         try {
             val audioFile = getOrCreateAudioFile(messageId, content) ?: return
+
+            // Route audio according to current proximity state (default loudspeaker)
+            routeAudio(proximityHelper.isNearEar)
+            proximityHelper.startListening()
+
             val mp = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
                 setDataSource(audioFile.absolutePath)
                 prepare()
                 start()
@@ -52,12 +109,16 @@ class AudioPlayerHelper(private val context: Context) {
             _isPlaying.value = true
 
             mp.setOnCompletionListener {
+                val finishedId = currentPlayingMessageId
                 stop()
+                if (finishedId != null) {
+                    onAudioCompleted?.invoke(finishedId)
+                }
             }
 
             startProgressTracker()
         } catch (e: Exception) {
-            Log.e("AudioPlayerHelper", "Erro ao reproduzir áudio", e)
+            Log.e(TAG, "Erro ao reproduzir áudio", e)
             stop()
         }
     }
@@ -73,7 +134,7 @@ class AudioPlayerHelper(private val context: Context) {
                         _progress.value = current.toFloat() / total.toFloat()
                     }
                 } catch (e: Exception) {}
-                delay(100)
+                delay(60)
             }
         }
     }
@@ -83,6 +144,8 @@ class AudioPlayerHelper(private val context: Context) {
             mediaPlayer?.pause()
             _isPlaying.value = false
         } catch (e: Exception) {}
+        proximityHelper.stopListening()
+        resetAudioRouting()
     }
 
     fun stop() {
@@ -96,6 +159,18 @@ class AudioPlayerHelper(private val context: Context) {
         _playingMessageId.value = null
         _isPlaying.value = false
         _progress.value = 0f
+        proximityHelper.stopListening()
+        resetAudioRouting()
+    }
+
+    private fun resetAudioRouting() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                audioManager.clearCommunicationDevice()
+            }
+            audioManager.mode = AudioManager.MODE_NORMAL
+            audioManager.isSpeakerphoneOn = false
+        } catch (e: Exception) {}
     }
 
     private fun getOrCreateAudioFile(messageId: String, content: String): File? {
@@ -112,7 +187,7 @@ class AudioPlayerHelper(private val context: Context) {
             FileOutputStream(file).use { it.write(decoded) }
             file
         } catch (e: Exception) {
-            Log.e("AudioPlayerHelper", "Erro ao decodificar base64", e)
+            Log.e(TAG, "Erro ao decodificar base64", e)
             null
         }
     }

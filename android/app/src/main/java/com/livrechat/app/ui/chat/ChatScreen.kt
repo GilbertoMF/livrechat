@@ -77,6 +77,19 @@ fun ChatScreen(
         viewModel.selectConversation(conversationId, otherUserId)
     }
 
+    LaunchedEffect(messages) {
+        audioPlayerHelper.onAudioCompleted = { completedId ->
+            val idx = messages.indexOfFirst { it.id == completedId }
+            if (idx != -1 && idx < messages.size - 1) {
+                val nextAudio = messages.subList(idx + 1, messages.size)
+                    .firstOrNull { it.messageType == "audio" && !it.isDeleted }
+                if (nextAudio != null) {
+                    audioPlayerHelper.playAudio(nextAudio.id, nextAudio.content)
+                }
+            }
+        }
+    }
+
     DisposableEffect(conversationId) {
         onDispose {
             typingDebounceJob?.cancel()

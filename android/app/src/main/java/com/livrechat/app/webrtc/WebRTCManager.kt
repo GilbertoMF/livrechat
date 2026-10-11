@@ -6,6 +6,7 @@ import android.media.AudioManager
 import android.os.Build
 import android.util.Log
 import com.google.gson.JsonObject
+import com.livrechat.app.util.ProximitySensorHelper
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
 import org.webrtc.DefaultVideoDecoderFactory
@@ -49,13 +50,30 @@ class WebRTCManager(
     private var localAudioTrack: AudioTrack? = null
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val proximityHelper = ProximitySensorHelper(context)
     private var isSpeakerOn = false
     private var isMicMuted = false
 
     private val iceServers = mutableListOf<PeerConnection.IceServer>()
+    private val pendingIceCandidates = mutableListOf<IceCandidate>()
+    private var isRemoteDescriptionSet = false
 
     init {
         initWebRTC()
+        proximityHelper.onProximityChanged = { isNear ->
+            if (!isSpeakerOn) {
+                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                audioManager.isSpeakerphoneOn = false
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val earpiece = audioManager.availableCommunicationDevices.firstOrNull {
+                        it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+                    }
+                    if (earpiece != null) {
+                        audioManager.setCommunicationDevice(earpiece)
+                    }
+                }
+            }
+        }
     }
 
     private fun initWebRTC() {
@@ -96,16 +114,21 @@ class WebRTCManager(
     }
 
     fun startCall() {
+        isRemoteDescriptionSet = false
+        synchronized(pendingIceCandidates) { pendingIceCandidates.clear() }
         callback.onCallStateChanged(CallState.CALLING)
         setupPeerConnection()
         createOffer()
     }
 
     fun answerCall(remoteSdp: String) {
+        isRemoteDescriptionSet = false
+        synchronized(pendingIceCandidates) { pendingIceCandidates.clear() }
         callback.onCallStateChanged(CallState.CONNECTING)
         setupPeerConnection()
-        setRemoteDescription(SessionDescription(SessionDescription.Type.OFFER, remoteSdp))
-        createAnswer()
+        setRemoteDescription(SessionDescription(SessionDescription.Type.OFFER, remoteSdp)) {
+            createAnswer()
+        }
     }
 
     fun onRemoteAnswerReceived(remoteSdp: String) {
@@ -120,7 +143,7 @@ class WebRTCManager(
             bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
             rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
-            keyType = PeerConnection.KeyType.ECDSA // Fast modern crypto
+            keyType = PeerConnection.KeyType.ECDSA
         }
 
         peerConnection = peerConnectionFactory?.createPeerConnection(rtcConfig, object : PeerConnection.Observer {
@@ -140,6 +163,7 @@ class WebRTCManager(
                         callback.onCallStateChanged(CallState.RECONNECTING)
                     }
                     PeerConnection.IceConnectionState.FAILED -> {
+                        Log.w(TAG, "ICE Connection Failed")
                         callback.onCallStateChanged(CallState.ENDED)
                         resetAudioMode()
                     }
@@ -222,21 +246,48 @@ class WebRTCManager(
         }, sdpConstraints)
     }
 
-    private fun setRemoteDescription(desc: SessionDescription) {
+    private fun setRemoteDescription(desc: SessionDescription, onSetSuccess: (() -> Unit)? = null) {
         peerConnection?.setRemoteDescription(object : SdpObserver {
             override fun onCreateSuccess(p0: SessionDescription?) {}
             override fun onSetSuccess() {
                 Log.d(TAG, "SDP Remoto configurado com sucesso.")
+                isRemoteDescriptionSet = true
+                drainPendingIceCandidates()
+                onSetSuccess?.invoke()
             }
             override fun onCreateFailure(p0: String?) {}
             override fun onSetFailure(err: String?) {
+                Log.e(TAG, "Falha ao configurar SDP Remoto: $err")
                 callback.onError("Falha ao configurar SDP Remoto: $err")
             }
         }, desc)
     }
 
     fun addRemoteIceCandidate(candidate: IceCandidate) {
-        peerConnection?.addIceCandidate(candidate)
+        if (isRemoteDescriptionSet && peerConnection != null) {
+            try {
+                peerConnection?.addIceCandidate(candidate)
+            } catch (e: Exception) {
+                Log.e(TAG, "Erro ao adicionar ICE candidate", e)
+            }
+        } else {
+            synchronized(pendingIceCandidates) {
+                pendingIceCandidates.add(candidate)
+            }
+        }
+    }
+
+    private fun drainPendingIceCandidates() {
+        synchronized(pendingIceCandidates) {
+            for (c in pendingIceCandidates) {
+                try {
+                    peerConnection?.addIceCandidate(c)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Erro ao drenar ICE candidate pendente", e)
+                }
+            }
+            pendingIceCandidates.clear()
+        }
     }
 
     // Audio controls
@@ -249,21 +300,33 @@ class WebRTCManager(
     fun toggleSpeaker(): Boolean {
         isSpeakerOn = !isSpeakerOn
         audioManager.isSpeakerphoneOn = isSpeakerOn
+        if (isSpeakerOn && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            audioManager.clearCommunicationDevice()
+        }
         return isSpeakerOn
     }
 
     private fun enableVoIPAudioMode() {
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         audioManager.isSpeakerphoneOn = isSpeakerOn
+        proximityHelper.startListening()
     }
 
     private fun resetAudioMode() {
+        proximityHelper.stopListening()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            audioManager.clearCommunicationDevice()
+        }
         audioManager.mode = AudioManager.MODE_NORMAL
         audioManager.isSpeakerphoneOn = false
     }
 
     fun endCall() {
         try {
+            isRemoteDescriptionSet = false
+            synchronized(pendingIceCandidates) {
+                pendingIceCandidates.clear()
+            }
             localAudioTrack?.setEnabled(false)
             localAudioSource?.dispose()
             peerConnection?.close()
