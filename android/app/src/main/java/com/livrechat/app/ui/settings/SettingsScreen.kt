@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -536,16 +537,24 @@ fun SettingsScreen(
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text("Modo de Exibição:", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        themes.forEach { (key, label) ->
+                        listOf("system" to "Sistema", "dark" to "Escuro", "light" to "Claro").forEach { (key, label) ->
                             FilterChip(
                                 selected = selectedTheme == key,
                                 onClick = {
                                     selectedTheme = key
                                     prefs.appTheme = key
                                 },
-                                label = { Text(label, fontSize = 11.sp) }
+                                label = {
+                                    Text(
+                                        text = label,
+                                        fontSize = 12.sp,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
@@ -662,21 +671,41 @@ fun SettingsScreen(
 
                     // Mensagens Autodestrutivas
                     Text("Autodestruição de Mensagens:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("off" to "Desligado", "24h" to "24 Horas", "7d" to "7 Dias", "30d" to "30 Dias").forEach { (timerKey, label) ->
-                            FilterChip(
-                                selected = selfDestruct == timerKey,
-                                onClick = {
-                                    selfDestruct = timerKey
-                                    prefs.selfDestructTimer = timerKey
-                                },
-                                label = { Text(label, fontSize = 10.sp) }
-                            )
-                        }
+                        FilterChip(
+                            selected = selfDestruct == "off",
+                            onClick = { selfDestruct = "off"; prefs.selfDestructTimer = "off" },
+                            label = { Text("Desligado", fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = selfDestruct == "24h",
+                            onClick = { selfDestruct = "24h"; prefs.selfDestructTimer = "24h" },
+                            label = { Text("24 Horas", fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = selfDestruct == "7d",
+                            onClick = { selfDestruct = "7d"; prefs.selfDestructTimer = "7d" },
+                            label = { Text("7 Dias", fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = selfDestruct == "30d",
+                            onClick = { selfDestruct = "30d"; prefs.selfDestructTimer = "30d" },
+                            label = { Text("30 Dias", fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -738,16 +767,17 @@ fun SettingsScreen(
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                     Text("Visto por Último:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("everyone" to "Todos", "contacts" to "Meus Contatos", "nobody" to "Ninguém").forEach { (key, label) ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("everyone" to "Todos", "contacts" to "Contatos", "nobody" to "Ninguém").forEach { (key, label) ->
                             FilterChip(
                                 selected = lastSeen == key,
                                 onClick = {
                                     lastSeen = key
                                     prefs.lastSeenVisibility = key
                                 },
-                                label = { Text(label, fontSize = 11.sp) }
+                                label = { Text(label, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
@@ -863,10 +893,9 @@ fun SettingsScreen(
                     ) {
                         Row(
                             modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                                 Text("Cache do Aplicativo", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text("Espaço ocupado temporário: $cacheSizeMb", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -881,9 +910,10 @@ fun SettingsScreen(
                                         }
                                     }
                                 },
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
-                                Text("Limpar", fontSize = 12.sp)
+                                Text("Limpar", fontSize = 13.sp, maxLines = 1)
                             }
                         }
                     }

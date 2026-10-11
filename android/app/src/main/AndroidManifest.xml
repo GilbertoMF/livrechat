@@ -56,10 +56,10 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
-        <!-- Persistent Background Service for 24/7 message and call delivery -->
+        <!-- Persistent Background Service disabled (user requested no persistent notification) -->
         <service
             android:name=".service.LivreChatBackgroundService"
-            android:enabled="true"
+            android:enabled="false"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 

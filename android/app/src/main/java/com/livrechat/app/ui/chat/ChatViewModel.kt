@@ -75,7 +75,13 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
     }
 
     fun unselectConversation() {
-        _currentConversationId.value?.let { ChatSoundManager.stopTypingRhythm(it) }
+        val convId = _currentConversationId.value
+        if (convId != null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                db.conversationDao().clearUnreadCount(convId)
+                db.messageDao().markAllIncomingAsRead(convId)
+            }
+        }
         _currentConversationId.value = null
         _currentOtherUserId.value = null
         connectionManager.setActiveConversation(null)
@@ -87,6 +93,15 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                 val res = apiService.getConversations()
                 if (res.isSuccessful && res.body() != null) {
                     val entities = res.body()!!.map { dto ->
+                        val localExisting = db.conversationDao().getConversationById(dto.conversationId)
+                        val localUnread = db.messageDao().getUnreadCount(dto.conversationId)
+                        val calculatedUnread = if (localExisting != null && localExisting.unreadCount == 0 && localUnread == 0) {
+                            0
+                        } else if (localUnread > 0) {
+                            localUnread
+                        } else {
+                            dto.unreadCount
+                        }
                         ConversationEntity(
                             id = dto.conversationId,
                             otherUserId = dto.otherUser.id,
@@ -94,9 +109,9 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             otherDisplayName = dto.otherUser.displayName,
                             otherAvatarUrl = dto.otherUser.avatarUrl,
                             otherPublicKey = dto.otherUser.publicKey,
-                            lastMessageContent = dto.lastMessage?.content,
-                            lastMessageTimestamp = System.currentTimeMillis(),
-                            unreadCount = dto.unreadCount,
+                            lastMessageContent = dto.lastMessage?.content ?: localExisting?.lastMessageContent,
+                            lastMessageTimestamp = localExisting?.lastMessageTimestamp ?: System.currentTimeMillis(),
+                            unreadCount = calculatedUnread,
                             isPinned = dto.isPinned,
                             isArchived = dto.isArchived,
                             isMuted = dto.isMuted
@@ -363,14 +378,10 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
             contactTypingJob?.cancel()
             _isContactTyping.value = isTyping
             if (isTyping) {
-                ChatSoundManager.startTypingRhythm(conversationId)
                 contactTypingJob = viewModelScope.launch {
                     delay(3500)
                     _isContactTyping.value = false
-                    ChatSoundManager.stopTypingRhythm(conversationId)
                 }
-            } else {
-                ChatSoundManager.stopTypingRhythm(conversationId)
             }
         }
     }

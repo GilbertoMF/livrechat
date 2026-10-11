@@ -14,6 +14,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import java.io.File
+import java.io.FileOutputStream
+import android.media.MediaPlayer
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -34,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -104,6 +109,11 @@ fun HomeScreen(
     var newStatusBgColor by remember { mutableStateOf("#075E54") }
     var newImageStatusBase64 by remember { mutableStateOf("") }
     var newImageStatusCaption by remember { mutableStateOf("") }
+    var showCreateMusicStatusDialog by remember { mutableStateOf(false) }
+    var newMusicStatusAudioBase64 by remember { mutableStateOf("") }
+    var newMusicStatusTitle by remember { mutableStateOf("") }
+    var newMusicStatusCaption by remember { mutableStateOf("") }
+    var newMusicStatusBgColor by remember { mutableStateOf("#075E54") }
     var isPostingStatus by remember { mutableStateOf(false) }
 
     fun loadStatuses() {
@@ -272,7 +282,7 @@ fun HomeScreen(
         }
     }
 
-    // Status Audio Picker
+    // Status Audio Picker (Estilo WhatsApp)
     val statusAudioPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -282,36 +292,42 @@ fun HomeScreen(
                     val inputStream = context.contentResolver.openInputStream(uri)
                     val bytes = inputStream?.readBytes()
                     inputStream?.close()
-                    if (bytes != null && bytes.size <= 8 * 1024 * 1024) {
+                    if (bytes != null && bytes.size <= 12 * 1024 * 1024) {
                         val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                         val dataUri = "data:audio/mp3;base64,$base64"
-                        withContext(Dispatchers.Main) {
-                            isPostingStatus = true
-                        }
-                        val res = apiService.createStatus(
-                            mapOf(
-                                "contentType" to "audio",
-                                "content" to dataUri,
-                                "caption" to "Áudio de Status"
-                            )
-                        )
-                        withContext(Dispatchers.Main) {
-                            isPostingStatus = false
-                            if (res.isSuccessful) {
-                                Toast.makeText(context, "Áudio compartilhado no Status!", Toast.LENGTH_SHORT).show()
-                                loadStatuses()
-                            } else {
-                                Toast.makeText(context, "Falha ao enviar áudio", Toast.LENGTH_SHORT).show()
+
+                        // Obter nome real do arquivo de música
+                        var detectedTitle = "Minha Música"
+                        try {
+                            val cursor = context.contentResolver.query(uri, null, null, null, null)
+                            cursor?.use {
+                                if (it.moveToFirst()) {
+                                    val nameIdx = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                    if (nameIdx >= 0) {
+                                        val fn = it.getString(nameIdx)
+                                        if (!fn.isNullOrBlank()) {
+                                            detectedTitle = fn.substringBeforeLast(".")
+                                        }
+                                    }
+                                }
                             }
+                        } catch (e: Exception) {}
+
+                        withContext(Dispatchers.Main) {
+                            newMusicStatusAudioBase64 = dataUri
+                            newMusicStatusTitle = detectedTitle
+                            newMusicStatusCaption = ""
+                            newMusicStatusBgColor = "#075E54"
+                            showCreateMusicStatusDialog = true
                         }
                     } else {
                         withContext(Dispatchers.Main) {
-                            Toast.makeText(context, "Arquivo de áudio muito grande (máx 8MB)", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Arquivo de música muito grande (máx 12MB)", Toast.LENGTH_SHORT).show()
                         }
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Erro ao carregar áudio", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Erro ao carregar arquivo de música", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -425,83 +441,201 @@ fun HomeScreen(
         )
     }
 
-    // DIALOG: Opções de Status (Texto, Foto, Áudio)
+    // DIALOG: Opções de Status (Texto, Foto, Música) com Design Moderno
     if (showStatusOptionsDialog) {
-        AlertDialog(
-            onDismissRequest = { showStatusOptionsDialog = false },
-            title = { Text("Adicionar ao Status", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Escolha o que você gostaria de compartilhar:")
-                    
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            showStatusOptionsDialog = false
-                            showCreateTextStatusDialog = true
-                        }
+        Dialog(onDismissRequest = { showStatusOptionsDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFF25D366))
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Text("Texto com fundo colorido", fontWeight = FontWeight.Medium)
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFF25D366).copy(alpha = 0.15f),
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.AddCircleOutline,
+                                    contentDescription = null,
+                                    tint = Color(0xFF25D366),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Adicionar ao Status", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text("Compartilhe momentos que expiram em 24h", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // 1. Texto Criativo
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            showStatusOptionsDialog = false
-                            launchStatusCamera()
-                        }
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showStatusOptionsDialog = false
+                                showCreateTextStatusDialog = true
+                            }
                     ) {
-                        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF25D366))
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFF00A884).copy(alpha = 0.2f),
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFF00A884), modifier = Modifier.size(22.dp))
+                                }
+                            }
                             Spacer(modifier = Modifier.width(14.dp))
-                            Text("Tirar Foto com a Câmera", fontWeight = FontWeight.Medium)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Texto Criativo", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("Escreva frases com fundos coloridos", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // 2. Câmera
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            showStatusOptionsDialog = false
-                            statusImagePickerLauncher.launch("image/*")
-                        }
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showStatusOptionsDialog = false
+                                launchStatusCamera()
+                            }
                     ) {
-                        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = BluePrimary)
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFF25D366).copy(alpha = 0.2f),
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF25D366), modifier = Modifier.size(22.dp))
+                                }
+                            }
                             Spacer(modifier = Modifier.width(14.dp))
-                            Text("Foto da Galeria", fontWeight = FontWeight.Medium)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Tirar Foto na Câmera", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("Capture e publique instantaneamente", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // 3. Galeria
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            showStatusOptionsDialog = false
-                            statusAudioPickerLauncher.launch("audio/*")
-                        }
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showStatusOptionsDialog = false
+                                statusImagePickerLauncher.launch("image/*")
+                            }
                     ) {
-                        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color(0xFFE91E63))
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFF007AFF).copy(alpha = 0.2f),
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color(0xFF007AFF), modifier = Modifier.size(22.dp))
+                                }
+                            }
                             Spacer(modifier = Modifier.width(14.dp))
-                            Text("Áudio / Música", fontWeight = FontWeight.Medium)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Foto da Galeria", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("Escolha fotos dos seus arquivos", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                         }
                     }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showStatusOptionsDialog = false }) {
-                    Text("Cancelar")
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // 4. Música (Estilo WhatsApp)
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showStatusOptionsDialog = false
+                                statusAudioPickerLauncher.launch("audio/*")
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFFE91E63).copy(alpha = 0.2f),
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color(0xFFE91E63), modifier = Modifier.size(22.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Música com Capa", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("Card de música com player estilo WhatsApp", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    OutlinedButton(
+                        onClick = { showStatusOptionsDialog = false },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Cancelar", fontWeight = FontWeight.Medium)
+                    }
                 }
             }
-        )
+        }
     }
 
     // DIALOG: Criar Status de Texto
@@ -556,7 +690,9 @@ fun HomeScreen(
                                         mapOf(
                                             "contentType" to "text",
                                             "content" to trimmed,
-                                            "backgroundColor" to newStatusBgColor
+                                            "backgroundColor" to newStatusBgColor,
+                                            "avatarUrl" to (prefs.userAvatarUrl ?: ""),
+                                            "displayName" to (prefs.currentDisplayName ?: prefs.currentUsername ?: "Usuário")
                                         )
                                     )
                                     if (res.isSuccessful) {
@@ -630,7 +766,9 @@ fun HomeScreen(
                                     mapOf(
                                         "contentType" to "image",
                                         "content" to newImageStatusBase64,
-                                        "caption" to newImageStatusCaption.trim()
+                                        "caption" to newImageStatusCaption.trim(),
+                                        "avatarUrl" to (prefs.userAvatarUrl ?: ""),
+                                        "displayName" to (prefs.currentDisplayName ?: prefs.currentUsername ?: "Usuário")
                                     )
                                 )
                                 if (res.isSuccessful) {
@@ -663,11 +801,274 @@ fun HomeScreen(
         )
     }
 
+    // DIALOG: Criar Status com Música (Estilo WhatsApp)
+    if (showCreateMusicStatusDialog) {
+        val colorOptions = listOf("#075E54", "#128C7E", "#7B1FA2", "#C2185B", "#1976D2", "#212121", "#E65100")
+        var isPlayingPreview by remember { mutableStateOf(false) }
+        var previewPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+        DisposableEffect(Unit) {
+            onDispose {
+                try {
+                    previewPlayer?.stop()
+                    previewPlayer?.release()
+                } catch (e: Exception) {}
+                previewPlayer = null
+            }
+        }
+
+        Dialog(
+            onDismissRequest = {
+                if (!isPostingStatus) {
+                    try { previewPlayer?.stop(); previewPlayer?.release() } catch (e: Exception) {}
+                    previewPlayer = null
+                    showCreateMusicStatusDialog = false
+                }
+            },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            val bgColor = remember(newMusicStatusBgColor) {
+                try { Color(android.graphics.Color.parseColor(newMusicStatusBgColor)) }
+                catch (e: Exception) { Color(0xFF075E54) }
+            }
+
+            Scaffold(
+                containerColor = bgColor,
+                topBar = {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        IconButton(onClick = {
+                            try { previewPlayer?.stop(); previewPlayer?.release() } catch (e: Exception) {}
+                            previewPlayer = null
+                            showCreateMusicStatusDialog = false
+                        }) {
+                            Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White)
+                        }
+                        Text(
+                            "Status com Música",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                        Box(modifier = Modifier.size(48.dp))
+                    }
+                },
+                bottomBar = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black.copy(alpha = 0.5f))
+                            .padding(16.dp)
+                    ) {
+                        // Paleta de Cores de Fundo
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            colorOptions.forEach { hex ->
+                                val c = Color(android.graphics.Color.parseColor(hex))
+                                Box(
+                                    modifier = Modifier
+                                        .padding(horizontal = 6.dp)
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(c)
+                                        .clickable { newMusicStatusBgColor = hex }
+                                        .then(
+                                            if (newMusicStatusBgColor == hex)
+                                                Modifier.border(2.5.dp, Color.White, CircleShape)
+                                            else Modifier
+                                        )
+                                )
+                            }
+                        }
+
+                        // Legenda e Botão Enviar
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = newMusicStatusCaption,
+                                onValueChange = { newMusicStatusCaption = it },
+                                placeholder = { Text("Adicione uma legenda...", color = Color.White.copy(alpha = 0.6f)) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color.White,
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.5f)
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            FloatingActionButton(
+                                onClick = {
+                                    if (isPostingStatus) return@FloatingActionButton
+                                    try { previewPlayer?.stop(); previewPlayer?.release() } catch (e: Exception) {}
+                                    previewPlayer = null
+                                    scope.launch {
+                                        isPostingStatus = true
+                                        val displayTitle = newMusicStatusTitle.ifBlank { "Música de Status" }
+                                        val combinedCaption = if (newMusicStatusCaption.isNotBlank()) {
+                                            "🎵 $displayTitle • ${newMusicStatusCaption.trim()}"
+                                        } else {
+                                            "🎵 $displayTitle"
+                                        }
+                                        try {
+                                            val res = apiService.createStatus(
+                                                mapOf(
+                                                    "contentType" to "audio",
+                                                    "content" to newMusicStatusAudioBase64,
+                                                    "caption" to combinedCaption,
+                                                    "backgroundColor" to newMusicStatusBgColor,
+                                                    "avatarUrl" to (prefs.userAvatarUrl ?: ""),
+                                                    "displayName" to (prefs.currentDisplayName ?: prefs.currentUsername ?: "Usuário")
+                                                )
+                                            )
+                                            if (res.isSuccessful) {
+                                                showCreateMusicStatusDialog = false
+                                                Toast.makeText(context, "Música publicada no Status!", Toast.LENGTH_SHORT).show()
+                                                loadStatuses()
+                                            } else {
+                                                Toast.makeText(context, "Falha ao publicar status", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        } finally {
+                                            isPostingStatus = false
+                                        }
+                                    }
+                                },
+                                containerColor = Color(0xFF25D366),
+                                contentColor = Color.White
+                            ) {
+                                if (isPostingStatus) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                                } else {
+                                    Icon(Icons.Default.Send, contentDescription = "Enviar")
+                                }
+                            }
+                        }
+                    }
+                }
+            ) { innerPadding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Floating WhatsApp Music Sticker Card
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.Black.copy(alpha = 0.55f),
+                        border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.25f)),
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .padding(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFF25D366).copy(alpha = 0.25f),
+                                border = BorderStroke(2.dp, Color(0xFF25D366)),
+                                modifier = Modifier.size(80.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.Audiotrack,
+                                        contentDescription = null,
+                                        tint = Color(0xFF25D366),
+                                        modifier = Modifier.size(42.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            BasicTextField(
+                                value = newMusicStatusTitle,
+                                onValueChange = { newMusicStatusTitle = it },
+                                textStyle = TextStyle(
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                "Música no Status",
+                                color = Color.White.copy(alpha = 0.7f),
+                                fontSize = 13.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            IconButton(
+                                onClick = {
+                                    if (isPlayingPreview) {
+                                        previewPlayer?.pause()
+                                        isPlayingPreview = false
+                                    } else {
+                                        if (previewPlayer == null) {
+                                            try {
+                                                val file = File(context.cacheDir, "preview_music_status.mp3")
+                                                val base64 = if (newMusicStatusAudioBase64.contains(",")) newMusicStatusAudioBase64.substringAfter(",") else newMusicStatusAudioBase64
+                                                val bytes = Base64.decode(base64, Base64.DEFAULT)
+                                                FileOutputStream(file).use { it.write(bytes) }
+                                                val mp = MediaPlayer().apply {
+                                                    setDataSource(file.absolutePath)
+                                                    setOnCompletionListener { isPlayingPreview = false }
+                                                    prepare()
+                                                    start()
+                                                }
+                                                previewPlayer = mp
+                                                isPlayingPreview = true
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Erro ao reproduzir prévia", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } else {
+                                            previewPlayer?.start()
+                                            isPlayingPreview = true
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(54.dp)
+                                    .background(Color.White.copy(alpha = 0.2f), CircleShape)
+                            ) {
+                                Icon(
+                                    if (isPlayingPreview) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = "Prévia",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Full-Screen Status Story Viewer
     if (activeStatusViewerList != null) {
         FullScreenStatusViewer(
             statuses = activeStatusViewerList!!,
             currentUserId = currentUserId,
+            userAvatarUrl = prefs.userAvatarUrl,
             onDismiss = { activeStatusViewerList = null },
             onDeleteStatus = { statusId ->
                 scope.launch {
@@ -1102,6 +1503,7 @@ fun HomeScreen(
 fun FullScreenStatusViewer(
     statuses: List<StatusDto>,
     currentUserId: String?,
+    userAvatarUrl: String? = null,
     onDismiss: () -> Unit,
     onDeleteStatus: (String) -> Unit
 ) {
@@ -1109,6 +1511,7 @@ fun FullScreenStatusViewer(
         onDismiss()
         return
     }
+    val context = LocalContext.current
     var currentIndex by remember { mutableStateOf(0) }
     var progress by remember { mutableStateOf(0f) }
     var isPaused by remember { mutableStateOf(false) }
@@ -1118,10 +1521,50 @@ fun FullScreenStatusViewer(
         return
     }
 
+    var isAudioPlaying by remember { mutableStateOf(false) }
+    var statusMediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    DisposableEffect(currentStatus) {
+        if (currentStatus.contentType == "audio" && currentStatus.content.isNotBlank()) {
+            try {
+                val mp = MediaPlayer()
+                val content = currentStatus.content
+                if (content.startsWith("data:") || content.length > 500) {
+                    val file = File(context.cacheDir, "status_play_${currentStatus.id}.mp3")
+                    val base64 = if (content.contains(",")) content.substringAfter(",") else content
+                    val bytes = Base64.decode(base64, Base64.DEFAULT)
+                    FileOutputStream(file).use { it.write(bytes) }
+                    mp.setDataSource(file.absolutePath)
+                } else {
+                    mp.setDataSource(content)
+                }
+                mp.setOnPreparedListener {
+                    it.start()
+                    isAudioPlaying = true
+                }
+                mp.setOnCompletionListener {
+                    isAudioPlaying = false
+                }
+                mp.prepareAsync()
+                statusMediaPlayer = mp
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        onDispose {
+            try {
+                statusMediaPlayer?.stop()
+                statusMediaPlayer?.release()
+            } catch (e: Exception) {}
+            statusMediaPlayer = null
+            isAudioPlaying = false
+        }
+    }
+
     LaunchedEffect(currentIndex, isPaused) {
         progress = 0f
         val stepMs = 50L
-        val totalMs = 5000L
+        val totalMs = if (currentStatus.contentType == "audio") 15000L else 5000L
         val steps = (totalMs / stepMs).toInt()
         for (i in 1..steps) {
             if (isPaused) {
@@ -1144,7 +1587,7 @@ fun FullScreenStatusViewer(
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
         val backgroundColor = remember(currentStatus) {
-            if (currentStatus.contentType == "text" && !currentStatus.backgroundColor.isNullOrBlank()) {
+            if ((currentStatus.contentType == "text" || currentStatus.contentType == "audio") && !currentStatus.backgroundColor.isNullOrBlank()) {
                 try {
                     Color(android.graphics.Color.parseColor(currentStatus.backgroundColor))
                 } catch (e: Exception) {
@@ -1213,38 +1656,160 @@ fun FullScreenStatusViewer(
                         )
                     }
                     "audio" -> {
+                        val rawCaption = currentStatus.caption.orEmpty()
+                        val (musicTitle, userCaption) = remember(rawCaption) {
+                            if (rawCaption.startsWith("🎵 ")) {
+                                val withoutIcon = rawCaption.removePrefix("🎵 ")
+                                if (withoutIcon.contains(" • ")) {
+                                    withoutIcon.substringBefore(" • ") to withoutIcon.substringAfter(" • ")
+                                } else {
+                                    withoutIcon to ""
+                                }
+                            } else {
+                                (if (rawCaption.isNotBlank()) rawCaption else "Música de Status") to ""
+                            }
+                        }
+
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier.padding(24.dp)
                         ) {
+                            // WhatsApp Floating Music Card
                             Surface(
-                                shape = CircleShape,
-                                color = Color(0xFF25D366).copy(alpha = 0.2f),
-                                modifier = Modifier.size(96.dp)
+                                shape = RoundedCornerShape(24.dp),
+                                color = Color.Black.copy(alpha = 0.55f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp)
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.Audiotrack,
-                                        contentDescription = null,
-                                        tint = Color(0xFF25D366),
-                                        modifier = Modifier.size(48.dp)
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(24.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(110.dp)
+                                            .background(Color.White.copy(alpha = 0.15f), CircleShape)
+                                            .border(2.5.dp, Color(0xFF25D366), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = Color.Black.copy(alpha = 0.4f),
+                                            modifier = Modifier.size(50.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    Icons.Default.MusicNote,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF25D366),
+                                                    modifier = Modifier.size(30.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(18.dp))
+
+                                    Text(
+                                        text = musicTitle,
+                                        color = Color.White,
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
                                     )
+
+                                    Spacer(modifier = Modifier.height(6.dp))
+
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = Color(0xFF25D366).copy(alpha = 0.2f)
+                                    ) {
+                                        Text(
+                                            text = "Áudio de Status",
+                                            color = Color(0xFF25D366),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(20.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                try {
+                                                    if (statusMediaPlayer?.isPlaying == true) {
+                                                        statusMediaPlayer?.pause()
+                                                        isAudioPlaying = false
+                                                    } else {
+                                                        statusMediaPlayer?.start()
+                                                        isAudioPlaying = true
+                                                    }
+                                                } catch (e: Exception) {}
+                                            },
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .background(Color.White.copy(alpha = 0.2f), CircleShape)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isAudioPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                contentDescription = if (isAudioPlaying) "Pausar" else "Reproduzir",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(30.dp)
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(16.dp))
+
+                                        Row(
+                                            modifier = Modifier.weight(1f),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            val heights = listOf(14.dp, 24.dp, 36.dp, 20.dp, 30.dp, 16.dp, 28.dp, 38.dp, 22.dp, 32.dp, 18.dp)
+                                            heights.forEachIndexed { i, h ->
+                                                val barColor = if (isAudioPlaying) {
+                                                    if (i % 2 == 0) Color(0xFF25D366) else Color.White
+                                                } else {
+                                                    Color.White.copy(alpha = 0.4f)
+                                                }
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(h)
+                                                        .clip(RoundedCornerShape(2.dp))
+                                                        .background(barColor)
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Text(
-                                "Áudio de Status",
-                                color = Color.White,
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            if (!currentStatus.caption.isNullOrBlank()) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    currentStatus.caption,
-                                    color = Color.White.copy(alpha = 0.8f),
-                                    fontSize = 15.sp
-                                )
+
+                            if (userCaption.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = Color.Black.copy(alpha = 0.4f)
+                                ) {
+                                    Text(
+                                        text = userCaption,
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -1312,21 +1877,29 @@ fun FullScreenStatusViewer(
                         Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = Color.White)
                     }
 
+                    val resolvedAvatar = if (currentStatus.userId == currentUserId && !userAvatarUrl.isNullOrEmpty()) {
+                        userAvatarUrl
+                    } else {
+                        currentStatus.avatarUrl
+                    }
+                    val resolvedName = if (currentStatus.userId == currentUserId) "Você" else currentStatus.displayName
+
                     Surface(
                         shape = CircleShape,
                         color = Color.White.copy(alpha = 0.2f),
                         modifier = Modifier.size(38.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            if (!currentStatus.avatarUrl.isNullOrEmpty()) {
+                            if (!resolvedAvatar.isNullOrEmpty()) {
                                 AsyncImage(
-                                    model = currentStatus.avatarUrl,
+                                    model = resolvedAvatar,
                                     contentDescription = null,
-                                    modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                    contentScale = ContentScale.Crop
                                 )
                             } else {
                                 Text(
-                                    text = currentStatus.displayName.take(1).uppercase(),
+                                    text = resolvedName.take(1).uppercase(),
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -1338,7 +1911,7 @@ fun FullScreenStatusViewer(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = currentStatus.displayName,
+                            text = resolvedName,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp
@@ -1548,10 +2121,16 @@ private fun formatTimestamp(timestamp: Long): String {
 
 private fun formatRelativeTime(isoString: String): String {
     return try {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
-        val cleanIso = if (isoString.contains(".")) isoString.substringBefore(".") else isoString.removeSuffix("Z")
+        val cleanIso = if (isoString.contains(".")) {
+            isoString.substringBefore(".")
+        } else {
+            isoString.removeSuffix("Z")
+        }
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }
         val date = sdf.parse(cleanIso) ?: Date()
-        val diffMs = System.currentTimeMillis() - date.time
+        val diffMs = (System.currentTimeMillis() - date.time).coerceAtLeast(0L)
         val minutes = diffMs / (60 * 1000)
         when {
             minutes < 1 -> "Agora mesmo"

@@ -20,9 +20,9 @@ export class StatusController {
       const status: StatusRecord = {
         id: uuidv4(),
         user_id: userId,
-        display_name: profile?.display_name || user?.username || 'Usuário',
+        display_name: req.body.displayName || profile?.display_name || user?.username || 'Usuário',
         username: user?.username || 'usuario',
-        avatar_url: profile?.avatar_url,
+        avatar_url: req.body.avatarUrl || profile?.avatar_url || undefined,
         content_type: contentType,
         content,
         caption: caption || undefined,

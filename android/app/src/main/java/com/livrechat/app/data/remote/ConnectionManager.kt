@@ -149,7 +149,6 @@ class ConnectionManager(
                 db.conversationDao().updateLastMessage(message.conversationId, previewContent, message.createdAt)
                 webSocketClient.sendReceipt(message.id, "read")
                 try { app.apiClient.apiService.markMessageRead(message.id) } catch (e: Exception) {}
-                ChatSoundManager.playIncomingMessageSound()
             } else {
                 // Mensagem entregue
                 val deliveredMsg = message.copy(status = "delivered")

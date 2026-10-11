@@ -97,49 +97,13 @@ object ChatSoundManager {
      * Toca o som agradável de mensagem recebida dentro da conversa.
      */
     fun playIncomingMessageSound() {
-        if (!LivreChatApp.instance.preferencesManager.conversationSounds) return
-        scope.launch {
-            playPcm(messageChimeBuffer)
-        }
+        // Removido a pedido do usuário
     }
 
-    /**
-     * Inicia a reprodução do som de digitação do amigo com pausas humanas naturais
-     * ("mais que nao seja um som constante tenha pausas de acordo como ele vai escrevendo").
-     */
     fun startTypingRhythm(conversationId: String) {
-        if (!LivreChatApp.instance.preferencesManager.conversationSounds) return
-        stopTypingRhythm(conversationId)
-
-        val job = scope.launch {
-            try {
-                var cycles = 0
-                // Máximo de 8 ciclos para não tocar indefinidamente
-                while (isActive && cycles < 8) {
-                    cycles++
-                    // Dispara uma sequência de 2 a 4 toques rápidos de teclado
-                    val taps = Random.nextInt(2, 5)
-                    for (i in 0 until taps) {
-                        if (!isActive) break
-                        playPcm(typingTickBuffer)
-                        // Pausa curta entre teclas na mesma palavra (80ms a 160ms)
-                        delay(Random.nextLong(80, 160))
-                    }
-
-                    // Pausa realista entre palavras/pensamentos (450ms a 850ms)
-                    if (!isActive) break
-                    delay(Random.nextLong(450, 850))
-                }
-            } catch (e: CancellationException) {
-                // Cancelado normalmente
-            }
-        }
-        typingJobs[conversationId] = job
+        // Removido a pedido do usuário
     }
 
-    /**
-     * Para os sons de digitação imediatamente.
-     */
     fun stopTypingRhythm(conversationId: String) {
         typingJobs.remove(conversationId)?.cancel()
     }

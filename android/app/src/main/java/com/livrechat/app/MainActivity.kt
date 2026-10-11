@@ -1,6 +1,7 @@
 package com.livrechat.app
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -65,6 +66,14 @@ class MainActivity : FragmentActivity() {
 
         pendingIntentFlow.value = intent
         checkAndRequestPermissions()
+
+        try {
+            val nm = getSystemService(NotificationManager::class.java)
+            nm?.cancel(1001)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                nm?.deleteNotificationChannel("livrechat_background_sync_channel")
+            }
+        } catch (e: Exception) {}
 
         setContent {
             val themeMode by LivreChatApp.instance.preferencesManager.themeFlow.collectAsState()

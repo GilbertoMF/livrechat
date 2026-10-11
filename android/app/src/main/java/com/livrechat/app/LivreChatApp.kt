@@ -60,10 +60,13 @@ class LivreChatApp : Application() {
             connectionManager.connect()
         }
 
-        // Cancel any lingering persistent foreground notification
+        // Cancel any lingering persistent foreground notification and delete its channel
         try {
             val nm = getSystemService(NotificationManager::class.java)
             nm?.cancel(1001)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                nm?.deleteNotificationChannel("livrechat_background_sync_channel")
+            }
             com.livrechat.app.service.LivreChatBackgroundService.stop(this)
         } catch (e: Exception) {}
     }

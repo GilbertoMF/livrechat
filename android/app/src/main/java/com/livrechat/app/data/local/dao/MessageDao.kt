@@ -40,6 +40,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE conversationId = :convId AND isOutgoing = 0 AND status != 'read'")
     suspend fun getUnreadIncomingMessages(convId: String): List<MessageEntity>
 
+    @Query("SELECT COUNT(*) FROM messages WHERE conversationId = :convId AND isOutgoing = 0 AND status != 'read'")
+    suspend fun getUnreadCount(convId: String): Int
+
     @Query("UPDATE messages SET status = 'read' WHERE conversationId = :convId AND isOutgoing = 0")
     suspend fun markAllIncomingAsRead(convId: String)
 
