@@ -34,6 +34,8 @@ import com.livrechat.app.media.AudioRecorderHelper
 import com.livrechat.app.ui.theme.BlueAccent
 import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
+import com.livrechat.app.ui.common.UserAvatarView
+import androidx.compose.ui.text.style.TextOverflow
 import com.livrechat.app.ui.theme.OfflineGray
 import com.livrechat.app.util.MediaFileManager
 import kotlinx.coroutines.Dispatchers
@@ -130,10 +132,15 @@ fun ChatScreen(
         }
     }
 
-    val prefs = remember { com.livrechat.app.LivreChatApp.instance.preferencesManager }
+    val app = remember { com.livrechat.app.LivreChatApp.instance }
+    val prefs = remember { app.preferencesManager }
+    val currentConv by remember(conversationId) {
+        app.database.conversationDao().getConversationByIdFlow(conversationId)
+    }.collectAsState(initial = null)
     var isConvLocked by remember { mutableStateOf(prefs.isConversationLocked(conversationId)) }
     var showMenu by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var showContactProfile by remember { mutableStateOf(false) }
     var showCryptoInfoDialog by remember { mutableStateOf(false) }
     var selectedMessageForAction by remember { mutableStateOf<MessageEntity?>(null) }
     var showAttachmentSheet by remember { mutableStateOf(false) }
@@ -388,32 +395,72 @@ fun ChatScreen(
         )
     }
 
+    if (showContactProfile) {
+        ContactProfileDialog(
+            conversationId = conversationId,
+            otherUserId = otherUserId,
+            otherDisplayName = otherDisplayName,
+            otherUsername = currentConv?.otherUsername ?: "",
+            otherAvatarUrl = currentConv?.otherAvatarUrl,
+            messages = messages,
+            isLocked = isConvLocked,
+            onDismiss = { showContactProfile = false },
+            onStartCall = {
+                onStartCall(
+                    otherUserId,
+                    otherDisplayName,
+                    currentConv?.otherUsername ?: "",
+                    currentConv?.otherAvatarUrl
+                )
+            },
+            onToggleLock = { newLocked ->
+                isConvLocked = newLocked
+                prefs.setConversationLocked(conversationId, newLocked)
+            },
+            onClearChat = {
+                viewModel.clearConversation(conversationId, otherUserId)
+            },
+            onBlockContact = {
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        app.apiClient.apiService.blockUser(mapOf("targetUserId" to otherUserId))
+                    } catch (e: Exception) {}
+                }
+            },
+            onViewMedia = { viewingImageBase64 = it }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Column(
-                        modifier = Modifier.clickable { showCryptoInfoDialog = true }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showContactProfile = true },
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = otherDisplayName,
-                            fontWeight = FontWeight.Bold,
+                        UserAvatarView(
+                            avatarUrl = currentConv?.otherAvatarUrl,
+                            displayName = otherDisplayName,
+                            size = 40.dp,
                             fontSize = 17.sp
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (!isTyping) {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(11.dp)
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                            }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (isTyping) "digitando..." else "Criptografia E2E",
+                                text = otherDisplayName,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = if (isTyping) "digitando..." else "Online",
                                 fontSize = 12.sp,
-                                color = if (isTyping) BlueAccent else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (isTyping) BlueAccent else Color(0xFF4CAF50),
+                                fontWeight = if (isTyping) FontWeight.Bold else FontWeight.Normal
                             )
                         }
                     }
@@ -425,7 +472,12 @@ fun ChatScreen(
                 },
                 actions = {
                     IconButton(onClick = {
-                        onStartCall(otherUserId, otherDisplayName, "", null)
+                        onStartCall(
+                            otherUserId,
+                            otherDisplayName,
+                            currentConv?.otherUsername ?: "",
+                            currentConv?.otherAvatarUrl
+                        )
                     }) {
                         Icon(
                             imageVector = Icons.Default.Phone,
@@ -442,6 +494,16 @@ fun ChatScreen(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false }
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("Dados do contato") },
+                                onClick = {
+                                    showMenu = false
+                                    showContactProfile = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Person, contentDescription = null, tint = BluePrimary)
+                                }
+                            )
                             DropdownMenuItem(
                                 text = { Text(if (isConvLocked) "Desbloquear conversa" else "Bloquear conversa") },
                                 onClick = {
