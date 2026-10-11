@@ -92,6 +92,9 @@ interface ApiService {
     @DELETE("api/messages/conversations/{conversationId}/clear")
     suspend fun clearConversation(@Path("conversationId") conversationId: String): Response<BaseResponse>
 
+    @DELETE("api/messages/conversations/{conversationId}")
+    suspend fun deleteConversation(@Path("conversationId") conversationId: String): Response<BaseResponse>
+
     @DELETE("api/calls/history")
     suspend fun clearCallHistory(): Response<BaseResponse>
 

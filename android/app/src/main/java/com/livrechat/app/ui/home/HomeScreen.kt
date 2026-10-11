@@ -262,10 +262,15 @@ fun HomeScreen(
                         selectedConvForAction = null
                         scope.launch(Dispatchers.IO) {
                             try {
+                                apiService.deleteConversation(toDel.id)
+                                apiService.removeContact(toDel.otherUserId)
                                 apiService.clearConversation(toDel.id)
                             } catch (e: Exception) {}
-                            db.conversationDao().deleteConversation(toDel.id)
-                            db.messageDao().clearConversationMessages(toDel.id)
+                            try {
+                                db.contactDao().deleteContact(toDel.otherUserId)
+                                db.conversationDao().deleteConversation(toDel.id)
+                                db.messageDao().clearConversationMessages(toDel.id)
+                            } catch (e: Exception) {}
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(context, "Conversa apagada", Toast.LENGTH_SHORT).show()
                             }

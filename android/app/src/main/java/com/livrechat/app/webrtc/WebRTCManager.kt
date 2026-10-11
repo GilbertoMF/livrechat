@@ -62,70 +62,105 @@ class WebRTCManager(
         initWebRTC()
         proximityHelper.onProximityChanged = { isNear ->
             if (!isSpeakerOn) {
-                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                audioManager.isSpeakerphoneOn = false
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val earpiece = audioManager.availableCommunicationDevices.firstOrNull {
-                        it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
-                    }
-                    if (earpiece != null) {
-                        audioManager.setCommunicationDevice(earpiece)
-                    }
-                }
+                updateAudioRouting()
             }
         }
     }
 
     private fun initWebRTC() {
-        val options = PeerConnectionFactory.InitializationOptions.builder(context)
-            .setEnableInternalTracer(false)
-            .createInitializationOptions()
-        PeerConnectionFactory.initialize(options)
+        try {
+            val options = PeerConnectionFactory.InitializationOptions.builder(context)
+                .setEnableInternalTracer(false)
+                .createInitializationOptions()
+            PeerConnectionFactory.initialize(options)
 
-        val eglBase = EglBase.create()
-        peerConnectionFactory = PeerConnectionFactory.builder()
-            .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
-            .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
-            .createPeerConnectionFactory()
+            val eglBase = EglBase.create()
+            peerConnectionFactory = PeerConnectionFactory.builder()
+                .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
+                .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
+                .createPeerConnectionFactory()
 
-        // Robust public STUN servers for NAT traversal
-        iceServers.add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer())
-        iceServers.add(PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer())
-        iceServers.add(PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer())
-        iceServers.add(PeerConnection.IceServer.builder("stun:stun3.l.google.com:19302").createIceServer())
-        iceServers.add(PeerConnection.IceServer.builder("stun:stun4.l.google.com:19302").createIceServer())
-        iceServers.add(PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer())
+            // Robust public STUN servers for NAT traversal
+            iceServers.add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer())
+            iceServers.add(PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer())
+            iceServers.add(PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer())
+            iceServers.add(PeerConnection.IceServer.builder("stun:stun3.l.google.com:19302").createIceServer())
+            iceServers.add(PeerConnection.IceServer.builder("stun:stun4.l.google.com:19302").createIceServer())
+            iceServers.add(PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer())
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro ao inicializar WebRTC factory: ${e.message}", e)
+        }
     }
 
     fun setIceServers(servers: List<PeerConnection.IceServer>) {
         iceServers.clear()
         iceServers.addAll(servers)
+        if (iceServers.isEmpty()) {
+            iceServers.add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer())
+            iceServers.add(PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer())
+        }
+    }
+
+    private fun cleanupCurrentCall() {
+        try {
+            isRemoteDescriptionSet = false
+            synchronized(pendingIceCandidates) {
+                pendingIceCandidates.clear()
+            }
+
+            localAudioTrack?.setEnabled(false)
+            try {
+                localAudioTrack?.dispose()
+            } catch (e: Exception) {
+                Log.w(TAG, "Aviso ao descartar localAudioTrack: ${e.message}")
+            }
+            localAudioTrack = null
+
+            try {
+                localAudioSource?.dispose()
+            } catch (e: Exception) {
+                Log.w(TAG, "Aviso ao descartar localAudioSource: ${e.message}")
+            }
+            localAudioSource = null
+
+            try {
+                peerConnection?.close()
+                peerConnection?.dispose()
+            } catch (e: Exception) {
+                Log.w(TAG, "Aviso ao descartar peerConnection: ${e.message}")
+            }
+            peerConnection = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro geral ao limpar chamada atual", e)
+        }
     }
 
     private fun createAudioTrack() {
-        val audioConstraints = MediaConstraints().apply {
-            // Low-latency and noise-reduction settings
-            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
-        }
+        try {
+            val audioConstraints = MediaConstraints().apply {
+                mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
+                mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
+                mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
+                mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
+            }
 
-        localAudioSource = peerConnectionFactory?.createAudioSource(audioConstraints)
-        localAudioTrack = peerConnectionFactory?.createAudioTrack("LIVRE_AUDIO_TRACK", localAudioSource)
-        localAudioTrack?.setEnabled(true)
+            localAudioSource = peerConnectionFactory?.createAudioSource(audioConstraints)
+            localAudioTrack = peerConnectionFactory?.createAudioTrack("LIVRE_AUDIO_TRACK_${System.currentTimeMillis()}", localAudioSource)
+            localAudioTrack?.setEnabled(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro ao criar track de áudio", e)
+        }
     }
 
     fun startCall() {
-        isRemoteDescriptionSet = false
-        synchronized(pendingIceCandidates) { pendingIceCandidates.clear() }
+        cleanupCurrentCall()
         callback.onCallStateChanged(CallState.CALLING)
         setupPeerConnection()
         createOffer()
     }
 
     fun answerCall(remoteSdp: String) {
-        isRemoteDescriptionSet = false
+        cleanupCurrentCall()
         callback.onCallStateChanged(CallState.CONNECTING)
         setupPeerConnection()
         setRemoteDescription(SessionDescription(SessionDescription.Type.OFFER, remoteSdp)) {
@@ -147,6 +182,7 @@ class WebRTCManager(
             rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
             keyType = PeerConnection.KeyType.ECDSA
+            sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
         }
 
         peerConnection = peerConnectionFactory?.createPeerConnection(rtcConfig, object : PeerConnection.Observer {
@@ -171,8 +207,7 @@ class WebRTCManager(
                             peerConnection?.restartIce()
                             callback.onCallStateChanged(CallState.RECONNECTING)
                         } catch (e: Exception) {
-                            callback.onCallStateChanged(CallState.ENDED)
-                            resetAudioMode()
+                            Log.e(TAG, "Falha ao reiniciar ICE", e)
                         }
                     }
                     PeerConnection.IceConnectionState.CLOSED -> {
@@ -183,7 +218,10 @@ class WebRTCManager(
                 }
             }
 
-            override fun onSignalingChange(p0: PeerConnection.SignalingState?) {}
+            override fun onSignalingChange(p0: PeerConnection.SignalingState?) {
+                Log.d(TAG, "Signaling state alterado: $p0")
+            }
+
             override fun onIceConnectionReceivingChange(p0: Boolean) {}
             override fun onIceGatheringChange(p0: PeerConnection.IceGatheringState?) {}
             override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>?) {}
@@ -191,7 +229,9 @@ class WebRTCManager(
             override fun onRemoveStream(stream: MediaStream?) {}
             override fun onDataChannel(p0: org.webrtc.DataChannel?) {}
             override fun onRenegotiationNeeded() {}
-            override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {}
+            override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {
+                Log.d(TAG, "Track remoto recebido com sucesso")
+            }
         })
 
         // Add local audio track
@@ -215,12 +255,14 @@ class WebRTCManager(
                     }
                     override fun onCreateFailure(p0: String?) {}
                     override fun onSetFailure(err: String?) {
+                        Log.e(TAG, "Falha ao aplicar SDP local na offer: $err")
                         callback.onError("Falha ao aplicar SDP local: $err")
                     }
                 }, desc)
             }
             override fun onSetSuccess() {}
             override fun onCreateFailure(err: String?) {
+                Log.e(TAG, "Falha ao criar SDP offer: $err")
                 callback.onError("Falha ao criar SDP Offer: $err")
             }
             override fun onSetFailure(p0: String?) {}
@@ -228,10 +270,8 @@ class WebRTCManager(
     }
 
     private fun createAnswer() {
-        val sdpConstraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
-        }
+        // In Unified Plan WebRTC, answer constraints should be empty to prevent transceiver conflicts
+        val sdpConstraints = MediaConstraints()
 
         peerConnection?.createAnswer(object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription) {
@@ -242,12 +282,14 @@ class WebRTCManager(
                     }
                     override fun onCreateFailure(p0: String?) {}
                     override fun onSetFailure(err: String?) {
+                        Log.e(TAG, "Falha ao aplicar SDP local na answer: $err")
                         callback.onError("Falha ao aplicar SDP answer: $err")
                     }
                 }, desc)
             }
             override fun onSetSuccess() {}
             override fun onCreateFailure(err: String?) {
+                Log.e(TAG, "Falha ao criar SDP answer: $err")
                 callback.onError("Falha ao criar SDP Answer: $err")
             }
             override fun onSetFailure(p0: String?) {}
@@ -258,7 +300,7 @@ class WebRTCManager(
         peerConnection?.setRemoteDescription(object : SdpObserver {
             override fun onCreateSuccess(p0: SessionDescription?) {}
             override fun onSetSuccess() {
-                Log.d(TAG, "SDP Remoto configurado com sucesso.")
+                Log.d(TAG, "SDP Remoto configurado com sucesso (${desc.type}).")
                 isRemoteDescriptionSet = true
                 drainPendingIceCandidates()
                 onSetSuccess?.invoke()
@@ -272,6 +314,8 @@ class WebRTCManager(
     }
 
     fun addRemoteIceCandidate(candidate: IceCandidate) {
+        if (candidate.sdp.isNullOrBlank()) return
+
         if (isRemoteDescriptionSet && peerConnection != null) {
             try {
                 peerConnection?.addIceCandidate(candidate)
@@ -298,7 +342,6 @@ class WebRTCManager(
         }
     }
 
-    // Audio controls
     fun toggleMute(): Boolean {
         isMicMuted = !isMicMuted
         localAudioTrack?.setEnabled(!isMicMuted)
@@ -307,58 +350,62 @@ class WebRTCManager(
 
     fun toggleSpeaker(): Boolean {
         isSpeakerOn = !isSpeakerOn
-        audioManager.isSpeakerphoneOn = isSpeakerOn
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try {
-                if (isSpeakerOn) {
-                    val speakerDevice = audioManager.availableCommunicationDevices.firstOrNull {
+        updateAudioRouting()
+        return isSpeakerOn
+    }
+
+    private fun updateAudioRouting() {
+        try {
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+            if (isSpeakerOn) {
+                audioManager.isSpeakerphoneOn = true
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val speaker = audioManager.availableCommunicationDevices.firstOrNull {
                         it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
                     }
-                    if (speakerDevice != null) {
-                        audioManager.setCommunicationDevice(speakerDevice)
-                    }
-                } else {
-                    val earpieceDevice = audioManager.availableCommunicationDevices.firstOrNull {
-                        it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
-                    }
-                    if (earpieceDevice != null) {
-                        audioManager.setCommunicationDevice(earpieceDevice)
+                    if (speaker != null) {
+                        audioManager.setCommunicationDevice(speaker)
                     } else {
                         audioManager.clearCommunicationDevice()
                     }
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "Falha ao definir communication device: ${e.message}")
+            } else {
+                audioManager.isSpeakerphoneOn = false
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val earpiece = audioManager.availableCommunicationDevices.firstOrNull {
+                        it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+                    }
+                    if (earpiece != null) {
+                        audioManager.setCommunicationDevice(earpiece)
+                    } else {
+                        audioManager.clearCommunicationDevice()
+                    }
+                }
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "Falha ao atualizar roteamento de áudio: ${e.message}")
         }
-        return isSpeakerOn
     }
 
     private fun enableVoIPAudioMode() {
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        audioManager.isSpeakerphoneOn = isSpeakerOn
+        updateAudioRouting()
         proximityHelper.startListening()
     }
 
     private fun resetAudioMode() {
         proximityHelper.stopListening()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            audioManager.clearCommunicationDevice()
-        }
-        audioManager.mode = AudioManager.MODE_NORMAL
-        audioManager.isSpeakerphoneOn = false
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                audioManager.clearCommunicationDevice()
+            }
+            audioManager.mode = AudioManager.MODE_NORMAL
+            audioManager.isSpeakerphoneOn = false
+        } catch (e: Exception) {}
     }
 
     fun endCall() {
         try {
-            isRemoteDescriptionSet = false
-            synchronized(pendingIceCandidates) {
-                pendingIceCandidates.clear()
-            }
-            localAudioTrack?.setEnabled(false)
-            localAudioSource?.dispose()
-            peerConnection?.close()
-            peerConnection = null
+            cleanupCurrentCall()
             resetAudioMode()
             callback.onCallStateChanged(CallState.ENDED)
         } catch (e: Exception) {

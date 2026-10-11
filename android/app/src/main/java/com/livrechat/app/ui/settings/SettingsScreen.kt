@@ -404,11 +404,16 @@ fun SettingsScreen(
                                             scope.launch(Dispatchers.IO) {
                                                 try {
                                                     apiService.removeContact(conv.otherUserId)
+                                                    apiService.deleteConversation(conv.id)
                                                     apiService.clearConversation(conv.id)
+                                                } catch (e: Exception) {}
+                                                try {
+                                                    db.contactDao().deleteContact(conv.otherUserId)
                                                     db.conversationDao().deleteConversation(conv.id)
+                                                    db.messageDao().clearConversationMessages(conv.id)
                                                 } catch (e: Exception) {}
                                             }
-                                            Toast.makeText(context, "Contato removido", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Contato excluído", Toast.LENGTH_SHORT).show()
                                         }
                                     ) {
                                         Icon(Icons.Default.Delete, contentDescription = "Remover", tint = DangerRed, modifier = Modifier.size(20.dp))

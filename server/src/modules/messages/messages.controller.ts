@@ -220,4 +220,21 @@ export class MessagesController {
       return res.status(500).json({ error: e.message });
     }
   }
+
+  public static async deleteConversation(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const { conversationId } = req.params;
+      await db.deleteConversationForUser(conversationId, userId);
+
+      WebSocketManager.getInstance()?.broadcast({
+        type: 'chat:clear',
+        conversationId
+      });
+
+      return res.status(200).json({ success: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
 }

@@ -583,11 +583,32 @@ class DatabaseService {
     this.memoryStore.contacts = this.memoryStore.contacts.filter(
       c => !(c.user_id === userId && c.contact_user_id === contactUserId)
     );
+
+    // Also remove direct conversation memberships
+    const directConvs = this.memoryStore.conversation_members
+      .filter(m => m.user_id === userId)
+      .map(m => m.conversation_id)
+      .filter(convId => 
+        this.memoryStore.conversation_members.some(m => m.conversation_id === convId && m.user_id === contactUserId)
+      );
+
+    for (const cId of directConvs) {
+      this.memoryStore.conversation_members = this.memoryStore.conversation_members.filter(
+        m => !(m.conversation_id === cId && m.user_id === userId)
+      );
+      this.memoryStore.messages = this.memoryStore.messages.filter(m => m.conversation_id !== cId);
+    }
     this.saveToLocal();
 
     if (this.pgPool) {
       try {
         await this.pgPool.query('DELETE FROM contacts WHERE user_id = $1 AND contact_user_id = $2', [userId, contactUserId]);
+        await this.pgPool.query(`
+          DELETE FROM conversation_members 
+          WHERE user_id = $1 AND conversation_id IN (
+            SELECT conversation_id FROM conversation_members WHERE user_id = $2
+          )
+        `, [userId, contactUserId]);
         return true;
       } catch (e) {
         console.warn('[Database] Erro PG removeContact:', e);
@@ -1373,6 +1394,56 @@ class DatabaseService {
     }
     this.memoryStore.messages = this.memoryStore.messages.filter(m => m.conversation_id !== conversationId);
     this.saveToLocal();
+    return true;
+  }
+
+  public async deleteConversationForUser(conversationId: string, userId: string): Promise<boolean> {
+    // 1. Remove from memory store
+    const otherMem = this.memoryStore.conversation_members.find(
+      m => m.conversation_id === conversationId && m.user_id !== userId
+    );
+    if (otherMem) {
+      this.memoryStore.contacts = this.memoryStore.contacts.filter(
+        c => !(c.user_id === userId && c.contact_user_id === otherMem.user_id)
+      );
+    }
+    this.memoryStore.conversation_members = this.memoryStore.conversation_members.filter(
+      m => !(m.conversation_id === conversationId && m.user_id === userId)
+    );
+    this.memoryStore.messages = this.memoryStore.messages.filter(m => m.conversation_id !== conversationId);
+    const remainingMems = this.memoryStore.conversation_members.filter(m => m.conversation_id === conversationId);
+    if (remainingMems.length === 0) {
+      this.memoryStore.conversations = this.memoryStore.conversations.filter(c => c.id !== conversationId);
+    }
+    this.saveToLocal();
+
+    // 2. Remove from PostgreSQL
+    if (this.pgPool) {
+      try {
+        const otherRes = await this.pgPool.query(
+          'SELECT user_id FROM conversation_members WHERE conversation_id = $1 AND user_id != $2',
+          [conversationId, userId]
+        );
+        for (const row of otherRes.rows) {
+          await this.pgPool.query(
+            'DELETE FROM contacts WHERE user_id = $1 AND contact_user_id = $2',
+            [userId, row.user_id]
+          );
+        }
+        await this.pgPool.query(
+          'DELETE FROM conversation_members WHERE conversation_id = $1 AND user_id = $2',
+          [conversationId, userId]
+        );
+        await this.pgPool.query('DELETE FROM messages WHERE conversation_id = $1', [conversationId]);
+        await this.pgPool.query(`
+          DELETE FROM conversations 
+          WHERE id = $1 AND (SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1) = 0
+        `, [conversationId]);
+        return true;
+      } catch (e) {
+        console.warn('[Database] Erro PG deleteConversationForUser:', e);
+      }
+    }
     return true;
   }
 

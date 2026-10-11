@@ -51,9 +51,11 @@ class AudioPlayerHelper(private val context: Context) {
 
     private fun routeAudio(isNearEar: Boolean) {
         try {
+            // Keep MODE_IN_COMMUNICATION active during playback to prevent Android AudioFlinger
+            // from resetting or tearing down the audio track when taking off the ear!
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
             if (isNearEar) {
                 // Route to EARPIECE (auricular de cima)
-                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
                 audioManager.isSpeakerphoneOn = false
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     val earpiece = audioManager.availableCommunicationDevices.firstOrNull {
@@ -65,11 +67,28 @@ class AudioPlayerHelper(private val context: Context) {
                 }
             } else {
                 // Route to LOUDSPEAKER (alto-falante principal)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    audioManager.clearCommunicationDevice()
-                }
-                audioManager.mode = AudioManager.MODE_NORMAL
                 audioManager.isSpeakerphoneOn = true
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val speaker = audioManager.availableCommunicationDevices.firstOrNull {
+                        it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                    }
+                    if (speaker != null) {
+                        audioManager.setCommunicationDevice(speaker)
+                    } else {
+                        audioManager.clearCommunicationDevice()
+                    }
+                }
+            }
+
+            // CRITICAL: Ensure playback continues without pause when transitioning routes
+            mediaPlayer?.let { mp ->
+                if (_isPlaying.value && !mp.isPlaying) {
+                    try {
+                        mp.start()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Falha ao retomar MediaPlayer na transição de áudio: ${e.message}")
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Erro ao rotear áudio: ${e.message}")
@@ -87,7 +106,7 @@ class AudioPlayerHelper(private val context: Context) {
         try {
             val audioFile = getOrCreateAudioFile(messageId, content) ?: return
 
-            // Route audio according to current proximity state (default loudspeaker)
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
             routeAudio(proximityHelper.isNearEar)
             proximityHelper.startListening()
 
@@ -99,6 +118,11 @@ class AudioPlayerHelper(private val context: Context) {
                         .build()
                 )
                 setDataSource(audioFile.absolutePath)
+                setOnErrorListener { _, what, extra ->
+                    Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
+                    stop()
+                    true
+                }
                 prepare()
                 start()
             }

@@ -79,6 +79,7 @@ app.delete('/api/messages/:messageId', authenticateToken, MessagesController.del
 app.post('/api/messages/:messageId/read', authenticateToken, MessagesController.markAsRead);
 app.post('/api/messages/conversations/:conversationId/read', authenticateToken, MessagesController.markConversationAsRead);
 app.delete('/api/messages/conversations/:conversationId/clear', authenticateToken, MessagesController.clearConversation);
+app.delete('/api/messages/conversations/:conversationId', authenticateToken, MessagesController.deleteConversation);
 
 // ==========================================
 // CALLS ROUTES

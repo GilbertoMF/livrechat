@@ -36,7 +36,7 @@ fun IncomingCallScreen(
                 hasNavigated = true
                 onCallAnswered()
             }
-        } else if ((callState == CallState.ENDED || callState == CallState.IDLE) && !hasNavigated) {
+        } else if (callState == CallState.ENDED && !hasNavigated) {
             onCallRejected()
         }
     }

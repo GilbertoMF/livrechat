@@ -212,7 +212,10 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     }
 
     override fun onError(message: String) {
-        hangupCall()
+        android.util.Log.e("CallViewModel", "WebRTC erro: $message")
+        if (message.contains("Falha ao aplicar SDP local") || message.contains("Falha ao criar SDP")) {
+            hangupCall()
+        }
     }
 
     // WebSocketEventsListener WebRTC callbacks
@@ -237,7 +240,9 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
         val sdpMid = if (candidate.has("sdpMid") && !candidate.get("sdpMid").isJsonNull) candidate.get("sdpMid").asString else null
         val sdpMLineIndex = if (candidate.has("sdpMLineIndex") && !candidate.get("sdpMLineIndex").isJsonNull) candidate.get("sdpMLineIndex").asInt else 0
         val sdp = if (candidate.has("candidate") && !candidate.get("candidate").isJsonNull) candidate.get("candidate").asString else ""
-        webRTCManager?.addRemoteIceCandidate(IceCandidate(sdpMid, sdpMLineIndex, sdp))
+        if (sdp.isNotBlank()) {
+            webRTCManager?.addRemoteIceCandidate(IceCandidate(sdpMid, sdpMLineIndex, sdp))
+        }
     }
 
     override fun onCallRinging(fromUserId: String) {
