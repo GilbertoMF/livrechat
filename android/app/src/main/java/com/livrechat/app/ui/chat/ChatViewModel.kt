@@ -59,6 +59,9 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
 
         viewModelScope.launch(Dispatchers.IO) {
             db.conversationDao().clearUnreadCount(conversationId)
+            try {
+                apiService.markConversationRead(conversationId)
+            } catch (e: Exception) {}
             // Marcar todas as mensagens recebidas como lidas e notificar remetente com 2 ticks azuis
             val unreadList = db.messageDao().getUnreadIncomingMessages(conversationId)
             db.messageDao().markAllIncomingAsRead(conversationId)
@@ -291,6 +294,33 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         viewModelScope.launch(Dispatchers.IO) {
             connectionManager.getClient().sendReceipt(messageId, "read")
             apiService.markMessageRead(messageId)
+        }
+    }
+
+    fun deleteMessage(messageId: String, conversationId: String, deleteForEveryone: Boolean, targetUserId: String? = null) {
+        val target = targetUserId ?: _currentOtherUserId.value
+        viewModelScope.launch(Dispatchers.IO) {
+            if (deleteForEveryone) {
+                db.messageDao().softDeleteMessage(messageId)
+                connectionManager.getClient().sendDeleteMessage(messageId, conversationId, target)
+                try {
+                    apiService.deleteMessage(messageId)
+                } catch (e: Exception) {}
+            } else {
+                db.messageDao().deletePermanently(messageId)
+            }
+        }
+    }
+
+    fun clearConversation(conversationId: String, targetUserId: String? = null) {
+        val target = targetUserId ?: _currentOtherUserId.value
+        viewModelScope.launch(Dispatchers.IO) {
+            db.messageDao().clearConversationMessages(conversationId)
+            db.conversationDao().updateLastMessage(conversationId, "", System.currentTimeMillis())
+            connectionManager.getClient().sendClearChat(conversationId, target)
+            try {
+                apiService.clearConversation(conversationId)
+            } catch (e: Exception) {}
         }
     }
 

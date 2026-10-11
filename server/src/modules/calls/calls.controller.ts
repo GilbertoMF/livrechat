@@ -72,4 +72,14 @@ export class CallsController {
       return res.status(500).json({ error: e.message });
     }
   }
+
+  public static async clearCallHistory(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      await db.deleteCallHistory(userId);
+      return res.status(200).json({ success: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
 }

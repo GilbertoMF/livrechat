@@ -264,6 +264,30 @@ export class WebSocketManager {
         break;
       }
 
+      case 'chat:delete': {
+        const { messageId, conversationId, deleteForEveryone } = event;
+        if (deleteForEveryone) {
+          await db.deleteMessage(messageId, senderId);
+          this.broadcast({
+            type: 'chat:delete',
+            messageId,
+            conversationId,
+            deleteForEveryone: true
+          });
+        }
+        break;
+      }
+
+      case 'chat:clear': {
+        const { conversationId } = event;
+        await db.clearConversationMessages(conversationId);
+        this.broadcast({
+          type: 'chat:clear',
+          conversationId
+        });
+        break;
+      }
+
       // ==========================================
       // WEBRTC CALL SIGNALING
       // ==========================================

@@ -94,8 +94,9 @@ dependencies {
     // WebRTC for Voice Calls
     implementation("io.getstream:stream-webrtc-android:1.1.1")
 
-    // Security & Encrypted Preferences
+    // Security, Biometrics & Encrypted Preferences
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.biometric:biometric:1.1.0")
 
     // Coil Image Loading
     implementation("io.coil-kt:coil-compose:2.5.0")

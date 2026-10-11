@@ -76,6 +76,8 @@ app.post('/api/messages', authenticateToken, MessagesController.sendMessage);
 app.put('/api/messages/:messageId', authenticateToken, MessagesController.editMessage);
 app.delete('/api/messages/:messageId', authenticateToken, MessagesController.deleteMessage);
 app.post('/api/messages/:messageId/read', authenticateToken, MessagesController.markAsRead);
+app.post('/api/messages/conversations/:conversationId/read', authenticateToken, MessagesController.markConversationAsRead);
+app.delete('/api/messages/conversations/:conversationId/clear', authenticateToken, MessagesController.clearConversation);
 
 // ==========================================
 // CALLS ROUTES
@@ -83,6 +85,7 @@ app.post('/api/messages/:messageId/read', authenticateToken, MessagesController.
 app.get('/api/calls/ice-servers', authenticateToken, CallsController.getIceServers);
 app.get('/api/calls/history', authenticateToken, CallsController.getCallHistory);
 app.post('/api/calls/record', authenticateToken, CallsController.recordCall);
+app.delete('/api/calls/history', authenticateToken, CallsController.clearCallHistory);
 
 // Attach WebSocket Manager
 export const wsManager = new WebSocketManager(server);

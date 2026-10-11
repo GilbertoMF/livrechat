@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Pool } from 'pg';
+import { v4 as uuidv4 } from 'uuid';
 import { CONFIG } from '../config/env';
 
 export interface User {
@@ -1285,6 +1286,77 @@ class DatabaseService {
       .filter(c => c.caller_id === userId || c.callee_id === userId)
       .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
       .slice(0, limit);
+  }
+
+  public async deleteCallHistory(userId: string): Promise<boolean> {
+    if (this.pgPool) {
+      try {
+        await this.pgPool.query(`
+          DELETE FROM call_history WHERE caller_id = $1 OR callee_id = $1
+        `, [userId]);
+        return true;
+      } catch (e) {
+        console.warn('[Database] Erro PG deleteCallHistory:', e);
+      }
+    }
+    this.memoryStore.call_history = this.memoryStore.call_history.filter(
+      c => c.caller_id !== userId && c.callee_id !== userId
+    );
+    this.saveToLocal();
+    return true;
+  }
+
+  public async markConversationAsRead(conversationId: string, userId: string): Promise<boolean> {
+    if (this.pgPool) {
+      try {
+        await this.pgPool.query(`
+          INSERT INTO message_receipts (id, message_id, user_id, status, timestamp)
+          SELECT gen_random_uuid()::varchar, m.id, $2, 'read', NOW()
+          FROM messages m
+          WHERE m.conversation_id = $1 AND m.sender_id != $2
+          ON CONFLICT (message_id, user_id, status) DO NOTHING
+        `, [conversationId, userId]);
+
+        await this.pgPool.query(`
+          UPDATE conversation_members
+          SET last_read_at = NOW()
+          WHERE conversation_id = $1 AND user_id = $2
+        `, [conversationId, userId]);
+        return true;
+      } catch (e) {
+        console.warn('[Database] Erro PG markConversationAsRead:', e);
+      }
+    }
+
+    const msgs = this.memoryStore.messages.filter(m => m.conversation_id === conversationId && m.sender_id !== userId);
+    for (const m of msgs) {
+      const exists = this.memoryStore.message_receipts.some(r => r.message_id === m.id && r.user_id === userId && r.status === 'read');
+      if (!exists) {
+        this.memoryStore.message_receipts.push({
+          id: uuidv4(),
+          message_id: m.id,
+          user_id: userId,
+          status: 'read',
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+    this.saveToLocal();
+    return true;
+  }
+
+  public async clearConversationMessages(conversationId: string): Promise<boolean> {
+    if (this.pgPool) {
+      try {
+        await this.pgPool.query(`DELETE FROM messages WHERE conversation_id = $1`, [conversationId]);
+        return true;
+      } catch (e) {
+        console.warn('[Database] Erro PG clearConversationMessages:', e);
+      }
+    }
+    this.memoryStore.messages = this.memoryStore.messages.filter(m => m.conversation_id !== conversationId);
+    this.saveToLocal();
+    return true;
   }
 
   // ==========================================

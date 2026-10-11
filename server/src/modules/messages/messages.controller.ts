@@ -185,4 +185,39 @@ export class MessagesController {
       return res.status(500).json({ error: e.message });
     }
   }
+
+  public static async markConversationAsRead(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const { conversationId } = req.params;
+
+      await db.markConversationAsRead(conversationId, userId);
+
+      WebSocketManager.getInstance()?.broadcast({
+        type: 'chat:conversation_read',
+        conversationId,
+        userId
+      });
+
+      return res.status(200).json({ success: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  public static async clearConversation(req: AuthRequest, res: Response) {
+    try {
+      const { conversationId } = req.params;
+      await db.clearConversationMessages(conversationId);
+
+      WebSocketManager.getInstance()?.broadcast({
+        type: 'chat:clear',
+        conversationId
+      });
+
+      return res.status(200).json({ success: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
 }

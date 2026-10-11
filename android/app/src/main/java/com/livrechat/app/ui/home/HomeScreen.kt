@@ -1,5 +1,8 @@
 package com.livrechat.app.ui.home
 
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,11 +17,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
 import coil.compose.AsyncImage
+import com.livrechat.app.LivreChatApp
 import com.livrechat.app.data.local.entity.CallRecordEntity
 import com.livrechat.app.data.local.entity.ConversationEntity
 import com.livrechat.app.ui.call.CallViewModel
@@ -26,6 +32,7 @@ import com.livrechat.app.ui.chat.ChatViewModel
 import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
 import com.livrechat.app.ui.theme.SuccessGreen
+import com.livrechat.app.util.BiometricHelper
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -47,8 +54,96 @@ fun HomeScreen(
     val isConnected by chatViewModel.isConnected.collectAsState()
     val typingStatus by chatViewModel.typingStatus.collectAsState()
 
+    val context = LocalContext.current
+    val prefs = remember { LivreChatApp.instance.preferencesManager }
+    var showClearCallHistoryDialog by remember { mutableStateOf(false) }
+    var selectedConvForAction by remember { mutableStateOf<ConversationEntity?>(null) }
+    var showClearConvDialog by remember { mutableStateOf<ConversationEntity?>(null) }
+
     LaunchedEffect(isConnected) {
         chatViewModel.syncConversations()
+    }
+
+    if (showClearCallHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearCallHistoryDialog = false },
+            title = { Text("Limpar histórico de chamadas?", fontWeight = FontWeight.Bold) },
+            text = { Text("Todas as chamadas recebidas e efetuadas serão apagadas.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    callViewModel.clearCallHistory()
+                    showClearCallHistoryDialog = false
+                    Toast.makeText(context, "Histórico de chamadas limpo", Toast.LENGTH_SHORT).show()
+                }) {
+                    Text("Limpar", color = DangerRed, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearCallHistoryDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (selectedConvForAction != null) {
+        val conv = selectedConvForAction!!
+        val isLocked = prefs.isConversationLocked(conv.id)
+        AlertDialog(
+            onDismissRequest = { selectedConvForAction = null },
+            title = { Text(conv.otherDisplayName, fontWeight = FontWeight.Bold) },
+            text = { Text("Opções da conversa:") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val newLocked = !isLocked
+                    prefs.setConversationLocked(conv.id, newLocked)
+                    selectedConvForAction = null
+                    Toast.makeText(
+                        context,
+                        if (newLocked) "Conversa bloqueada com biometria" else "Conversa desbloqueada",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }) {
+                    Text(if (isLocked) "Desbloquear com Digital" else "Bloquear com Digital", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        showClearConvDialog = conv
+                        selectedConvForAction = null
+                    }) {
+                        Text("Limpar conversa", color = DangerRed)
+                    }
+                    TextButton(onClick = { selectedConvForAction = null }) {
+                        Text("Cancelar")
+                    }
+                }
+            }
+        )
+    }
+
+    if (showClearConvDialog != null) {
+        val conv = showClearConvDialog!!
+        AlertDialog(
+            onDismissRequest = { showClearConvDialog = null },
+            title = { Text("Limpar conversa?", fontWeight = FontWeight.Bold) },
+            text = { Text("Todas as mensagens com ${conv.otherDisplayName} serão apagadas.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    chatViewModel.clearConversation(conv.id, conv.otherUserId)
+                    showClearConvDialog = null
+                    Toast.makeText(context, "Conversa limpa", Toast.LENGTH_SHORT).show()
+                }) {
+                    Text("Limpar mensagens", color = DangerRed, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConvDialog = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -66,6 +161,11 @@ fun HomeScreen(
                     }
                 },
                 actions = {
+                    if (selectedTab == 1 && callHistory.isNotEmpty()) {
+                        IconButton(onClick = { showClearCallHistoryDialog = true }) {
+                            Icon(Icons.Default.DeleteSweep, contentDescription = "Limpar Histórico", tint = DangerRed)
+                        }
+                    }
                     IconButton(onClick = onNavigateToSearch) {
                         Icon(Icons.Default.Search, contentDescription = "Pesquisar")
                     }
@@ -149,11 +249,35 @@ fun HomeScreen(
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
                         items(conversations, key = { it.id }) { conv ->
                             val isTyping = typingStatus[conv.id] == true
+                            val isLocked = prefs.isConversationLocked(conv.id)
                             ConversationItem(
                                 conversation = conv,
                                 isTyping = isTyping,
+                                isLocked = isLocked,
                                 onClick = {
-                                    onNavigateToChat(conv.id, conv.otherUserId, conv.otherDisplayName)
+                                    if (isLocked) {
+                                        val activity = context as? FragmentActivity
+                                        if (activity != null) {
+                                            BiometricHelper.authenticate(
+                                                activity = activity,
+                                                title = "Conversa Bloqueada",
+                                                subtitle = "Confirme sua digital para abrir a conversa",
+                                                onSuccess = {
+                                                    onNavigateToChat(conv.id, conv.otherUserId, conv.otherDisplayName)
+                                                },
+                                                onError = {
+                                                    Toast.makeText(context, "Acesso negado", Toast.LENGTH_SHORT).show()
+                                                }
+                                            )
+                                        } else {
+                                            onNavigateToChat(conv.id, conv.otherUserId, conv.otherDisplayName)
+                                        }
+                                    } else {
+                                        onNavigateToChat(conv.id, conv.otherUserId, conv.otherDisplayName)
+                                    }
+                                },
+                                onLongClick = {
+                                    selectedConvForAction = conv
                                 }
                             )
                             Divider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), thickness = 0.5.dp)
@@ -202,16 +326,22 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ConversationItem(
     conversation: ConversationEntity,
     isTyping: Boolean = false,
-    onClick: () -> Unit
+    isLocked: Boolean = false,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -247,13 +377,27 @@ fun ConversationItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = conversation.otherDisplayName,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = conversation.otherDisplayName,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (isLocked) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = "Bloqueada",
+                            tint = BluePrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
                 Text(
                     text = formatTimestamp(conversation.lastMessageTimestamp),
                     fontSize = 12.sp,

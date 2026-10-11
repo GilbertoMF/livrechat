@@ -3,9 +3,12 @@ package com.livrechat.app.ui.chat
 import android.util.Base64
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -92,21 +95,122 @@ fun ChatScreen(
         }
     }
 
+    val prefs = remember { com.livrechat.app.LivreChatApp.instance.preferencesManager }
+    var isConvLocked by remember { mutableStateOf(prefs.isConversationLocked(conversationId)) }
+    var showMenu by remember { mutableStateOf(false) }
+    var showClearDialog by remember { mutableStateOf(false) }
+    var showCryptoInfoDialog by remember { mutableStateOf(false) }
+    var selectedMessageForAction by remember { mutableStateOf<MessageEntity?>(null) }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Limpar conversa?", fontWeight = FontWeight.Bold) },
+            text = { Text("Todas as mensagens desta conversa serão apagadas permanentemente.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearConversation(conversationId, otherUserId)
+                    showClearDialog = false
+                    Toast.makeText(context, "Conversa limpa", Toast.LENGTH_SHORT).show()
+                }) {
+                    Text("Limpar mensagens", color = DangerRed, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (showCryptoInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showCryptoInfoDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Security, contentDescription = null, tint = BluePrimary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Criptografia de Ponta a Ponta", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Text(
+                    "As mensagens, áudios e chamadas desta conversa são protegidas com criptografia de nível militar (AES-256-GCM + PBKDF2/HMAC-SHA256).\n\n" +
+                    "Ninguém fora desta conversa, nem mesmo o LivreChat ou provedores de rede, podem ler suas mensagens ou ouvir suas chamadas de voz.",
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showCryptoInfoDialog = false }) {
+                    Text("Entendido", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (selectedMessageForAction != null) {
+        val msg = selectedMessageForAction!!
+        AlertDialog(
+            onDismissRequest = { selectedMessageForAction = null },
+            title = { Text("Apagar mensagem?", fontWeight = FontWeight.Bold) },
+            text = { Text("Escolha como deseja apagar a mensagem:") },
+            confirmButton = {
+                if (msg.isOutgoing && !msg.isDeleted) {
+                    TextButton(onClick = {
+                        viewModel.deleteMessage(msg.id, conversationId, deleteForEveryone = true, targetUserId = otherUserId)
+                        selectedMessageForAction = null
+                        Toast.makeText(context, "Mensagem apagada para todos", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Text("Apagar para todos", color = DangerRed, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        viewModel.deleteMessage(msg.id, conversationId, deleteForEveryone = false)
+                        selectedMessageForAction = null
+                        Toast.makeText(context, "Mensagem apagada para você", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Text("Apagar para mim")
+                    }
+                    TextButton(onClick = { selectedMessageForAction = null }) {
+                        Text("Cancelar")
+                    }
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
+                    Column(
+                        modifier = Modifier.clickable { showCryptoInfoDialog = true }
+                    ) {
                         Text(
                             text = otherDisplayName,
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp
                         )
-                        Text(
-                            text = if (isTyping) "digitando..." else "LivreChat Criptografado",
-                            fontSize = 12.sp,
-                            color = if (isTyping) BlueAccent else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (!isTyping) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                            }
+                            Text(
+                                text = if (isTyping) "digitando..." else "Criptografia E2E",
+                                fontSize = 12.sp,
+                                color = if (isTyping) BlueAccent else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
@@ -123,6 +227,57 @@ fun ChatScreen(
                             contentDescription = "Chamada de Voz WebRTC",
                             tint = BluePrimary
                         )
+                    }
+
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Opções")
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(if (isConvLocked) "Desbloquear conversa" else "Bloquear conversa") },
+                                onClick = {
+                                    val newLocked = !isConvLocked
+                                    prefs.setConversationLocked(conversationId, newLocked)
+                                    isConvLocked = newLocked
+                                    showMenu = false
+                                    Toast.makeText(
+                                        context,
+                                        if (newLocked) "Conversa bloqueada com biometria" else "Conversa desbloqueada",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = if (isConvLocked) Icons.Default.LockOpen else Icons.Default.Lock,
+                                        contentDescription = null
+                                    )
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Limpar conversa") },
+                                onClick = {
+                                    showMenu = false
+                                    showClearDialog = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.DeleteSweep, contentDescription = null, tint = DangerRed)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Segurança e Criptografia") },
+                                onClick = {
+                                    showMenu = false
+                                    showCryptoInfoDialog = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Shield, contentDescription = null, tint = BluePrimary)
+                                }
+                            )
+                        }
                     }
                 }
             )
@@ -317,17 +472,20 @@ fun ChatScreen(
             items(messages, key = { it.id }) { message ->
                 MessageBubble(
                     message = message,
-                    audioPlayerHelper = audioPlayerHelper
+                    audioPlayerHelper = audioPlayerHelper,
+                    onLongPress = { selectedMessageForAction = it }
                 )
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageBubble(
     message: MessageEntity,
-    audioPlayerHelper: AudioPlayerHelper
+    audioPlayerHelper: AudioPlayerHelper,
+    onLongPress: (MessageEntity) -> Unit
 ) {
     val isOutgoing = message.isOutgoing
     val alignment = if (isOutgoing) Alignment.End else Alignment.Start
@@ -344,10 +502,34 @@ fun MessageBubble(
                 bottomEnd = if (isOutgoing) 4.dp else 16.dp
             ),
             color = if (isOutgoing) BluePrimary else MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.widthIn(max = 295.dp)
+            modifier = Modifier
+                .widthIn(max = 295.dp)
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = { onLongPress(message) }
+                )
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                if (message.messageType == "audio") {
+                if (message.isDeleted) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Block,
+                            contentDescription = null,
+                            tint = if (isOutgoing) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Esta mensagem foi apagada",
+                            fontStyle = FontStyle.Italic,
+                            color = if (isOutgoing) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            fontSize = 14.sp
+                        )
+                    }
+                } else if (message.messageType == "audio") {
                     AudioMessageBubbleContent(
                         message = message,
                         audioPlayerHelper = audioPlayerHelper,
@@ -373,12 +555,43 @@ fun MessageBubble(
                         fontSize = 11.sp
                     )
 
-                    if (isOutgoing) {
+                    if (isOutgoing && !message.isDeleted) {
                         Spacer(modifier = Modifier.width(4.dp))
                         MessageStatusIcon(status = message.status)
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun AudioWaveformVisualizer(
+    progress: Float,
+    isOutgoing: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val barHeights = remember {
+        listOf(8, 14, 22, 12, 28, 18, 10, 24, 16, 26, 30, 14, 20, 26, 12, 18, 28, 16, 10, 22, 30, 20, 14, 18, 26, 16, 10, 14)
+    }
+    Row(
+        modifier = modifier.height(32.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        barHeights.forEachIndexed { index, heightDp ->
+            val barRatio = index.toFloat() / barHeights.size.toFloat()
+            val isPlayed = progress > barRatio
+            val activeColor = if (isOutgoing) Color.White else BluePrimary
+            val inactiveColor = if (isOutgoing) Color.White.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(heightDp.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(if (isPlayed) activeColor else inactiveColor)
+            )
         }
     }
 }
@@ -408,29 +621,27 @@ fun AudioMessageBubbleContent(
             colors = IconButtonDefaults.iconButtonColors(
                 containerColor = if (isOutgoing) Color.White.copy(alpha = 0.25f) else BluePrimary.copy(alpha = 0.15f)
             ),
-            modifier = Modifier.size(38.dp)
+            modifier = Modifier.size(42.dp)
         ) {
             Icon(
                 imageVector = if (isThisPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                 contentDescription = if (isThisPlaying) "Pausar" else "Reproduzir",
                 tint = if (isOutgoing) Color.White else BluePrimary,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(24.dp)
             )
         }
 
         Spacer(modifier = Modifier.width(10.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            LinearProgressIndicator(
-                progress = { if (playingId == message.id) progress else 0f },
-                color = if (isOutgoing) Color.White else BluePrimary,
-                trackColor = if (isOutgoing) Color.White.copy(alpha = 0.3f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
+            // WhatsApp-style Waveform Bars
+            AudioWaveformVisualizer(
+                progress = if (playingId == message.id) progress else 0f,
+                isOutgoing = isOutgoing,
+                modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -446,7 +657,7 @@ fun AudioMessageBubbleContent(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (isThisPlaying) "Reproduzindo..." else "Mensagem de voz",
+                        text = if (isThisPlaying) "Reproduzindo..." else "Áudio gravado",
                         fontSize = 11.sp,
                         color = if (isOutgoing) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -254,4 +254,25 @@ class ConnectionManager(
             listeners.forEach { it.onCallEnded(fromUserId) }
         }
     }
+
+    override fun onMessageDeleted(messageId: String, conversationId: String) {
+        scope.launch {
+            val db = LivreChatApp.instance.database
+            db.messageDao().softDeleteMessage(messageId)
+            synchronized(listeners) {
+                listeners.forEach { it.onMessageDeleted(messageId, conversationId) }
+            }
+        }
+    }
+
+    override fun onChatCleared(conversationId: String) {
+        scope.launch {
+            val db = LivreChatApp.instance.database
+            db.messageDao().clearConversationMessages(conversationId)
+            db.conversationDao().updateLastMessage(conversationId, "", System.currentTimeMillis())
+            synchronized(listeners) {
+                listeners.forEach { it.onChatCleared(conversationId) }
+            }
+        }
+    }
 }

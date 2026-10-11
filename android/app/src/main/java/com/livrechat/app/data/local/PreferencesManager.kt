@@ -71,6 +71,32 @@ class PreferencesManager(context: Context) {
             _themeFlow.value = value
         }
 
+    var isBiometricEnabled: Boolean
+        get() = prefs.getBoolean(KEY_BIOMETRIC_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_BIOMETRIC_ENABLED, value).apply()
+
+    var userBio: String
+        get() = prefs.getString(KEY_USER_BIO, "Disponível no LivreChat") ?: "Disponível no LivreChat"
+        set(value) = prefs.edit().putString(KEY_USER_BIO, value).apply()
+
+    var userAvatarUrl: String?
+        get() = prefs.getString(KEY_USER_AVATAR, null)
+        set(value) = prefs.edit().putString(KEY_USER_AVATAR, value).apply()
+
+    fun getLockedConversations(): Set<String> {
+        return prefs.getStringSet(KEY_LOCKED_CONVERSATIONS, emptySet()) ?: emptySet()
+    }
+
+    fun isConversationLocked(conversationId: String): Boolean {
+        return getLockedConversations().contains(conversationId)
+    }
+
+    fun setConversationLocked(conversationId: String, locked: Boolean) {
+        val current = getLockedConversations().toMutableSet()
+        if (locked) current.add(conversationId) else current.remove(conversationId)
+        prefs.edit().putStringSet(KEY_LOCKED_CONVERSATIONS, current).apply()
+    }
+
     fun isLoggedIn(): Boolean {
         return !accessToken.isNullOrEmpty() && !currentUserId.isNullOrEmpty()
     }
@@ -82,6 +108,8 @@ class PreferencesManager(context: Context) {
             .remove(KEY_USER_ID)
             .remove(KEY_USERNAME)
             .remove(KEY_DISPLAY_NAME)
+            .remove(KEY_USER_BIO)
+            .remove(KEY_USER_AVATAR)
             .apply()
     }
 
@@ -97,5 +125,9 @@ class PreferencesManager(context: Context) {
         private const val KEY_BACKUP_WIFI_ONLY = "backup_wifi_only"
         private const val KEY_LAST_BACKUP = "last_backup"
         private const val KEY_APP_THEME = "app_theme"
+        private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
+        private const val KEY_USER_BIO = "user_bio"
+        private const val KEY_USER_AVATAR = "user_avatar"
+        private const val KEY_LOCKED_CONVERSATIONS = "locked_conversations"
     }
 }

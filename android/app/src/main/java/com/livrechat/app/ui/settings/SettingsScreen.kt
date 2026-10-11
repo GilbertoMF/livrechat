@@ -10,12 +10,17 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.draw.clip
+import androidx.fragment.app.FragmentActivity
+import coil.compose.AsyncImage
+import com.livrechat.app.util.BiometricHelper
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,10 +53,14 @@ fun SettingsScreen(
     val connectionManager = LivreChatApp.instance.connectionManager
 
     var displayName by remember { mutableStateOf(prefs.currentDisplayName ?: "Usuário") }
+    var userBio by remember { mutableStateOf(prefs.userBio) }
+    var userAvatarUrl by remember { mutableStateOf(prefs.userAvatarUrl ?: "") }
+    var isBiometricActive by remember { mutableStateOf(prefs.isBiometricEnabled) }
     val username = prefs.currentUsername ?: "usuario"
     val userId = prefs.currentUserId ?: ""
 
     val isConnected by connectionManager.isConnected.collectAsState()
+    val conversations by db.conversationDao().getAllConversationsFlow().collectAsState(initial = emptyList())
 
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
@@ -60,8 +69,11 @@ fun SettingsScreen(
     var showBlockedDialog by remember { mutableStateOf(false) }
     var showRecoveryPhraseDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showManageContactsDialog by remember { mutableStateOf(false) }
 
     var newDisplayNameInput by remember { mutableStateOf(displayName) }
+    var newBioInput by remember { mutableStateOf(userBio) }
+    var newAvatarUrlInput by remember { mutableStateOf(userAvatarUrl) }
     var userRecoveryPhrase by remember { mutableStateOf<String?>(null) }
     var userPublicKey by remember { mutableStateOf<String?>(null) }
 
@@ -73,23 +85,93 @@ fun SettingsScreen(
         }
     }
 
-    // DIALOG: Editar Perfil
+    // DIALOG: Editar Perfil (Nome, Foto, Status/Bio)
     if (showEditProfileDialog) {
         AlertDialog(
             onDismissRequest = { showEditProfileDialog = false },
-            title = { Text("Editar Nome de Exibição") },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AccountCircle, contentDescription = null, tint = BluePrimary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Editar Perfil", fontWeight = FontWeight.Bold)
+                }
+            },
             text = {
-                Column {
-                    Text(
-                        "Digite como seus contatos verão seu nome no LivreChat:",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Preview do Avatar
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = BluePrimary.copy(alpha = 0.2f),
+                            modifier = Modifier.size(72.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                if (newAvatarUrlInput.isNotBlank()) {
+                                    AsyncImage(
+                                        model = newAvatarUrlInput,
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                    )
+                                } else {
+                                    Text(
+                                        text = newDisplayNameInput.take(1).uppercase(),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 28.sp,
+                                        color = BluePrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
                     OutlinedTextField(
                         value = newDisplayNameInput,
                         onValueChange = { newDisplayNameInput = it },
                         label = { Text("Nome de Exibição") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = newBioInput,
+                        onValueChange = { newBioInput = it },
+                        label = { Text("Recado / Status") },
+                        placeholder = { Text("Ex: Disponível, No trabalho...") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Tags rápidas de status
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf("Disponível", "Ocupado", "Em chamada").forEach { tag ->
+                            SuggestionChip(
+                                onClick = { newBioInput = tag },
+                                label = { Text(tag, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = newAvatarUrlInput,
+                        onValueChange = { newAvatarUrlInput = it },
+                        label = { Text("Link da Foto de Perfil (URL)") },
+                        placeholder = { Text("https://...") },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -99,21 +181,40 @@ fun SettingsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        val trimmed = newDisplayNameInput.trim()
-                        if (trimmed.isNotBlank()) {
-                            displayName = trimmed
-                            prefs.currentDisplayName = trimmed
+                        val trimmedName = newDisplayNameInput.trim()
+                        val trimmedBio = newBioInput.trim()
+                        val trimmedAvatar = newAvatarUrlInput.trim()
+
+                        if (trimmedName.isNotBlank()) {
+                            displayName = trimmedName
+                            prefs.currentDisplayName = trimmedName
+                            userBio = trimmedBio
+                            prefs.userBio = trimmedBio
+                            userAvatarUrl = trimmedAvatar
+                            prefs.userAvatarUrl = if (trimmedAvatar.isNotBlank()) trimmedAvatar else null
                             showEditProfileDialog = false
+
                             scope.launch(Dispatchers.IO) {
                                 try {
-                                    apiService.updateProfile(mapOf("displayName" to trimmed))
+                                    apiService.updateProfile(
+                                        mapOf(
+                                            "displayName" to trimmedName,
+                                            "bio" to trimmedBio,
+                                            "avatarUrl" to trimmedAvatar
+                                        )
+                                    )
                                     val current = db.userDao().getCurrentUser()
                                     if (current != null) {
-                                        db.userDao().insertOrUpdate(current.copy(displayName = trimmed))
+                                        db.userDao().insertOrUpdate(
+                                            current.copy(
+                                                displayName = trimmedName,
+                                                avatarUrl = trimmedAvatar
+                                            )
+                                        )
                                     }
                                 } catch (e: Exception) {}
                             }
-                            Toast.makeText(context, "Nome atualizado com sucesso!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Perfil atualizado com sucesso!", Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
@@ -124,6 +225,107 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showEditProfileDialog = false }) {
                     Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // DIALOG: Gerenciar Contatos
+    if (showManageContactsDialog) {
+        AlertDialog(
+            onDismissRequest = { showManageContactsDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.People, contentDescription = null, tint = BluePrimary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Gerenciar Contatos", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                if (conversations.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        Text("Nenhum contato salvo ainda.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 350.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(conversations, key = { it.id }) { conv ->
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = BluePrimary.copy(alpha = 0.2f),
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            if (!conv.otherAvatarUrl.isNullOrEmpty()) {
+                                                AsyncImage(
+                                                    model = conv.otherAvatarUrl,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = conv.otherDisplayName.take(1).uppercase(),
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = BluePrimary
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(conv.otherDisplayName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text("@${conv.otherUsername}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+
+                                    IconButton(
+                                        onClick = {
+                                            scope.launch(Dispatchers.IO) {
+                                                try {
+                                                    apiService.blockUser(mapOf("blockedUserId" to conv.otherUserId))
+                                                } catch (e: Exception) {}
+                                            }
+                                            Toast.makeText(context, "Contato bloqueado", Toast.LENGTH_SHORT).show()
+                                        }
+                                    ) {
+                                        Icon(Icons.Default.Block, contentDescription = "Bloquear", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(20.dp))
+                                    }
+
+                                    IconButton(
+                                        onClick = {
+                                            scope.launch(Dispatchers.IO) {
+                                                try {
+                                                    apiService.removeContact(conv.otherUserId)
+                                                    apiService.clearConversation(conv.id)
+                                                    db.conversationDao().deleteConversation(conv.id)
+                                                } catch (e: Exception) {}
+                                            }
+                                            Toast.makeText(context, "Contato removido", Toast.LENGTH_SHORT).show()
+                                        }
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Remover", tint = DangerRed, modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showManageContactsDialog = false }) {
+                    Text("Fechar")
                 }
             }
         )
@@ -498,13 +700,15 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Profile Card Header (Clickable para editar)
+            // Profile Card Header (Clickable para editar foto, nome e recado)
             item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
                             newDisplayNameInput = displayName
+                            newBioInput = userBio
+                            newAvatarUrlInput = userAvatarUrl
                             showEditProfileDialog = true
                         }
                         .padding(20.dp),
@@ -513,15 +717,23 @@ fun SettingsScreen(
                     Surface(
                         shape = CircleShape,
                         color = BluePrimary.copy(alpha = 0.2f),
-                        modifier = Modifier.size(64.dp)
+                        modifier = Modifier.size(68.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = displayName.take(1).uppercase(),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 24.sp,
-                                color = BluePrimary
-                            )
+                            if (userAvatarUrl.isNotBlank()) {
+                                AsyncImage(
+                                    model = userAvatarUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                )
+                            } else {
+                                Text(
+                                    text = displayName.take(1).uppercase(),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 26.sp,
+                                    color = BluePrimary
+                                )
+                            }
                         }
                     }
 
@@ -537,20 +749,22 @@ fun SettingsScreen(
                             Spacer(modifier = Modifier.width(6.dp))
                             Icon(
                                 Icons.Default.Edit,
-                                contentDescription = "Editar Nome",
+                                contentDescription = "Editar",
                                 tint = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
                         Text(
                             text = "@$username",
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Toque para editar seu nome",
-                            fontSize = 11.sp,
-                            color = BluePrimary
+                            text = if (userBio.isNotBlank()) "💬 $userBio" else "Toque para adicionar um recado",
+                            fontSize = 12.sp,
+                            color = if (userBio.isNotBlank()) MaterialTheme.colorScheme.onSurface else BluePrimary,
+                            maxLines = 1
                         )
                     }
 
@@ -564,7 +778,54 @@ fun SettingsScreen(
                 Divider(color = MaterialTheme.colorScheme.surfaceVariant, thickness = 1.dp)
             }
 
-            // Opção 1: Tema e Aparência
+            // Opção: Bloqueio por Impressão Digital (WhatsApp style)
+            item {
+                SettingsOptionSwitchItem(
+                    icon = Icons.Default.Fingerprint,
+                    title = "Bloqueio por Impressão Digital",
+                    subtitle = if (isBiometricActive) "Ativado (exige digital para abrir o app)" else "Desativado",
+                    checked = isBiometricActive,
+                    onCheckedChange = { enable ->
+                        if (enable) {
+                            val act = context as? FragmentActivity
+                            if (act != null) {
+                                BiometricHelper.authenticate(
+                                    activity = act,
+                                    title = "Ativar Bloqueio por Digital",
+                                    subtitle = "Confirme sua digital para habilitar o bloqueio",
+                                    onSuccess = {
+                                        prefs.isBiometricEnabled = true
+                                        isBiometricActive = true
+                                        Toast.makeText(context, "Bloqueio por digital ativado!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onError = {
+                                        Toast.makeText(context, "Não foi possível confirmar digital", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            } else {
+                                prefs.isBiometricEnabled = true
+                                isBiometricActive = true
+                            }
+                        } else {
+                            prefs.isBiometricEnabled = false
+                            isBiometricActive = false
+                            Toast.makeText(context, "Bloqueio por digital desativado", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
+            }
+
+            // Opção: Gerenciar Contatos
+            item {
+                SettingsOptionItem(
+                    icon = Icons.Default.People,
+                    title = "Gerenciar Contatos",
+                    subtitle = "Visualizar, excluir e gerenciar contatos salvos",
+                    onClick = { showManageContactsDialog = true }
+                )
+            }
+
+            // Opção: Tema e Aparência
             item {
                 val themeLabel = when (prefs.appTheme) {
                     "dark" -> "Modo Escuro"
@@ -579,7 +840,7 @@ fun SettingsScreen(
                 )
             }
 
-            // Opção 2: Backup e Restauração
+            // Opção: Backup e Restauração
             item {
                 SettingsOptionItem(
                     icon = Icons.Default.CloudUpload,
@@ -589,17 +850,17 @@ fun SettingsScreen(
                 )
             }
 
-            // Opção 2: Privacidade e Segurança
+            // Opção: Privacidade e Segurança (E2E Criptografia)
             item {
                 SettingsOptionItem(
                     icon = Icons.Default.Security,
-                    title = "Privacidade e Segurança",
-                    subtitle = "Criptografia de ponta a ponta e chaves",
+                    title = "Privacidade & Criptografia Pesada",
+                    subtitle = "AES-256-GCM + PBKDF2 de nível militar",
                     onClick = { showPrivacyDialog = true }
                 )
             }
 
-            // Opção 3: Aparelhos Conectados
+            // Opção: Aparelhos Conectados
             item {
                 SettingsOptionItem(
                     icon = Icons.Default.Devices,
@@ -609,7 +870,7 @@ fun SettingsScreen(
                 )
             }
 
-            // Opção 4: Contatos Bloqueados
+            // Opção: Contatos Bloqueados
             item {
                 SettingsOptionItem(
                     icon = Icons.Default.Block,
@@ -623,7 +884,7 @@ fun SettingsScreen(
                 Divider(color = MaterialTheme.colorScheme.surfaceVariant, thickness = 1.dp)
             }
 
-            // Opção 5: Sair da Conta
+            // Opção: Sair da Conta
             item {
                 SettingsOptionItem(
                     icon = Icons.Default.ExitToApp,
@@ -634,6 +895,51 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun SettingsOptionSwitchItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    tint: Color = BluePrimary,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(26.dp)
+        )
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp
+            )
+            Text(
+                text = subtitle,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
     }
 }
 

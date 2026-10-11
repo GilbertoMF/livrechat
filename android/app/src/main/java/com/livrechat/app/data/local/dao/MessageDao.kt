@@ -45,4 +45,7 @@ interface MessageDao {
 
     @Query("DELETE FROM messages WHERE id = :messageId")
     suspend fun deletePermanently(messageId: String)
+
+    @Query("DELETE FROM messages WHERE conversationId = :convId")
+    suspend fun clearConversationMessages(convId: String)
 }

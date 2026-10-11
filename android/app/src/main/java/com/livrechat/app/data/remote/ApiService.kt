@@ -85,6 +85,21 @@ interface ApiService {
     @GET("api/calls/ice-servers")
     suspend fun getIceServers(): Response<IceServersResponse>
 
+    @POST("api/messages/conversations/{conversationId}/read")
+    suspend fun markConversationRead(@Path("conversationId") conversationId: String): Response<BaseResponse>
+
+    @DELETE("api/messages/conversations/{conversationId}/clear")
+    suspend fun clearConversation(@Path("conversationId") conversationId: String): Response<BaseResponse>
+
+    @DELETE("api/calls/history")
+    suspend fun clearCallHistory(): Response<BaseResponse>
+
+    @DELETE("api/users/contacts/{contactUserId}")
+    suspend fun removeContact(@Path("contactUserId") contactUserId: String): Response<BaseResponse>
+
+    @POST("api/users/block")
+    suspend fun blockUser(@Body body: Map<String, String>): Response<BaseResponse>
+
     @GET("api/calls/history")
     suspend fun getCallHistory(): Response<List<CallHistoryDto>>
 }

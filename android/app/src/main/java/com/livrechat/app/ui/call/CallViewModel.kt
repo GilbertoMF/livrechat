@@ -261,6 +261,17 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
         cleanupCall()
     }
 
+    fun clearCallHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                callDao.clearHistory()
+                apiService.clearCallHistory()
+            } catch (e: Exception) {
+                // Ignore error
+            }
+        }
+    }
+
     override fun onConnected() {}
     override fun onDisconnected() {}
     override fun onMessageReceived(message: MessageEntity) {}

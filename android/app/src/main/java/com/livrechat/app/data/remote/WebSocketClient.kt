@@ -33,6 +33,8 @@ interface WebSocketEventsListener {
     fun onCallRinging(fromUserId: String)
     fun onCallRejected(fromUserId: String, reason: String)
     fun onCallEnded(fromUserId: String)
+    fun onMessageDeleted(messageId: String, conversationId: String) {}
+    fun onChatCleared(conversationId: String) {}
 }
 
 class WebSocketClient(
@@ -214,6 +216,15 @@ class WebSocketClient(
                             val fromUserId = json.get("fromUserId").asStringOrDefault()
                             listener.onCallEnded(fromUserId)
                         }
+                        "chat:deleted" -> {
+                            val messageId = json.get("messageId").asStringOrDefault()
+                            val convId = json.get("conversationId").asStringOrDefault()
+                            listener.onMessageDeleted(messageId, convId)
+                        }
+                        "chat:cleared" -> {
+                            val convId = json.get("conversationId").asStringOrDefault()
+                            listener.onChatCleared(convId)
+                        }
                     }
                 } catch (t: Throwable) {
                     Log.e(TAG, "Erro ao despachar evento WebSocket na main thread", t)
@@ -315,6 +326,25 @@ class WebSocketClient(
             addProperty("type", "call:hangup")
             addProperty("targetUserId", targetUserId)
             addProperty("durationSeconds", durationSeconds)
+        }
+        return sendPayload(payload)
+    }
+
+    fun sendDeleteMessage(messageId: String, conversationId: String, targetUserId: String? = null): Boolean {
+        val payload = JsonObject().apply {
+            addProperty("type", "chat:delete")
+            addProperty("messageId", messageId)
+            addProperty("conversationId", conversationId)
+            targetUserId?.let { addProperty("targetUserId", it) }
+        }
+        return sendPayload(payload)
+    }
+
+    fun sendClearChat(conversationId: String, targetUserId: String? = null): Boolean {
+        val payload = JsonObject().apply {
+            addProperty("type", "chat:clear")
+            addProperty("conversationId", conversationId)
+            targetUserId?.let { addProperty("targetUserId", it) }
         }
         return sendPayload(payload)
     }

@@ -6,21 +6,34 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.navigation.compose.rememberNavController
 import com.livrechat.app.ui.navigation.LivreChatNavGraph
+import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.LivreChatTheme
+import com.livrechat.app.util.BiometricHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private val pendingIntentFlow = MutableStateFlow<Intent?>(null)
+    private val isAppUnlockedState = mutableStateOf(true)
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -42,6 +55,14 @@ class MainActivity : ComponentActivity() {
             )
         }
 
+        val prefs = LivreChatApp.instance.preferencesManager
+        if (prefs.isBiometricEnabled && prefs.accessToken != null) {
+            isAppUnlockedState.value = false
+            triggerBiometricUnlock()
+        } else {
+            isAppUnlockedState.value = true
+        }
+
         pendingIntentFlow.value = intent
         checkAndRequestPermissions()
 
@@ -54,16 +75,83 @@ class MainActivity : ComponentActivity() {
             }
 
             LivreChatTheme(darkTheme = isDarkTheme) {
-                val navController = rememberNavController()
-                val currentIntent by pendingIntentFlow.collectAsState()
+                val isUnlocked by remember { isAppUnlockedState }
 
-                LivreChatNavGraph(
-                    navController = navController,
-                    pendingIntent = currentIntent,
-                    onIntentHandled = { pendingIntentFlow.value = null }
-                )
+                if (!isUnlocked) {
+                    // WhatsApp-style Biometric Lock Screen
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Fingerprint,
+                                contentDescription = "Digital",
+                                tint = BluePrimary,
+                                modifier = Modifier.size(96.dp)
+                            )
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Text(
+                                text = "LivreChat Bloqueado",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 22.sp,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Toque no sensor de impressão digital para desbloquear o aplicativo",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(32.dp))
+                            Button(
+                                onClick = { triggerBiometricUnlock() },
+                                colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                            ) {
+                                Text("Desbloquear com Biometria", color = Color.White)
+                            }
+                        }
+                    }
+                } else {
+                    val navController = rememberNavController()
+                    val currentIntent by pendingIntentFlow.collectAsState()
+
+                    LivreChatNavGraph(
+                        navController = navController,
+                        pendingIntent = currentIntent,
+                        onIntentHandled = { pendingIntentFlow.value = null }
+                    )
+                }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val prefs = LivreChatApp.instance.preferencesManager
+        if (prefs.isBiometricEnabled && prefs.accessToken != null && !isAppUnlockedState.value) {
+            triggerBiometricUnlock()
+        }
+    }
+
+    private fun triggerBiometricUnlock() {
+        BiometricHelper.authenticate(
+            activity = this,
+            title = "LivreChat Bloqueado",
+            subtitle = "Confirme sua identidade com biometria",
+            onSuccess = {
+                isAppUnlockedState.value = true
+            },
+            onError = {
+                // User cancelled or failed
+            }
+        )
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -94,4 +182,3 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
