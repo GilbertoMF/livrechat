@@ -43,6 +43,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.fragment.app.FragmentActivity
 import coil.compose.AsyncImage
+import com.livrechat.app.ui.common.UserAvatarView
 import com.livrechat.app.LivreChatApp
 import com.livrechat.app.data.local.entity.CallRecordEntity
 import com.livrechat.app.data.local.entity.ConversationEntity
@@ -932,22 +933,12 @@ fun HomeScreen(
                                             else Modifier
                                         )
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        if (!prefs.userAvatarUrl.isNullOrEmpty()) {
-                                            AsyncImage(
-                                                model = prefs.userAvatarUrl,
-                                                contentDescription = null,
-                                                modifier = Modifier.fillMaxSize().clip(CircleShape)
-                                            )
-                                        } else {
-                                            Text(
-                                                text = (prefs.currentDisplayName ?: "V").take(1).uppercase(),
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 22.sp,
-                                                color = BluePrimary
-                                            )
-                                        }
-                                    }
+                                    UserAvatarView(
+                                        avatarUrl = prefs.userAvatarUrl,
+                                        displayName = prefs.currentDisplayName ?: "V",
+                                        size = 56.dp,
+                                        fontSize = 22.sp
+                                    )
                                 }
 
                                 Surface(
@@ -1390,28 +1381,12 @@ fun ConversationItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Avatar
-        Surface(
-            shape = CircleShape,
-            color = BluePrimary.copy(alpha = 0.2f),
-            modifier = Modifier.size(52.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                if (!conversation.otherAvatarUrl.isNullOrEmpty()) {
-                    AsyncImage(
-                        model = conversation.otherAvatarUrl,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize().clip(CircleShape)
-                    )
-                } else {
-                    Text(
-                        text = conversation.otherDisplayName.take(1).uppercase(),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp,
-                        color = BluePrimary
-                    )
-                }
-            }
-        }
+        UserAvatarView(
+            avatarUrl = conversation.otherAvatarUrl,
+            displayName = conversation.otherDisplayName,
+            size = 52.dp,
+            fontSize = 20.sp
+        )
 
         Spacer(modifier = Modifier.width(14.dp))
 
@@ -1517,28 +1492,12 @@ fun CallHistoryItem(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Surface(
-            shape = CircleShape,
-            color = BluePrimary.copy(alpha = 0.2f),
-            modifier = Modifier.size(48.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                if (!call.contactAvatarUrl.isNullOrEmpty()) {
-                    AsyncImage(
-                        model = call.contactAvatarUrl,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize().clip(CircleShape)
-                    )
-                } else {
-                    Text(
-                        text = call.contactDisplayName.take(1).uppercase(),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = BluePrimary
-                    )
-                }
-            }
-        }
+        UserAvatarView(
+            avatarUrl = call.contactAvatarUrl,
+            displayName = call.contactDisplayName,
+            size = 48.dp,
+            fontSize = 18.sp
+        )
 
         Spacer(modifier = Modifier.width(14.dp))
 

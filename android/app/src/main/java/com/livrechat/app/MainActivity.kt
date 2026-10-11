@@ -68,13 +68,14 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             val themeMode by LivreChatApp.instance.preferencesManager.themeFlow.collectAsState()
+            val colorPalette by LivreChatApp.instance.preferencesManager.paletteFlow.collectAsState()
             val isDarkTheme = when (themeMode) {
                 "dark" -> true
                 "light" -> false
                 else -> isSystemInDarkTheme()
             }
 
-            LivreChatTheme(darkTheme = isDarkTheme) {
+            LivreChatTheme(darkTheme = isDarkTheme, palette = colorPalette) {
                 val isUnlocked by remember { isAppUnlockedState }
 
                 if (!isUnlocked) {

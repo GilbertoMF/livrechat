@@ -62,6 +62,16 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putLong(KEY_LAST_BACKUP, value).apply()
 
     private val _themeFlow = kotlinx.coroutines.flow.MutableStateFlow(prefs.getString(KEY_APP_THEME, "system") ?: "system")
+    private val _paletteFlow = kotlinx.coroutines.flow.MutableStateFlow(colorPalette)
+    val paletteFlow: kotlinx.coroutines.flow.StateFlow<String> = _paletteFlow
+
+    var colorPalette: String
+        get() = prefs.getString(KEY_COLOR_PALETTE, "default") ?: "default"
+        set(value) {
+            prefs.edit().putString(KEY_COLOR_PALETTE, value).apply()
+            _paletteFlow.value = value
+        }
+
     val themeFlow: kotlinx.coroutines.flow.StateFlow<String> = _themeFlow
 
     var appTheme: String
@@ -74,6 +84,46 @@ class PreferencesManager(context: Context) {
     var isBiometricEnabled: Boolean
         get() = prefs.getBoolean(KEY_BIOMETRIC_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_BIOMETRIC_ENABLED, value).apply()
+
+    var isPinLockEnabled: Boolean
+        get() = prefs.getBoolean(KEY_PIN_LOCK_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_PIN_LOCK_ENABLED, value).apply()
+
+    var appLockPin: String?
+        get() = prefs.getString(KEY_APP_LOCK_PIN, null)
+        set(value) = prefs.edit().putString(KEY_APP_LOCK_PIN, value).apply()
+
+    var selfDestructTimer: String
+        get() = prefs.getString(KEY_SELF_DESTRUCT_TIMER, "off") ?: "off"
+        set(value) = prefs.edit().putString(KEY_SELF_DESTRUCT_TIMER, value).apply()
+
+    var blockScreenshots: Boolean
+        get() = prefs.getBoolean(KEY_BLOCK_SCREENSHOTS, false)
+        set(value) = prefs.edit().putBoolean(KEY_BLOCK_SCREENSHOTS, value).apply()
+
+    var readReceiptsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_READ_RECEIPTS, true)
+        set(value) = prefs.edit().putBoolean(KEY_READ_RECEIPTS, value).apply()
+
+    var lastSeenVisibility: String
+        get() = prefs.getString(KEY_LAST_SEEN, "everyone") ?: "everyone"
+        set(value) = prefs.edit().putString(KEY_LAST_SEEN, value).apply()
+
+    var highPriorityNotifications: Boolean
+        get() = prefs.getBoolean(KEY_HIGH_PRIORITY_NOTIFS, true)
+        set(value) = prefs.edit().putBoolean(KEY_HIGH_PRIORITY_NOTIFS, value).apply()
+
+    var conversationSounds: Boolean
+        get() = prefs.getBoolean(KEY_CONV_SOUNDS, true)
+        set(value) = prefs.edit().putBoolean(KEY_CONV_SOUNDS, value).apply()
+
+    var mediaAutoDownloadWifiOnly: Boolean
+        get() = prefs.getBoolean(KEY_MEDIA_WIFI_ONLY, false)
+        set(value) = prefs.edit().putBoolean(KEY_MEDIA_WIFI_ONLY, value).apply()
+
+    var hdMediaQuality: Boolean
+        get() = prefs.getBoolean(KEY_HD_MEDIA, true)
+        set(value) = prefs.edit().putBoolean(KEY_HD_MEDIA, value).apply()
 
     var userBio: String
         get() = prefs.getString(KEY_USER_BIO, "Disponível no LivreChat") ?: "Disponível no LivreChat"
@@ -125,7 +175,18 @@ class PreferencesManager(context: Context) {
         private const val KEY_BACKUP_WIFI_ONLY = "backup_wifi_only"
         private const val KEY_LAST_BACKUP = "last_backup"
         private const val KEY_APP_THEME = "app_theme"
+        private const val KEY_COLOR_PALETTE = "color_palette"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
+        private const val KEY_PIN_LOCK_ENABLED = "pin_lock_enabled"
+        private const val KEY_APP_LOCK_PIN = "app_lock_pin"
+        private const val KEY_SELF_DESTRUCT_TIMER = "self_destruct_timer"
+        private const val KEY_BLOCK_SCREENSHOTS = "block_screenshots"
+        private const val KEY_READ_RECEIPTS = "read_receipts"
+        private const val KEY_LAST_SEEN = "last_seen"
+        private const val KEY_HIGH_PRIORITY_NOTIFS = "high_priority_notifs"
+        private const val KEY_CONV_SOUNDS = "conv_sounds"
+        private const val KEY_MEDIA_WIFI_ONLY = "media_wifi_only"
+        private const val KEY_HD_MEDIA = "hd_media"
         private const val KEY_USER_BIO = "user_bio"
         private const val KEY_USER_AVATAR = "user_avatar"
         private const val KEY_LOCKED_CONVERSATIONS = "locked_conversations"
