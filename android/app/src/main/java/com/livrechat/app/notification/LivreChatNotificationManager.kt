@@ -54,7 +54,10 @@ object LivreChatNotificationManager {
         context: Context,
         conversationId: String,
         senderName: String,
-        content: String
+        content: String,
+        messageId: String? = null,
+        messageType: String = "text",
+        isPlayingAudio: Boolean = false
     ) {
         try {
             val intent = Intent(context, MainActivity::class.java).apply {
@@ -72,7 +75,41 @@ object LivreChatNotificationManager {
 
             val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
-            val notification = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+            // Direct Reply via RemoteInput
+            val remoteInput = androidx.core.app.RemoteInput.Builder(NotificationActionReceiver.KEY_TEXT_REPLY)
+                .setLabel("Responder...")
+                .build()
+
+            val replyIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+                action = NotificationActionReceiver.ACTION_REPLY
+                putExtra(NotificationActionReceiver.EXTRA_CONVERSATION_ID, conversationId)
+                putExtra(NotificationActionReceiver.EXTRA_SENDER_NAME, senderName)
+                putExtra(NotificationActionReceiver.EXTRA_MESSAGE_ID, messageId)
+            }
+
+            val replyFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+
+            val replyPendingIntent = PendingIntent.getBroadcast(
+                context,
+                (conversationId + "_reply").hashCode(),
+                replyIntent,
+                replyFlags
+            )
+
+            val replyAction = NotificationCompat.Action.Builder(
+                android.R.drawable.ic_menu_send,
+                "Responder",
+                replyPendingIntent
+            )
+                .addRemoteInput(remoteInput)
+                .setAllowGeneratedReplies(true)
+                .build()
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(senderName)
                 .setContentText(content)
@@ -81,8 +118,52 @@ object LivreChatNotificationManager {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setContentIntent(pendingIntent)
-                .build()
+                .addAction(replyAction)
 
+            // Suporte para ouvir áudio diretamente na notificação
+            if (messageType == "audio" && messageId != null) {
+                if (isPlayingAudio) {
+                    val stopIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+                        action = NotificationActionReceiver.ACTION_STOP_AUDIO
+                        putExtra(NotificationActionReceiver.EXTRA_CONVERSATION_ID, conversationId)
+                        putExtra(NotificationActionReceiver.EXTRA_SENDER_NAME, senderName)
+                        putExtra(NotificationActionReceiver.EXTRA_MESSAGE_ID, messageId)
+                    }
+                    val stopPendingIntent = PendingIntent.getBroadcast(
+                        context,
+                        (conversationId + "_stop").hashCode(),
+                        stopIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    val stopAction = NotificationCompat.Action.Builder(
+                        android.R.drawable.ic_media_pause,
+                        "⏹ Parar Áudio",
+                        stopPendingIntent
+                    ).build()
+                    builder.addAction(stopAction)
+                } else {
+                    val playIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+                        action = NotificationActionReceiver.ACTION_PLAY_AUDIO
+                        putExtra(NotificationActionReceiver.EXTRA_CONVERSATION_ID, conversationId)
+                        putExtra(NotificationActionReceiver.EXTRA_SENDER_NAME, senderName)
+                        putExtra(NotificationActionReceiver.EXTRA_MESSAGE_ID, messageId)
+                    }
+                    val playPendingIntent = PendingIntent.getBroadcast(
+                        context,
+                        (conversationId + "_play").hashCode(),
+                        playIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    val playAction = NotificationCompat.Action.Builder(
+                        android.R.drawable.ic_media_play,
+                        "▶ Ouvir Áudio",
+                        playPendingIntent
+                    ).build()
+                    builder.addAction(playAction)
+                }
+            }
+
+            val notification = builder.build()
             NotificationManagerCompat.from(context).notify(conversationId.hashCode(), notification)
         } catch (e: Exception) {
             // Se permissão POST_NOTIFICATIONS não concedida ou erro

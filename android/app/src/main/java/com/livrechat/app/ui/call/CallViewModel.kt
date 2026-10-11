@@ -134,6 +134,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
             recordCall(info, "completed", duration)
         }
         webRTCManager?.endCall()
+        _callState.value = CallState.ENDED
         cleanupCall()
     }
 
@@ -159,10 +160,14 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
         LivreChatNotificationManager.cancelCallNotification(app)
         timerJob?.cancel()
         CallForegroundService.stop(app)
-        _callState.value = CallState.IDLE
-        _callInfo.value = null
-        _isMuted.value = false
-        _isSpeaker.value = false
+        _callState.value = CallState.ENDED
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(200)
+            _callState.value = CallState.IDLE
+            _callInfo.value = null
+            _isMuted.value = false
+            _isSpeaker.value = false
+        }
     }
 
     private fun recordCall(info: ActiveCallInfo, status: String, duration: Int) {
@@ -262,6 +267,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
         if (info != null) {
             recordCall(info, "completed", _durationSeconds.value)
         }
+        webRTCManager?.endCall()
         cleanupCall()
     }
 

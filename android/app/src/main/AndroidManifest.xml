@@ -73,6 +73,12 @@
             </intent-filter>
         </receiver>
 
+        <!-- BroadcastReceiver for direct replies and audio controls from notifications -->
+        <receiver
+            android:name=".notification.NotificationActionReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- FileProvider for capturing camera photos securely -->
         <provider
             android:name="androidx.core.content.FileProvider"

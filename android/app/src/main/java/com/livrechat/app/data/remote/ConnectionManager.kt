@@ -7,6 +7,7 @@ import com.livrechat.app.LivreChatApp
 import com.livrechat.app.data.local.entity.ConversationEntity
 import com.livrechat.app.data.local.entity.MessageEntity
 import com.livrechat.app.notification.LivreChatNotificationManager
+import com.livrechat.app.util.ChatSoundManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -92,9 +93,15 @@ class ConnectionManager(
 
             val isCurrentOpen = _activeConversationId.value == message.conversationId
 
-            val previewContent = when {
-                message.messageType == "audio" || message.content.startsWith("data:audio") || message.content.contains("base64,") -> "🎤 Mensagem de voz"
-                message.messageType == "image" || message.content.startsWith("data:image") -> "📷 Foto"
+            val actualType = when {
+                message.messageType == "audio" || message.content.startsWith("data:audio") || message.content.contains("base64,") -> "audio"
+                message.messageType == "image" || message.content.startsWith("data:image") -> "image"
+                else -> message.messageType
+            }
+
+            val previewContent = when (actualType) {
+                "audio" -> "🎤 Mensagem de voz"
+                "image" -> "📷 Foto"
                 else -> message.content
             }
 
@@ -142,6 +149,7 @@ class ConnectionManager(
                 db.conversationDao().updateLastMessage(message.conversationId, previewContent, message.createdAt)
                 webSocketClient.sendReceipt(message.id, "read")
                 try { app.apiClient.apiService.markMessageRead(message.id) } catch (e: Exception) {}
+                ChatSoundManager.playIncomingMessageSound()
             } else {
                 // Mensagem entregue
                 val deliveredMsg = message.copy(status = "delivered")
@@ -157,7 +165,9 @@ class ConnectionManager(
                     context = context,
                     conversationId = message.conversationId,
                     senderName = senderTitle,
-                    content = previewContent
+                    content = previewContent,
+                    messageId = message.id,
+                    messageType = actualType
                 )
             }
 

@@ -30,7 +30,7 @@ fun ActiveCallScreen(
     val durationSeconds by viewModel.durationSeconds.collectAsState()
 
     LaunchedEffect(callState) {
-        if (callState == CallState.ENDED) {
+        if (callState == CallState.ENDED || callState == CallState.IDLE) {
             onCallFinished()
         }
     }
@@ -143,7 +143,10 @@ fun ActiveCallScreen(
 
                 // End Call Red Button
                 FloatingActionButton(
-                    onClick = { viewModel.hangupCall() },
+                    onClick = {
+                        viewModel.hangupCall()
+                        onCallFinished()
+                    },
                     containerColor = DangerRed,
                     contentColor = Color.White,
                     shape = CircleShape,

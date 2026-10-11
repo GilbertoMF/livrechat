@@ -58,8 +58,14 @@ class LivreChatApp : Application() {
 
         if (preferencesManager.isLoggedIn()) {
             connectionManager.connect()
-            com.livrechat.app.service.LivreChatBackgroundService.start(this)
         }
+
+        // Cancel any lingering persistent foreground notification
+        try {
+            val nm = getSystemService(NotificationManager::class.java)
+            nm?.cancel(1001)
+            com.livrechat.app.service.LivreChatBackgroundService.stop(this)
+        } catch (e: Exception) {}
     }
 
     private fun createNotificationChannels() {

@@ -10,6 +10,7 @@ import com.livrechat.app.data.local.entity.MessageEntity
 import com.livrechat.app.data.remote.WebSocketClient
 import com.livrechat.app.data.remote.WebSocketEventsListener
 import com.livrechat.app.data.remote.model.SendMessageRequest
+import com.livrechat.app.util.ChatSoundManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -74,6 +75,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
     }
 
     fun unselectConversation() {
+        _currentConversationId.value?.let { ChatSoundManager.stopTypingRhythm(it) }
         _currentConversationId.value = null
         _currentOtherUserId.value = null
         connectionManager.setActiveConversation(null)
@@ -361,10 +363,14 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
             contactTypingJob?.cancel()
             _isContactTyping.value = isTyping
             if (isTyping) {
+                ChatSoundManager.startTypingRhythm(conversationId)
                 contactTypingJob = viewModelScope.launch {
                     delay(3500)
                     _isContactTyping.value = false
+                    ChatSoundManager.stopTypingRhythm(conversationId)
                 }
+            } else {
+                ChatSoundManager.stopTypingRhythm(conversationId)
             }
         }
     }
@@ -378,6 +384,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
 
     override fun onCleared() {
         super.onCleared()
+        ChatSoundManager.stopAll()
         connectionManager.setActiveConversation(null)
         connectionManager.unregisterListener(this)
     }
