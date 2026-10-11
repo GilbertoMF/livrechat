@@ -1256,11 +1256,6 @@ fun SettingsScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
                     }
-                },
-                actions = {
-                    IconButton(onClick = { showThemeAndColorsDialog = true }) {
-                        Icon(Icons.Default.Palette, contentDescription = "Paleta de Cores", tint = MaterialTheme.colorScheme.primary)
-                    }
                 }
             )
         }
@@ -1371,38 +1366,22 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Ações Rápidas
-                        Row(
+                        // Botão Editar Perfil em destaque
+                        Button(
+                            onClick = {
+                                newDisplayNameInput = displayName
+                                newBioInput = userBio
+                                newAvatarUrlInput = userAvatarUrl
+                                customWebUrlInput = if (userAvatarUrl.startsWith("http")) userAvatarUrl else ""
+                                showEditProfileDialog = true
+                            },
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            contentPadding = PaddingValues(vertical = 10.dp)
                         ) {
-                            Button(
-                                onClick = {
-                                    newDisplayNameInput = displayName
-                                    newBioInput = userBio
-                                    newAvatarUrlInput = userAvatarUrl
-                                    customWebUrlInput = if (userAvatarUrl.startsWith("http")) userAvatarUrl else ""
-                                    showEditProfileDialog = true
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(vertical = 8.dp)
-                            ) {
-                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Editar Perfil", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-
-                            OutlinedButton(
-                                onClick = { showThemeAndColorsDialog = true },
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(vertical = 8.dp)
-                            ) {
-                                Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Cores", fontSize = 12.sp)
-                            }
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Editar Perfil & Foto", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

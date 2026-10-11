@@ -40,6 +40,25 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.FileProvider
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -116,6 +135,166 @@ fun ChatScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     var showCryptoInfoDialog by remember { mutableStateOf(false) }
     var selectedMessageForAction by remember { mutableStateOf<MessageEntity?>(null) }
+    var showAttachmentSheet by remember { mutableStateOf(false) }
+    var viewingImageBase64 by remember { mutableStateOf<String?>(null) }
+
+    val takePhotoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bmp: Bitmap? ->
+        if (bmp != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val baos = ByteArrayOutputStream()
+                    bmp.compress(Bitmap.CompressFormat.JPEG, 85, baos)
+                    val bytes = baos.toByteArray()
+                    val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    val dataUri = "data:image/jpeg;base64,$b64"
+                    viewModel.sendMediaMessage(
+                        conversationId = conversationId,
+                        content = dataUri,
+                        messageType = "image",
+                        targetUserId = otherUserId
+                    )
+                } catch (e: Exception) {
+                    Log.e("ChatScreen", "Erro ao processar foto da câmera", e)
+                }
+            }
+        }
+    }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val input = context.contentResolver.openInputStream(uri)
+                    val original = BitmapFactory.decodeStream(input)
+                    input?.close()
+                    if (original != null) {
+                        val maxDim = 1280
+                        val width = original.width
+                        val height = original.height
+                        val scale = if (width > height) maxDim.toFloat() / width else maxDim.toFloat() / height
+                        val scaled = if (scale < 1f) {
+                            Bitmap.createScaledBitmap(original, (width * scale).toInt(), (height * scale).toInt(), true)
+                        } else original
+
+                        val baos = ByteArrayOutputStream()
+                        scaled.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+                        val bytes = baos.toByteArray()
+                        val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        val dataUri = "data:image/jpeg;base64,$b64"
+                        viewModel.sendMediaMessage(
+                            conversationId = conversationId,
+                            content = dataUri,
+                            messageType = "image",
+                            targetUserId = otherUserId
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e("ChatScreen", "Erro ao enviar foto", e)
+                }
+            }
+        }
+    }
+
+    val videoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val (fileName, fileSize) = getFileNameAndSize(context, uri)
+                    if (fileSize > 25 * 1024 * 1024) {
+                        launch(Dispatchers.Main) {
+                            Toast.makeText(context, "O vídeo deve ter menos de 25MB", Toast.LENGTH_LONG).show()
+                        }
+                        return@launch
+                    }
+                    val input = context.contentResolver.openInputStream(uri)
+                    val bytes = input?.readBytes() ?: return@launch
+                    input.close()
+                    val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    val dataUri = "data:video/mp4;base64,$b64"
+                    viewModel.sendMediaMessage(
+                        conversationId = conversationId,
+                        content = dataUri,
+                        messageType = "video",
+                        fileName = fileName,
+                        fileSize = fileSize,
+                        targetUserId = otherUserId
+                    )
+                } catch (e: Exception) {
+                    Log.e("ChatScreen", "Erro ao enviar vídeo", e)
+                }
+            }
+        }
+    }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val (fileName, fileSize) = getFileNameAndSize(context, uri)
+                    if (fileSize > 25 * 1024 * 1024) {
+                        launch(Dispatchers.Main) {
+                            Toast.makeText(context, "O arquivo deve ter menos de 25MB", Toast.LENGTH_LONG).show()
+                        }
+                        return@launch
+                    }
+                    val input = context.contentResolver.openInputStream(uri)
+                    val bytes = input?.readBytes() ?: return@launch
+                    input.close()
+                    val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    val dataUri = "data:application/octet-stream;base64,$b64"
+                    viewModel.sendMediaMessage(
+                        conversationId = conversationId,
+                        content = dataUri,
+                        messageType = "file",
+                        fileName = fileName,
+                        fileSize = fileSize,
+                        targetUserId = otherUserId
+                    )
+                } catch (e: Exception) {
+                    Log.e("ChatScreen", "Erro ao enviar arquivo", e)
+                }
+            }
+        }
+    }
+
+    val audioPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val (fileName, fileSize) = getFileNameAndSize(context, uri)
+                    if (fileSize > 25 * 1024 * 1024) {
+                        launch(Dispatchers.Main) {
+                            Toast.makeText(context, "O áudio deve ter menos de 25MB", Toast.LENGTH_LONG).show()
+                        }
+                        return@launch
+                    }
+                    val input = context.contentResolver.openInputStream(uri)
+                    val bytes = input?.readBytes() ?: return@launch
+                    input.close()
+                    val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    val dataUri = "data:audio/mp3;base64,$b64"
+                    viewModel.sendAudioMessage(
+                        conversationId = conversationId,
+                        audioBase64 = dataUri,
+                        durationSeconds = 0,
+                        targetUserId = otherUserId
+                    )
+                } catch (e: Exception) {
+                    Log.e("ChatScreen", "Erro ao enviar áudio", e)
+                }
+            }
+        }
+    }
 
     if (showClearDialog) {
         AlertDialog(
@@ -440,6 +619,26 @@ fun ChatScreen(
                                 }
                             },
                             placeholder = { Text("Digite uma mensagem...", fontSize = 14.sp) },
+                            trailingIcon = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { showAttachmentSheet = true }) {
+                                        Icon(
+                                            imageVector = Icons.Default.AttachFile,
+                                            contentDescription = "Anexar",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    if (textInput.isBlank()) {
+                                        IconButton(onClick = { takePhotoLauncher.launch(null) }) {
+                                            Icon(
+                                                imageVector = Icons.Default.CameraAlt,
+                                                contentDescription = "Câmera",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            },
                             maxLines = 4,
                             shape = RoundedCornerShape(24.dp),
                             modifier = Modifier
@@ -520,10 +719,100 @@ fun ChatScreen(
                 MessageBubble(
                     message = message,
                     audioPlayerHelper = audioPlayerHelper,
-                    onLongPress = { selectedMessageForAction = it }
+                    onLongPress = { selectedMessageForAction = it },
+                    onImageClick = { viewingImageBase64 = it }
                 )
             }
         }
+    }
+
+    if (showAttachmentSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showAttachmentSheet = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            dragHandle = { BottomSheetDefaults.DragHandle() }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
+            ) {
+                Text(
+                    "Compartilhar",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    AttachmentItem(
+                        icon = Icons.Default.Description,
+                        label = "Documento",
+                        color = Color(0xFF7F66FF)
+                    ) {
+                        showAttachmentSheet = false
+                        filePickerLauncher.launch("*/*")
+                    }
+
+                    AttachmentItem(
+                        icon = Icons.Default.CameraAlt,
+                        label = "Câmera",
+                        color = Color(0xFFE91E63)
+                    ) {
+                        showAttachmentSheet = false
+                        takePhotoLauncher.launch(null)
+                    }
+
+                    AttachmentItem(
+                        icon = Icons.Default.PhotoLibrary,
+                        label = "Galeria",
+                        color = Color(0xFF9C27B0)
+                    ) {
+                        showAttachmentSheet = false
+                        photoPickerLauncher.launch("image/*")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    AttachmentItem(
+                        icon = Icons.Default.Headphones,
+                        label = "Áudio",
+                        color = Color(0xFFFF9800)
+                    ) {
+                        showAttachmentSheet = false
+                        audioPickerLauncher.launch("audio/*")
+                    }
+
+                    AttachmentItem(
+                        icon = Icons.Default.Videocam,
+                        label = "Vídeo",
+                        color = Color(0xFF00B0FF)
+                    ) {
+                        showAttachmentSheet = false
+                        videoPickerLauncher.launch("video/*")
+                    }
+
+                    Spacer(modifier = Modifier.width(60.dp))
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+
+    if (viewingImageBase64 != null) {
+        FullscreenImageViewerDialog(
+            base64Content = viewingImageBase64!!,
+            onDismiss = { viewingImageBase64 = null }
+        )
     }
 }
 
@@ -532,10 +821,12 @@ fun ChatScreen(
 fun MessageBubble(
     message: MessageEntity,
     audioPlayerHelper: AudioPlayerHelper,
-    onLongPress: (MessageEntity) -> Unit
+    onLongPress: (MessageEntity) -> Unit,
+    onImageClick: (String) -> Unit
 ) {
     val isOutgoing = message.isOutgoing
     val alignment = if (isOutgoing) Alignment.End else Alignment.Start
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -581,6 +872,24 @@ fun MessageBubble(
                         message = message,
                         audioPlayerHelper = audioPlayerHelper,
                         isOutgoing = isOutgoing
+                    )
+                } else if (message.messageType == "image" || message.content.startsWith("data:image")) {
+                    ImageMessageBubbleContent(
+                        message = message,
+                        isOutgoing = isOutgoing,
+                        onImageClick = { onImageClick(message.content) }
+                    )
+                } else if (message.messageType == "video" || message.content.startsWith("data:video")) {
+                    VideoMessageBubbleContent(
+                        message = message,
+                        isOutgoing = isOutgoing,
+                        context = context
+                    )
+                } else if (message.messageType == "file" || message.content.startsWith("data:application")) {
+                    FileMessageBubbleContent(
+                        message = message,
+                        isOutgoing = isOutgoing,
+                        context = context
                     )
                 } else {
                     Text(
@@ -813,5 +1122,353 @@ fun MessageStatusIcon(status: String) {
                 modifier = Modifier.size(13.dp)
             )
         }
+    }
+}
+
+@Composable
+fun AttachmentItem(
+    icon: ImageVector,
+    label: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(8.dp)
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = color,
+            modifier = Modifier.size(54.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(26.dp))
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun ImageMessageBubbleContent(
+    message: MessageEntity,
+    isOutgoing: Boolean,
+    onImageClick: () -> Unit
+) {
+    var decodedBitmap by remember(message.content) { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(message.content) {
+        withContext(Dispatchers.IO) {
+            try {
+                val clean = if (message.content.contains(",")) message.content.substringAfter(",") else message.content
+                val bytes = Base64.decode(clean, Base64.DEFAULT)
+                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                withContext(Dispatchers.Main) {
+                    decodedBitmap = bmp
+                }
+            } catch (e: Exception) {
+                decodedBitmap = null
+            }
+        }
+    }
+
+    Column {
+        if (decodedBitmap != null) {
+            Image(
+                bitmap = decodedBitmap!!.asImageBitmap(),
+                contentDescription = "Foto",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 140.dp, max = 260.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = onImageClick),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
+                    .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = if (isOutgoing) Color.White else BluePrimary)
+            }
+        }
+
+        if (!message.iv.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = message.iv,
+                color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun VideoMessageBubbleContent(
+    message: MessageEntity,
+    isOutgoing: Boolean,
+    context: Context
+) {
+    val parts = remember(message.iv) { message.iv?.split("|") ?: emptyList() }
+    val fileName = parts.getOrNull(0)?.ifBlank { null } ?: "video_${message.id.take(8)}.mp4"
+    val fileSize = parts.getOrNull(1)?.toLongOrNull() ?: 0L
+    val caption = parts.getOrNull(2)?.ifBlank { null }
+
+    Column {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(150.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.Black.copy(alpha = 0.7f))
+                .clickable {
+                    openMediaFile(context, message.content, fileName, "video/mp4")
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.3f),
+                modifier = Modifier.size(54.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Reproduzir Vídeo",
+                        tint = Color.White,
+                        modifier = Modifier.size(34.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomStart)
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Videocam, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = if (fileSize > 0) "Vídeo • ${formatFileSize(fileSize)}" else "Vídeo",
+                    color = Color.White,
+                    fontSize = 11.sp
+                )
+            }
+        }
+
+        if (!caption.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = caption,
+                color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun FileMessageBubbleContent(
+    message: MessageEntity,
+    isOutgoing: Boolean,
+    context: Context
+) {
+    val parts = remember(message.iv) { message.iv?.split("|") ?: emptyList() }
+    val fileName = parts.getOrNull(0)?.ifBlank { null } ?: "arquivo_${message.id.take(8)}"
+    val fileSize = parts.getOrNull(1)?.toLongOrNull() ?: 0L
+    val ext = fileName.substringAfterLast(".", "").uppercase()
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (isOutgoing) Color.White.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                val mime = when (ext.lowercase()) {
+                    "pdf" -> "application/pdf"
+                    "doc", "docx" -> "application/msword"
+                    "xls", "xlsx" -> "application/vnd.ms-excel"
+                    "zip" -> "application/zip"
+                    "apk" -> "application/vnd.android.package-archive"
+                    "txt" -> "text/plain"
+                    else -> "*/*"
+                }
+                openMediaFile(context, message.content, fileName, mime)
+            }
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (ext == "PDF") Color(0xFFF44336) else if (ext in listOf("ZIP", "RAR")) Color(0xFFFF9800) else BluePrimary,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.InsertDriveFile,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = fileName,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = listOfNotNull(
+                        if (fileSize > 0) formatFileSize(fileSize) else null,
+                        ext.ifBlank { null }
+                    ).joinToString(" • "),
+                    fontSize = 11.sp,
+                    color = if (isOutgoing) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Icon(
+                imageVector = Icons.Default.OpenInNew,
+                contentDescription = "Abrir",
+                tint = if (isOutgoing) Color.White else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun FullscreenImageViewerDialog(
+    base64Content: String,
+    onDismiss: () -> Unit
+) {
+    var decodedBitmap by remember(base64Content) { mutableStateOf<Bitmap?>(null) }
+    val context = LocalContext.current
+
+    LaunchedEffect(base64Content) {
+        withContext(Dispatchers.IO) {
+            try {
+                val clean = if (base64Content.contains(",")) base64Content.substringAfter(",") else base64Content
+                val bytes = Base64.decode(clean, Base64.DEFAULT)
+                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                withContext(Dispatchers.Main) {
+                    decodedBitmap = bmp
+                }
+            } catch (e: Exception) {}
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            if (decodedBitmap != null) {
+                Image(
+                    bitmap = decodedBitmap!!.asImageBitmap(),
+                    contentDescription = "Foto em tela cheia",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center),
+                    color = Color.White
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .padding(horizontal = 12.dp, vertical = 24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White)
+                }
+
+                IconButton(onClick = {
+                    openMediaFile(context, base64Content, "foto_${System.currentTimeMillis()}.jpg", "image/jpeg")
+                }) {
+                    Icon(Icons.Default.Share, contentDescription = "Compartilhar", tint = Color.White)
+                }
+            }
+        }
+    }
+}
+
+fun getFileNameAndSize(context: Context, uri: Uri): Pair<String, Long> {
+    var name = "arquivo_${System.currentTimeMillis()}"
+    var size = 0L
+    try {
+        val cursor = context.contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1) name = it.getString(nameIndex) ?: name
+                val sizeIndex = it.getColumnIndex(OpenableColumns.SIZE)
+                if (sizeIndex != -1) size = it.getLong(sizeIndex)
+            }
+        }
+    } catch (e: Exception) {}
+    return Pair(name, size)
+}
+
+fun formatFileSize(bytes: Long): String {
+    if (bytes <= 0) return ""
+    val kb = bytes / 1024.0
+    val mb = kb / 1024.0
+    return when {
+        mb >= 1.0 -> String.format(Locale.getDefault(), "%.1f MB", mb)
+        kb >= 1.0 -> String.format(Locale.getDefault(), "%.0f KB", kb)
+        else -> "$bytes B"
+    }
+}
+
+fun openMediaFile(context: Context, base64Content: String, fileName: String, mimeType: String) {
+    try {
+        val cleanBase64 = if (base64Content.contains(",")) base64Content.substringAfter(",") else base64Content
+        val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
+        val cacheFile = File(context.cacheDir, fileName)
+        FileOutputStream(cacheFile).use { it.write(bytes) }
+
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", cacheFile)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mimeType)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(Intent.createChooser(intent, "Abrir com..."))
+    } catch (e: Exception) {
+        Toast.makeText(context, "Não foi possível abrir o arquivo: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
     }
 }

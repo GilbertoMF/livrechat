@@ -96,12 +96,16 @@ class ConnectionManager(
             val actualType = when {
                 message.messageType == "audio" || message.content.startsWith("data:audio") || message.content.contains("base64,") -> "audio"
                 message.messageType == "image" || message.content.startsWith("data:image") -> "image"
+                message.messageType == "video" || message.content.startsWith("data:video") -> "video"
+                message.messageType == "file" || message.content.startsWith("data:application") -> "file"
                 else -> message.messageType
             }
 
             val previewContent = when (actualType) {
                 "audio" -> "🎤 Mensagem de voz"
                 "image" -> "📷 Foto"
+                "video" -> "🎥 Vídeo"
+                "file" -> "📄 Documento/Arquivo"
                 else -> message.content
             }
 
@@ -295,6 +299,12 @@ class ConnectionManager(
             synchronized(listeners) {
                 listeners.forEach { it.onChatCleared(conversationId) }
             }
+        }
+    }
+
+    override fun onStatusUpdated() {
+        synchronized(listeners) {
+            listeners.forEach { it.onStatusUpdated() }
         }
     }
 }

@@ -61,6 +61,7 @@ import com.livrechat.app.ui.theme.SuccessGreen
 import com.livrechat.app.util.BiometricHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -137,6 +138,37 @@ fun HomeScreen(
     LaunchedEffect(selectedTab) {
         if (selectedTab == 1) {
             loadStatuses()
+            while (isActive) {
+                delay(15000L)
+                loadStatuses()
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        val listener = object : com.livrechat.app.data.remote.WebSocketEventsListener {
+            override fun onConnected() { loadStatuses() }
+            override fun onDisconnected() {}
+            override fun onMessageReceived(message: com.livrechat.app.data.local.entity.MessageEntity) {}
+            override fun onMessageAck(messageId: String, clientMessageId: String?, status: String) {}
+            override fun onMessageReceipt(messageId: String, status: String, userId: String) {}
+            override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean) {}
+            override fun onIncomingCall(callerId: String, callerUsername: String, callerDisplayName: String, callerAvatarUrl: String?, sdp: String) {}
+            override fun onCallAnswered(calleeId: String, sdp: String) {}
+            override fun onIceCandidateReceived(fromUserId: String, candidate: com.google.gson.JsonObject) {}
+            override fun onCallRinging(fromUserId: String) {}
+            override fun onCallRejected(fromUserId: String, reason: String) {}
+            override fun onCallEnded(fromUserId: String) {}
+            override fun onStatusUpdated() {
+                scope.launch(Dispatchers.Main) {
+                    loadStatuses()
+                }
+            }
+        }
+        val connMgr = LivreChatApp.instance.connectionManager
+        connMgr.registerListener(listener)
+        onDispose {
+            connMgr.unregisterListener(listener)
         }
     }
 
@@ -1374,17 +1406,93 @@ fun HomeScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     item {
-                        Text(
-                            text = "Status",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Status",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 22.sp
+                            )
+                            IconButton(onClick = { loadStatuses() }) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Atualizar", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
                     }
 
-                    // "Meu status" Row
+                    // Ações Rápidas em Estilo WhatsApp / Redes
                     item {
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { showStatusOptionsDialog = true }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF25D366), modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Câmera", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { showCreateTextStatusDialog = true }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Texto", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { showCreateMusicStatusDialog = true }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color(0xFFE91E63), modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Música", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    // "Meu status" Card
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
@@ -1394,94 +1502,152 @@ fun HomeScreen(
                                         showStatusOptionsDialog = true
                                     }
                                 }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(
-                                modifier = Modifier.size(56.dp),
-                                contentAlignment = Alignment.BottomEnd
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = if (myStatuses.isNotEmpty()) Color(0xFF25D366).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
-                                    modifier = Modifier
-                                        .size(56.dp)
-                                        .then(
-                                            if (myStatuses.isNotEmpty()) Modifier.border(2.5.dp, Color(0xFF25D366), CircleShape).padding(2.dp)
-                                            else Modifier
-                                        )
+                                Box(
+                                    modifier = Modifier.size(58.dp),
+                                    contentAlignment = Alignment.BottomEnd
                                 ) {
-                                    UserAvatarView(
-                                        avatarUrl = prefs.userAvatarUrl,
-                                        displayName = prefs.currentDisplayName ?: "V",
-                                        size = 56.dp,
-                                        fontSize = 22.sp
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = if (myStatuses.isNotEmpty()) Color(0xFF25D366).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier
+                                            .size(58.dp)
+                                            .then(
+                                                if (myStatuses.isNotEmpty()) Modifier.border(2.5.dp, Color(0xFF25D366), CircleShape).padding(2.5.dp)
+                                                else Modifier
+                                            )
+                                    ) {
+                                        UserAvatarView(
+                                            avatarUrl = myStatuses.lastOrNull()?.avatarUrl ?: prefs.userAvatarUrl,
+                                            displayName = prefs.currentDisplayName ?: "V",
+                                            size = 54.dp,
+                                            fontSize = 22.sp
+                                        )
+                                    }
+
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = Color(0xFF25D366),
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .clickable { showStatusOptionsDialog = true }
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = "Adicionar status",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(16.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Meu status", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = if (myStatuses.isNotEmpty()) "${myStatuses.size} atualização(ões) ativa(s)" else "Toque para adicionar atualização",
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
 
-                                Surface(
-                                    shape = CircleShape,
-                                    color = Color(0xFF25D366),
-                                    modifier = Modifier
-                                        .size(20.dp)
-                                        .clickable { showStatusOptionsDialog = true }
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.Add,
-                                            contentDescription = "Adicionar status",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(14.dp)
-                                        )
+                                Row {
+                                    IconButton(onClick = { showCreateTextStatusDialog = true }) {
+                                        Icon(Icons.Default.Edit, contentDescription = "Texto", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    IconButton(onClick = { showStatusOptionsDialog = true }) {
+                                        Icon(Icons.Default.CameraAlt, contentDescription = "Câmera", tint = MaterialTheme.colorScheme.primary)
                                     }
                                 }
                             }
-
-                            Spacer(modifier = Modifier.width(16.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Meu status", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = if (myStatuses.isNotEmpty()) "${myStatuses.size} atualização(ões) ativa(s)" else "Toque para adicionar atualização",
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
                         }
 
-                        Divider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        Spacer(modifier = Modifier.height(14.dp))
                     }
 
                     // "Atualizações recentes"
+                    val grouped = contactsStatuses.groupBy { it.userId }
                     item {
-                        Text(
-                            text = "Atualizações recentes",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Atualizações recentes",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (contactsStatuses.isNotEmpty()) {
+                                Text(
+                                    text = "${grouped.keys.size} contato(s)",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF25D366),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
                     }
 
                     if (contactsStatuses.isEmpty()) {
                         item {
-                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
                                     Icon(
                                         Icons.Default.HistoryToggleOff,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        tint = Color(0xFF25D366),
                                         modifier = Modifier.size(48.dp)
                                     )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Nenhuma atualização recente", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-                                    Text("Os status dos seus contatos aparecerão aqui por 24h", color = MaterialTheme.colorScheme.outline, fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text(
+                                        "Nenhuma atualização recente",
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 15.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        "Os status postados pelos seus contatos aparecerão aqui e ficam visíveis por 24h.",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 13.sp,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    OutlinedButton(
+                                        onClick = { loadStatuses() },
+                                        shape = RoundedCornerShape(20.dp)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Verificar atualizações", fontSize = 12.sp)
+                                    }
                                 }
                             }
                         }
                     } else {
-                        val grouped = contactsStatuses.groupBy { it.userId }
                         items(grouped.keys.toList(), key = { it }) { contactUserId ->
                             val userStatuses = grouped[contactUserId] ?: emptyList()
                             val latestStatus = userStatuses.last()
@@ -1496,38 +1662,43 @@ fun HomeScreen(
                                     shape = CircleShape,
                                     color = MaterialTheme.colorScheme.surfaceVariant,
                                     modifier = Modifier
-                                        .size(54.dp)
+                                        .size(56.dp)
                                         .border(2.5.dp, Color(0xFF25D366), CircleShape)
                                         .padding(2.5.dp)
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        if (!latestStatus.avatarUrl.isNullOrEmpty()) {
-                                            AsyncImage(
-                                                model = latestStatus.avatarUrl,
-                                                contentDescription = null,
-                                                modifier = Modifier.fillMaxSize().clip(CircleShape)
-                                            )
-                                        } else {
-                                            Text(
-                                                text = latestStatus.displayName.take(1).uppercase(),
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 20.sp,
-                                                color = BluePrimary
-                                            )
-                                        }
-                                    }
+                                    UserAvatarView(
+                                        avatarUrl = latestStatus.avatarUrl,
+                                        displayName = latestStatus.displayName,
+                                        size = 50.dp,
+                                        fontSize = 18.sp
+                                    )
                                 }
 
                                 Spacer(modifier = Modifier.width(16.dp))
 
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(latestStatus.displayName, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                    Text(latestStatus.displayName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         formatRelativeTime(latestStatus.createdAt),
                                         fontSize = 13.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                }
+
+                                if (userStatuses.size > 1) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = Color(0xFF25D366).copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = "${userStatuses.size}",
+                                            color = Color(0xFF25D366),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
                                 }
                             }
                             Divider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), thickness = 0.5.dp)
@@ -1995,28 +2166,12 @@ fun FullScreenStatusViewer(
                     }
                     val resolvedName = if (currentStatus.userId == currentUserId) "Você" else currentStatus.displayName
 
-                    Surface(
-                        shape = CircleShape,
-                        color = Color.White.copy(alpha = 0.2f),
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            if (!resolvedAvatar.isNullOrEmpty()) {
-                                AsyncImage(
-                                    model = resolvedAvatar,
-                                    contentDescription = null,
-                                    modifier = Modifier.fillMaxSize().clip(CircleShape),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                Text(
-                                    text = resolvedName.take(1).uppercase(),
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
+                    UserAvatarView(
+                        avatarUrl = resolvedAvatar,
+                        displayName = resolvedName,
+                        size = 38.dp,
+                        fontSize = 16.sp
+                    )
 
                     Spacer(modifier = Modifier.width(10.dp))
 
@@ -2230,24 +2385,52 @@ private fun formatTimestamp(timestamp: Long): String {
     return sdf.format(Date(timestamp))
 }
 
-private fun formatRelativeTime(isoString: String): String {
+private fun formatRelativeTime(rawTime: String): String {
     return try {
-        val cleanIso = if (isoString.contains(".")) {
-            isoString.substringBefore(".")
-        } else {
-            isoString.removeSuffix("Z")
+        val date: Date = when {
+            rawTime.toLongOrNull() != null -> Date(rawTime.toLong())
+            else -> {
+                val clean = rawTime.trim()
+                val formats = listOf(
+                    "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+                    "yyyy-MM-dd'T'HH:mm:ss'Z'",
+                    "yyyy-MM-dd'T'HH:mm:ss.SSS",
+                    "yyyy-MM-dd'T'HH:mm:ss",
+                    "yyyy-MM-dd HH:mm:ss",
+                    "yyyy-MM-dd HH:mm"
+                )
+                var parsed: Date? = null
+                for (fmt in formats) {
+                    try {
+                        val sdf = SimpleDateFormat(fmt, Locale.US).apply {
+                            timeZone = java.util.TimeZone.getTimeZone("UTC")
+                        }
+                        parsed = sdf.parse(clean)
+                        if (parsed != null) break
+                    } catch (e: Exception) {}
+                }
+                parsed ?: Date()
+            }
         }
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).apply {
-            timeZone = java.util.TimeZone.getTimeZone("UTC")
-        }
-        val date = sdf.parse(cleanIso) ?: Date()
-        val diffMs = (System.currentTimeMillis() - date.time).coerceAtLeast(0L)
+        val now = System.currentTimeMillis()
+        val diffMs = now - date.time
         val minutes = diffMs / (60 * 1000)
+        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+        val dateFormat = SimpleDateFormat("dd/MM", Locale.getDefault()).format(date)
+
+        val calNow = java.util.Calendar.getInstance()
+        val calDate = java.util.Calendar.getInstance().apply { time = date }
+        val isToday = calNow.get(java.util.Calendar.YEAR) == calDate.get(java.util.Calendar.YEAR) &&
+                      calNow.get(java.util.Calendar.DAY_OF_YEAR) == calDate.get(java.util.Calendar.DAY_OF_YEAR)
+        val isYesterday = calNow.get(java.util.Calendar.YEAR) == calDate.get(java.util.Calendar.YEAR) &&
+                          calNow.get(java.util.Calendar.DAY_OF_YEAR) - calDate.get(java.util.Calendar.DAY_OF_YEAR) == 1
+
         when {
-            minutes < 1 -> "Agora mesmo"
-            minutes < 60 -> "há ${minutes}m"
-            minutes < 1440 -> "hoje às " + SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
-            else -> SimpleDateFormat("dd/MM 'às' HH:mm", Locale.getDefault()).format(date)
+            diffMs in 0..59000 -> "Agora mesmo"
+            minutes in 1..59 -> "há ${minutes}m"
+            isToday -> "hoje às $timeFormat"
+            isYesterday -> "ontem às $timeFormat"
+            else -> "$dateFormat às $timeFormat"
         }
     } catch (e: Exception) {
         "Recente"

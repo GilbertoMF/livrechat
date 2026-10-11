@@ -309,6 +309,87 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         }
     }
 
+    fun sendMediaMessage(
+        conversationId: String,
+        content: String,
+        messageType: String,
+        caption: String? = null,
+        fileName: String? = null,
+        fileSize: Long? = null,
+        targetUserId: String? = null
+    ) {
+        if (content.isBlank()) return
+
+        val myId = prefs.currentUserId ?: return
+        val target = targetUserId ?: _currentOtherUserId.value
+        val clientMessageId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+
+        val metaIv = when (messageType) {
+            "file" -> "${fileName ?: "documento"}|${fileSize ?: 0}|${caption ?: ""}"
+            "video" -> "${fileName ?: "video"}|${fileSize ?: 0}|${caption ?: ""}"
+            "image" -> caption
+            else -> caption
+        }
+
+        val previewText = when (messageType) {
+            "image" -> if (!caption.isNullOrBlank()) "📷 $caption" else "📷 Foto"
+            "video" -> if (!caption.isNullOrBlank()) "🎥 $caption" else "🎥 Vídeo"
+            "file" -> "📄 ${fileName ?: "Documento/Arquivo"}"
+            else -> "📎 Arquivo"
+        }
+
+        val localMessage = MessageEntity(
+            id = clientMessageId,
+            conversationId = conversationId,
+            senderId = myId,
+            content = content,
+            messageType = messageType,
+            iv = metaIv,
+            replyToId = null,
+            status = "sending",
+            isOutgoing = true,
+            createdAt = now
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.messageDao().insertOrUpdate(localMessage)
+            db.conversationDao().updateLastMessage(conversationId, previewText, now)
+
+            val wsSent = connectionManager.getClient().sendChatMessage(
+                conversationId = conversationId,
+                content = content,
+                iv = metaIv,
+                messageType = messageType,
+                replyToId = null,
+                clientMessageId = clientMessageId,
+                targetUserId = target
+            )
+
+            if (!wsSent) {
+                try {
+                    val res = apiService.sendMessage(
+                        SendMessageRequest(
+                            conversationId = conversationId,
+                            content = content,
+                            iv = metaIv,
+                            clientMessageId = clientMessageId,
+                            messageType = messageType,
+                            targetUserId = target
+                        )
+                    )
+                    if (res.isSuccessful) {
+                        db.messageDao().updateStatus(clientMessageId, "sent")
+                    } else {
+                        db.messageDao().updateStatus(clientMessageId, "failed")
+                    }
+                } catch (e: Exception) {
+                    db.messageDao().updateStatus(clientMessageId, "failed")
+                }
+            }
+        }
+    }
+
     fun sendTyping(isTyping: Boolean, targetUserId: String? = null) {
         val convId = _currentConversationId.value ?: return
         val target = targetUserId ?: _currentOtherUserId.value

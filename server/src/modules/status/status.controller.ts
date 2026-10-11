@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { db, StatusRecord } from '../../db/database';
+import { wsManager } from '../../index';
 
 export class StatusController {
   public static async createStatus(req: Request, res: Response) {
@@ -17,6 +18,17 @@ export class StatusController {
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
 
+      if (req.body.avatarUrl && (!profile?.avatar_url || profile.avatar_url !== req.body.avatarUrl)) {
+        await db.upsertProfile({
+          user_id: userId,
+          display_name: req.body.displayName || profile?.display_name || user?.username || 'Usuário',
+          avatar_url: req.body.avatarUrl,
+          bio: profile?.bio || '',
+          public_key: profile?.public_key || '',
+          updated_at: now.toISOString()
+        }).catch(() => {});
+      }
+
       const status: StatusRecord = {
         id: uuidv4(),
         user_id: userId,
@@ -32,6 +44,15 @@ export class StatusController {
       };
 
       const created = await db.createStatus(status);
+
+      // Notifica todos os clientes conectados imediatamente
+      try {
+        wsManager?.broadcast({
+          type: 'status:new',
+          status: created
+        });
+      } catch (e) {}
+
       res.status(201).json(created);
     } catch (err: any) {
       console.error('[StatusController] createStatus error:', err);
@@ -64,6 +85,15 @@ export class StatusController {
       }
 
       await db.deleteStatus(statusId, userId);
+
+      // Notifica remoção imediatamente
+      try {
+        wsManager?.broadcast({
+          type: 'status:deleted',
+          statusId
+        });
+      } catch (e) {}
+
       res.status(200).json({ success: true, message: 'Status apagado com sucesso' });
     } catch (err: any) {
       console.error('[StatusController] deleteStatus error:', err);

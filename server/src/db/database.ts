@@ -1616,6 +1616,7 @@ class DatabaseService {
             AND (
               s.user_id = $1
               OR s.user_id IN (SELECT contact_user_id FROM contacts WHERE user_id = $1)
+              OR s.user_id IN (SELECT user_id FROM contacts WHERE contact_user_id = $1)
               OR s.user_id IN (
                 SELECT cm2.user_id 
                 FROM conversation_members cm1 
@@ -1646,7 +1647,14 @@ class DatabaseService {
 
     // Fallback in-memory
     const active = this.memoryStore.statuses.filter(s => s.expires_at > now);
-    return active.sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return active.map(s => {
+      const prof = this.memoryStore.profiles.find(p => p.user_id === s.user_id);
+      return {
+        ...s,
+        avatar_url: s.avatar_url || prof?.avatar_url,
+        display_name: s.display_name || prof?.display_name || s.username
+      };
+    }).sort((a, b) => a.created_at.localeCompare(b.created_at));
   }
 
   public async deleteStatus(statusId: string, userId: string): Promise<boolean> {

@@ -35,6 +35,7 @@ interface WebSocketEventsListener {
     fun onCallEnded(fromUserId: String)
     fun onMessageDeleted(messageId: String, conversationId: String) {}
     fun onChatCleared(conversationId: String) {}
+    fun onStatusUpdated() {}
 }
 
 class WebSocketClient(
@@ -224,6 +225,9 @@ class WebSocketClient(
                         "chat:cleared" -> {
                             val convId = json.get("conversationId").asStringOrDefault()
                             listener.onChatCleared(convId)
+                        }
+                        "status:new", "status:deleted" -> {
+                            listener.onStatusUpdated()
                         }
                     }
                 } catch (t: Throwable) {
