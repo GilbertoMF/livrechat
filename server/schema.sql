@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS messages (
     conversation_id VARCHAR(36) NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     sender_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content TEXT NOT NULL, -- Encrypted payload (E2E ciphertext)
-    iv VARCHAR(64), -- Initialization vector for E2E
+    iv VARCHAR(255), -- Initialization vector or waveform for audio
     message_type VARCHAR(16) DEFAULT 'text',
     reply_to_id VARCHAR(36) REFERENCES messages(id) ON DELETE SET NULL,
     is_deleted BOOLEAN DEFAULT FALSE,

@@ -181,12 +181,12 @@ fun HomeScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onNavigateToSearch,
-                containerColor = BluePrimary,
+                containerColor = Color(0xFF25D366),
                 contentColor = Color.White,
-                shape = CircleShape
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Icon(
-                    imageVector = if (selectedTab == 0) Icons.Default.Chat else Icons.Default.Call,
+                    imageVector = if (selectedTab == 0) Icons.Default.AddComment else Icons.Default.Call,
                     contentDescription = "Novo"
                 )
             }
@@ -422,8 +422,16 @@ fun ConversationItem(
                         modifier = Modifier.weight(1f)
                     )
                 } else {
+                    val previewText = when {
+                        conversation.lastMessageContent.isNullOrBlank() -> "Sem mensagens ainda"
+                        conversation.lastMessageContent.startsWith("data:audio") ||
+                        conversation.lastMessageContent.contains("base64,") ||
+                        conversation.lastMessageContent.startsWith("🎤") -> "🎤 Mensagem de voz"
+                        conversation.lastMessageContent.startsWith("data:image") -> "📷 Foto"
+                        else -> conversation.lastMessageContent
+                    }
                     Text(
-                        text = conversation.lastMessageContent ?: "Sem mensagens ainda",
+                        text = previewText,
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

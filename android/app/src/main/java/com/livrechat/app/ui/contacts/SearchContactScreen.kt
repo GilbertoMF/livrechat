@@ -1,5 +1,7 @@
 package com.livrechat.app.ui.contacts
 
+import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,9 +14,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.livrechat.app.LivreChatApp
 import com.livrechat.app.data.local.entity.ConversationEntity
 import com.livrechat.app.data.remote.model.AddContactRequest
@@ -24,190 +30,540 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+data class ContactUiModel(
+    val userId: String,
+    val displayName: String,
+    val username: String,
+    val avatarUrl: String? = null,
+    val bio: String = "",
+    val isSelf: Boolean = false
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchContactScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToChat: (String, String, String) -> Unit
+    onNavigateToChat: (String, String, String) -> Unit,
+    onNavigateToQRCode: () -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val apiService = LivreChatApp.instance.apiClient.apiService
-    val db = LivreChatApp.instance.database
+    val app = LivreChatApp.instance
+    val apiService = app.apiClient.apiService
+    val db = app.database
+    val prefs = app.preferencesManager
 
-    var query by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf<List<UserDto>>(emptyList()) }
+    var isSearchActive by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var contactsList by remember { mutableStateOf<List<ContactUiModel>>(emptyList()) }
+    var remoteSearchResults by remember { mutableStateOf<List<UserDto>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showMenu by remember { mutableStateOf(false) }
+    var showAddContactDialog by remember { mutableStateOf(false) }
+    var newContactUsername by remember { mutableStateOf("") }
+    var isAddingContact by remember { mutableStateOf(false) }
 
-    fun performSearch() {
-        if (query.trim().length < 2) return
+    fun loadContacts() {
         scope.launch {
             isLoading = true
-            errorMessage = null
             try {
-                val res = apiService.searchUsers(query.trim())
-                if (res.isSuccessful && res.body() != null) {
-                    searchResults = res.body()!!
-                    if (searchResults.isEmpty()) {
-                        errorMessage = "Nenhum usuário encontrado com este nome ou ID."
-                    }
-                } else {
-                    errorMessage = "Nenhum resultado."
+                val currentUserId = prefs.currentUserId
+                val list = mutableListOf<ContactUiModel>()
+
+                // 1. Add current user as "(Você) - Mensagens para mim"
+                if (currentUserId != null) {
+                    val myUsername = prefs.currentUsername ?: "eu"
+                    val myName = prefs.currentDisplayName ?: "Você"
+                    list.add(
+                        ContactUiModel(
+                            userId = currentUserId,
+                            displayName = myName,
+                            username = myUsername,
+                            avatarUrl = null,
+                            bio = "Mensagens para mim",
+                            isSelf = true
+                        )
+                    )
                 }
+
+                // 2. Fetch server contacts
+                val contactsRes = try { apiService.getContacts() } catch (e: Exception) { null }
+                if (contactsRes?.isSuccessful == true && contactsRes.body() != null) {
+                    contactsRes.body()!!.forEach { c ->
+                        if (c.contactUserId != currentUserId && list.none { it.userId == c.contactUserId }) {
+                            list.add(
+                                ContactUiModel(
+                                    userId = c.contactUserId,
+                                    displayName = c.displayName,
+                                    username = c.username,
+                                    avatarUrl = c.avatarUrl,
+                                    bio = c.bio.ifBlank { "Disponível" }
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // 3. Include users from local active conversations if not present
+                val convs = withContext(Dispatchers.IO) { db.conversationDao().getAllConversationsSync() }
+                convs.forEach { conv ->
+                    if (conv.otherUserId != currentUserId && list.none { it.userId == conv.otherUserId }) {
+                        list.add(
+                            ContactUiModel(
+                                userId = conv.otherUserId,
+                                displayName = conv.otherDisplayName,
+                                username = conv.otherUsername,
+                                avatarUrl = conv.otherAvatarUrl,
+                                bio = "Conversa ativa"
+                            )
+                        )
+                    }
+                }
+
+                contactsList = list
             } catch (e: Exception) {
-                errorMessage = "Erro ao buscar: ${e.localizedMessage}"
+                // Silently ignore or show cached
             } finally {
                 isLoading = false
             }
         }
     }
 
-    fun startChat(user: UserDto) {
+    LaunchedEffect(Unit) {
+        loadContacts()
+    }
+
+    fun startChatWithUser(targetUserId: String, targetDisplayName: String, targetUsername: String = "", avatarUrl: String? = null) {
         scope.launch {
             isLoading = true
             try {
-                val res = apiService.getOrCreateConversation(mapOf("targetUserId" to user.id))
+                val res = apiService.getOrCreateConversation(mapOf("targetUserId" to targetUserId))
                 if (res.isSuccessful && res.body() != null) {
                     val conv = res.body()!!
-                    // Insert into local db
                     withContext(Dispatchers.IO) {
                         db.conversationDao().insertOrUpdate(
                             ConversationEntity(
                                 id = conv.conversationId,
-                                otherUserId = user.id,
-                                otherUsername = user.username,
-                                otherDisplayName = user.displayName,
-                                otherAvatarUrl = user.avatarUrl,
-                                otherPublicKey = user.publicKey,
+                                otherUserId = targetUserId,
+                                otherUsername = targetUsername,
+                                otherDisplayName = targetDisplayName,
+                                otherAvatarUrl = avatarUrl,
+                                otherPublicKey = null,
                                 lastMessageContent = null,
                                 lastMessageTimestamp = System.currentTimeMillis()
                             )
                         )
                     }
-                    onNavigateToChat(conv.conversationId, user.id, user.displayName)
+                    onNavigateToChat(conv.conversationId, targetUserId, targetDisplayName)
+                } else {
+                    Toast.makeText(context, "Não foi possível abrir a conversa", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                errorMessage = "Erro ao iniciar conversa: ${e.localizedMessage}"
+                Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
             } finally {
                 isLoading = false
             }
         }
     }
 
+    fun searchRemoteUsers(q: String) {
+        if (q.trim().length < 2) {
+            remoteSearchResults = emptyList()
+            return
+        }
+        scope.launch {
+            try {
+                val res = apiService.searchUsers(q.trim())
+                if (res.isSuccessful && res.body() != null) {
+                    remoteSearchResults = res.body()!!
+                }
+            } catch (e: Exception) {}
+        }
+    }
+
+    // Filter contacts based on search query
+    val filteredContacts = remember(contactsList, searchQuery) {
+        if (searchQuery.isBlank()) {
+            contactsList
+        } else {
+            contactsList.filter {
+                it.displayName.contains(searchQuery, ignoreCase = true) ||
+                it.username.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+
+    // Add Contact Dialog
+    if (showAddContactDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isAddingContact) showAddContactDialog = false
+            },
+            title = { Text("Novo contato", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Digite o @nome_de_usuario ou ID do contato:", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newContactUsername,
+                        onValueChange = { newContactUsername = it },
+                        placeholder = { Text("Ex: joaosilva") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = newContactUsername.isNotBlank() && !isAddingContact,
+                    onClick = {
+                        scope.launch {
+                            isAddingContact = true
+                            try {
+                                val searchRes = apiService.searchUsers(newContactUsername.trim().removePrefix("@"))
+                                val user = searchRes.body()?.firstOrNull()
+                                if (user != null) {
+                                    apiService.addContact(AddContactRequest(contactUserId = user.id))
+                                    Toast.makeText(context, "${user.displayName} adicionado aos contatos!", Toast.LENGTH_SHORT).show()
+                                    showAddContactDialog = false
+                                    newContactUsername = ""
+                                    loadContacts()
+                                    startChatWithUser(user.id, user.displayName, user.username, user.avatarUrl)
+                                } else {
+                                    Toast.makeText(context, "Usuário não encontrado", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                            } finally {
+                                isAddingContact = false
+                            }
+                        }
+                    }
+                ) {
+                    Text(if (isAddingContact) "Buscando..." else "Adicionar", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddContactDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Adicionar Contato") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Voltar")
+            if (isSearchActive) {
+                TopAppBar(
+                    title = {
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = {
+                                searchQuery = it
+                                searchRemoteUsers(it)
+                            },
+                            placeholder = { Text("Pesquisar contatos...") },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            isSearchActive = false
+                            searchQuery = ""
+                            remoteSearchResults = emptyList()
+                        }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Fechar busca")
+                        }
+                    },
+                    actions = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = {
+                                searchQuery = ""
+                                remoteSearchResults = emptyList()
+                            }) {
+                                Icon(Icons.Default.Close, contentDescription = "Limpar")
+                            }
+                        }
                     }
-                }
-            )
+                )
+            } else {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text("Contatos", fontWeight = FontWeight.SemiBold, fontSize = 19.sp)
+                            Text(
+                                "${filteredContacts.size} contatos",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Voltar")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { isSearchActive = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Pesquisar")
+                        }
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Mais opções")
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Atualizar") },
+                                    onClick = {
+                                        showMenu = false
+                                        loadContacts()
+                                        Toast.makeText(context, "Lista atualizada", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Convidar amigos") },
+                                    onClick = {
+                                        showMenu = false
+                                        Toast.makeText(context, "Compartilhe o LivreChat com seus amigos!", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                        }
+                    }
+                )
+            }
         }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
         ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                label = { Text("Buscar por @nome_de_usuario ou ID") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = {
-                    IconButton(onClick = { performSearch() }) {
-                        Icon(Icons.Default.ArrowForward, contentDescription = "Buscar", tint = BluePrimary)
-                    }
-                },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (isLoading) {
-                Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = BluePrimary)
+            // Action Tiles (Shown when not searching)
+            if (!isSearchActive || searchQuery.isEmpty()) {
+                item {
+                    // 1. Novo grupo
+                    ActionContactTile(
+                        icon = Icons.Default.GroupAdd,
+                        title = "Novo grupo",
+                        onClick = {
+                            Toast.makeText(context, "Criação de grupos em desenvolvimento", Toast.LENGTH_SHORT).show()
+                        }
+                    )
                 }
-            }
 
-            errorMessage?.let { msg ->
-                Surface(
-                    color = MaterialTheme.colorScheme.errorContainer,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                ) {
+                item {
+                    // 2. Novo contato (com botão QR Code)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showAddContactDialog = true }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFF25D366),
+                                modifier = Modifier.size(42.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.PersonAdd,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(
+                                text = "Novo contato",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 16.sp
+                            )
+                        }
+
+                        IconButton(onClick = onNavigateToQRCode) {
+                            Icon(
+                                imageVector = Icons.Default.QrCode,
+                                contentDescription = "Escanear QR Code",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    // 3. Nova comunidade
+                    ActionContactTile(
+                        icon = Icons.Default.Groups,
+                        title = "Nova comunidade",
+                        onClick = {
+                            Toast.makeText(context, "Comunidades em desenvolvimento", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = msg,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        text = "Contatos no LivreChat",
                         fontSize = 13.sp,
-                        modifier = Modifier.padding(12.dp)
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
             }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(searchResults) { user ->
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = BluePrimary.copy(alpha = 0.2f),
-                                    modifier = Modifier.size(44.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = user.displayName.take(1).uppercase(),
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 18.sp,
-                                            color = BluePrimary
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        text = user.displayName,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp
-                                    )
-                                    Text(
-                                        text = "@${user.username}",
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
+            // Contact List
+            items(filteredContacts, key = { it.userId }) { contact ->
+                ContactRowItem(
+                    contact = contact,
+                    onClick = {
+                        startChatWithUser(
+                            targetUserId = contact.userId,
+                            targetDisplayName = contact.displayName,
+                            targetUsername = contact.username,
+                            avatarUrl = contact.avatarUrl
+                        )
+                    }
+                )
+            }
 
-                            Button(
-                                onClick = { startChat(user) },
-                                colors = ButtonDefaults.buttonColors(containerColor = BluePrimary),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text("Conversar", fontSize = 13.sp)
+            // Additional Search Results from Server (if actively searching)
+            if (isSearchActive && searchQuery.length >= 2 && remoteSearchResults.isNotEmpty()) {
+                val nonLocalResults = remoteSearchResults.filter { r ->
+                    filteredContacts.none { it.userId == r.id }
+                }
+                if (nonLocalResults.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Outros usuários encontrados",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                        )
+                    }
+                    items(nonLocalResults, key = { it.id }) { user ->
+                        ContactRowItem(
+                            contact = ContactUiModel(
+                                userId = user.id,
+                                displayName = user.displayName,
+                                username = user.username,
+                                avatarUrl = user.avatarUrl,
+                                bio = "@${user.username}"
+                            ),
+                            onClick = {
+                                startChatWithUser(user.id, user.displayName, user.username, user.avatarUrl)
                             }
-                        }
+                        )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun ActionContactTile(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = Color(0xFF25D366),
+            modifier = Modifier.size(42.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = title,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 16.sp
+        )
+    }
+}
+
+@Composable
+fun ContactRowItem(
+    contact: ContactUiModel,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Avatar
+        Surface(
+            shape = CircleShape,
+            color = if (contact.isSelf) Color(0xFF25D366).copy(alpha = 0.2f) else BluePrimary.copy(alpha = 0.15f),
+            modifier = Modifier.size(46.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                if (!contact.avatarUrl.isNullOrEmpty()) {
+                    AsyncImage(
+                        model = contact.avatarUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape)
+                    )
+                } else {
+                    Text(
+                        text = contact.displayName.take(1).uppercase(),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = if (contact.isSelf) Color(0xFF25D366) else BluePrimary
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(14.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (contact.isSelf) "${contact.displayName} (Você)" else contact.displayName,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = contact.bio.ifBlank { "@${contact.username}" },
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

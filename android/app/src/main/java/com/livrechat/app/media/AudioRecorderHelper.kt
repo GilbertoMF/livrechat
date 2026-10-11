@@ -42,6 +42,14 @@ class AudioRecorderHelper(private val context: Context) {
         }
     }
 
+    fun getMaxAmplitude(): Int {
+        return try {
+            recorder?.maxAmplitude ?: 0
+        } catch (e: Exception) {
+            0
+        }
+    }
+
     fun stopRecording(): File? {
         return try {
             recorder?.apply {

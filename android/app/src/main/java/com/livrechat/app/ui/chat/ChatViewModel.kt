@@ -227,7 +227,13 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         }
     }
 
-    fun sendAudioMessage(conversationId: String, audioBase64: String, durationSeconds: Int, targetUserId: String? = null) {
+    fun sendAudioMessage(
+        conversationId: String,
+        audioBase64: String,
+        durationSeconds: Int,
+        targetUserId: String? = null,
+        waveform: String? = null
+    ) {
         if (audioBase64.isBlank()) return
 
         val myId = prefs.currentUserId ?: return
@@ -241,6 +247,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
             senderId = myId,
             content = audioBase64,
             messageType = "audio",
+            iv = waveform,
             replyToId = null,
             status = "sending",
             isOutgoing = true,
@@ -249,12 +256,12 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
 
         viewModelScope.launch(Dispatchers.IO) {
             db.messageDao().insertOrUpdate(localMessage)
-            db.conversationDao().updateLastMessage(conversationId, "🎤 Áudio (${durationSeconds}s)", now)
+            db.conversationDao().updateLastMessage(conversationId, "🎤 Mensagem de voz (${durationSeconds}s)", now)
 
             val wsSent = connectionManager.getClient().sendChatMessage(
                 conversationId = conversationId,
                 content = audioBase64,
-                iv = null,
+                iv = waveform,
                 messageType = "audio",
                 replyToId = null,
                 clientMessageId = clientMessageId,
@@ -267,6 +274,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                         SendMessageRequest(
                             conversationId = conversationId,
                             content = audioBase64,
+                            iv = waveform,
                             clientMessageId = clientMessageId,
                             messageType = "audio",
                             targetUserId = target

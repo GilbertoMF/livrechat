@@ -210,7 +210,8 @@ fun LivreChatNavGraph(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToChat = { convId, userId, name ->
                     navController.navigate("chat/$convId/$userId/$name")
-                }
+                },
+                onNavigateToQRCode = { navController.navigate(Routes.QR_CODE) }
             )
         }
 

@@ -13,6 +13,9 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations ORDER BY isPinned DESC, lastMessageTimestamp DESC")
     fun getAllConversationsFlow(): Flow<List<ConversationEntity>>
 
+    @Query("SELECT * FROM conversations ORDER BY isPinned DESC, lastMessageTimestamp DESC")
+    suspend fun getAllConversationsSync(): List<ConversationEntity>
+
     @Query("SELECT * FROM conversations WHERE id = :id LIMIT 1")
     suspend fun getConversationById(id: String): ConversationEntity?
 
@@ -33,6 +36,9 @@ interface ConversationDao {
 
     @Query("UPDATE conversations SET unreadCount = unreadCount + 1 WHERE id = :convId")
     suspend fun incrementUnreadCount(convId: String)
+
+    @Query("UPDATE conversations SET unreadCount = (SELECT COUNT(*) FROM messages WHERE conversationId = :convId AND isOutgoing = 0 AND status != 'read') WHERE id = :convId")
+    suspend fun recalculateUnreadCount(convId: String)
 
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun deleteById(id: String)

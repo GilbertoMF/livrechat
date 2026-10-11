@@ -181,6 +181,7 @@ export class WebSocketManager {
           if (targetUserId && !members.includes(targetUserId)) {
             members.push(targetUserId);
           }
+          members = Array.from(new Set(members));
 
           for (const memberId of members) {
             if (memberId !== senderId) {

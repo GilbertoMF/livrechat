@@ -67,6 +67,7 @@ fun ChatScreen(
     var isRecording by remember { mutableStateOf(false) }
     var recordingSeconds by remember { mutableIntStateOf(0) }
     var recordingJob by remember { mutableStateOf<Job?>(null) }
+    val recordingAmplitudes = remember { mutableStateListOf<Int>() }
 
     val currentFlow by viewModel.messagesFlow.collectAsState()
     val messages by currentFlow.collectAsState(initial = emptyList())
@@ -83,6 +84,7 @@ fun ChatScreen(
             audioPlayerHelper.stop()
             if (isRecording) {
                 audioRecorderHelper.cancelRecording()
+                recordingAmplitudes.clear()
             }
             viewModel.sendTyping(false, otherUserId)
             viewModel.unselectConversation()
@@ -304,6 +306,7 @@ fun ChatScreen(
                                 audioRecorderHelper.cancelRecording()
                                 isRecording = false
                                 recordingSeconds = 0
+                                recordingAmplitudes.clear()
                                 Toast.makeText(context, "Gravação cancelada", Toast.LENGTH_SHORT).show()
                             },
                             colors = IconButtonDefaults.iconButtonColors(containerColor = DangerRed.copy(alpha = 0.15f))
@@ -313,7 +316,7 @@ fun ChatScreen(
 
                         Spacer(modifier = Modifier.width(12.dp))
 
-                        // Duration label with red dot
+                        // Duration label with red dot & live amplitude visualizer
                         Row(
                             modifier = Modifier.weight(1f),
                             verticalAlignment = Alignment.CenterVertically
@@ -330,6 +333,25 @@ fun ChatScreen(
                                 color = DangerRed,
                                 fontSize = 15.sp
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            // Live bouncing bars
+                            Row(
+                                modifier = Modifier.height(20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val recent = recordingAmplitudes.takeLast(14)
+                                for (a in recent) {
+                                    val barH = ((a / 12000f).coerceIn(0.2f, 1f) * 18).dp
+                                    Box(
+                                        modifier = Modifier
+                                            .width(2.5.dp)
+                                            .height(barH)
+                                            .clip(RoundedCornerShape(1.dp))
+                                            .background(DangerRed.copy(alpha = 0.85f))
+                                    )
+                                }
+                            }
                         }
 
                         // Send Audio Button
@@ -338,8 +360,10 @@ fun ChatScreen(
                                 recordingJob?.cancel()
                                 val recordedFile = audioRecorderHelper.stopRecording()
                                 val seconds = recordingSeconds
+                                val amps = recordingAmplitudes.toList()
                                 isRecording = false
                                 recordingSeconds = 0
+                                recordingAmplitudes.clear()
 
                                 if (recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
                                     scope.launch(Dispatchers.IO) {
@@ -347,11 +371,14 @@ fun ChatScreen(
                                             val bytes = recordedFile.readBytes()
                                             val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                                             val audioUri = "data:audio/mp4;base64,$base64"
+                                            val bars = processAmplitudesToBars(amps, 28)
+                                            val encodedWaveform = encodeWaveform(bars)
                                             viewModel.sendAudioMessage(
                                                 conversationId = conversationId,
                                                 audioBase64 = audioUri,
                                                 durationSeconds = seconds.coerceAtLeast(1),
-                                                targetUserId = otherUserId
+                                                targetUserId = otherUserId,
+                                                waveform = encodedWaveform
                                             )
                                         } catch (e: Exception) {
                                             Log.e("ChatScreen", "Erro ao processar áudio", e)
@@ -435,11 +462,18 @@ fun ChatScreen(
                                     if (file != null) {
                                         isRecording = true
                                         recordingSeconds = 0
+                                        recordingAmplitudes.clear()
                                         recordingJob?.cancel()
                                         recordingJob = scope.launch {
+                                            var tick = 0
                                             while (isActive) {
-                                                delay(1000)
-                                                recordingSeconds++
+                                                delay(100)
+                                                val amp = audioRecorderHelper.getMaxAmplitude()
+                                                recordingAmplitudes.add(amp)
+                                                tick++
+                                                if (tick % 10 == 0) {
+                                                    recordingSeconds++
+                                                }
                                             }
                                         }
                                     } else {
@@ -565,15 +599,58 @@ fun MessageBubble(
     }
 }
 
+fun processAmplitudesToBars(raw: List<Int>, targetCount: Int = 28): List<Int> {
+    if (raw.isEmpty()) {
+        return listOf(8, 14, 22, 12, 28, 18, 10, 24, 16, 26, 30, 14, 20, 26, 12, 18, 28, 16, 10, 22, 30, 20, 14, 18, 26, 16, 10, 14)
+    }
+    val maxAmp = raw.maxOrNull()?.toFloat()?.coerceAtLeast(1200f) ?: 1200f
+    val bars = ArrayList<Int>(targetCount)
+    val chunkSize = raw.size.toFloat() / targetCount.toFloat()
+    for (i in 0 until targetCount) {
+        val startIdx = (i * chunkSize).toInt().coerceIn(0, raw.size - 1)
+        val endIdx = ((i + 1) * chunkSize).toInt().coerceIn(startIdx + 1, raw.size)
+        val sub = raw.subList(startIdx, endIdx)
+        val avg = if (sub.isNotEmpty()) sub.average().toFloat() else 0f
+        val ratio = (avg / maxAmp).coerceIn(0f, 1f)
+        val height = (6 + (ratio * 24)).toInt().coerceIn(6, 30)
+        bars.add(height)
+    }
+    return bars
+}
+
+fun encodeWaveform(bars: List<Int>): String {
+    val sb = StringBuilder("w:")
+    for (b in bars.take(28)) {
+        val level = (b - 6).coerceIn(0, 25)
+        sb.append(('A'.code + level).toChar())
+    }
+    return sb.toString()
+}
+
+fun decodeWaveform(encoded: String?): List<Int> {
+    if (encoded != null && encoded.startsWith("w:")) {
+        val chars = encoded.removePrefix("w:")
+        val list = chars.map { ch ->
+            val level = (ch - 'A').coerceIn(0, 25)
+            6 + level
+        }
+        if (list.isNotEmpty()) return list
+    }
+    if (encoded != null && encoded.startsWith("wf:")) {
+        val parsed = encoded.removePrefix("wf:").split(",").mapNotNull { it.toIntOrNull() }
+        if (parsed.isNotEmpty()) return parsed
+    }
+    return listOf(8, 14, 22, 12, 28, 18, 10, 24, 16, 26, 30, 14, 20, 26, 12, 18, 28, 16, 10, 22, 30, 20, 14, 18, 26, 16, 10, 14)
+}
+
 @Composable
 fun AudioWaveformVisualizer(
+    bars: List<Int>,
     progress: Float,
     isOutgoing: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val barHeights = remember {
-        listOf(8, 14, 22, 12, 28, 18, 10, 24, 16, 26, 30, 14, 20, 26, 12, 18, 28, 16, 10, 22, 30, 20, 14, 18, 26, 16, 10, 14)
-    }
+    val barHeights = if (bars.isNotEmpty()) bars else listOf(8, 14, 22, 12, 28, 18, 10, 24, 16, 26, 30, 14, 20, 26, 12, 18, 28, 16, 10, 22, 30, 20, 14, 18, 26, 16, 10, 14)
     Row(
         modifier = modifier.height(32.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -608,6 +685,18 @@ fun AudioMessageBubbleContent(
 
     val isThisPlaying = playingId == message.id && isPlayingState
 
+    val waveformBars = remember(message.iv, message.id) {
+        if (!message.iv.isNullOrBlank()) {
+            decodeWaveform(message.iv)
+        } else {
+            val hash = kotlin.math.abs(message.id.hashCode())
+            (0 until 28).map { i ->
+                val pseudo = ((hash / (i + 1)) * 37 + i * 19) % 24
+                6 + kotlin.math.abs(pseudo)
+            }
+        }
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -636,6 +725,7 @@ fun AudioMessageBubbleContent(
         Column(modifier = Modifier.weight(1f)) {
             // WhatsApp-style Waveform Bars
             AudioWaveformVisualizer(
+                bars = waveformBars,
                 progress = if (playingId == message.id) progress else 0f,
                 isOutgoing = isOutgoing,
                 modifier = Modifier.fillMaxWidth()

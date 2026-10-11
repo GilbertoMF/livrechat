@@ -211,6 +211,7 @@ class DatabaseService {
         if (schemaPath) {
           const sql = fs.readFileSync(schemaPath, 'utf-8');
           await client.query(sql);
+          await client.query('ALTER TABLE messages ALTER COLUMN iv TYPE VARCHAR(255);').catch(() => {});
           console.log(`[Database] PostgreSQL (${CONFIG.DATABASE_URL.includes('neon.tech') ? 'Neon.tech' : 'Cloud'}) conectado e tabelas migradas com sucesso.`);
         } else {
           console.log('[Database] PostgreSQL conectado.');

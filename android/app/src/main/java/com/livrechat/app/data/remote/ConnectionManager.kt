@@ -82,7 +82,21 @@ class ConnectionManager(
         scope.launch {
             val app = LivreChatApp.instance
             val db = app.database
+
+            // 1. De-duplication check: ignore if already received and stored
+            val existingMsg = db.messageDao().getMessageById(message.id)
+            if (existingMsg != null) {
+                Log.d(TAG, "Mensagem ${message.id} já recebida anteriormente. Ignorando duplicata.")
+                return@launch
+            }
+
             val isCurrentOpen = _activeConversationId.value == message.conversationId
+
+            val previewContent = when {
+                message.messageType == "audio" || message.content.startsWith("data:audio") || message.content.contains("base64,") -> "🎤 Mensagem de voz"
+                message.messageType == "image" || message.content.startsWith("data:image") -> "📷 Foto"
+                else -> message.content
+            }
 
             var conv = db.conversationDao().getConversationById(message.conversationId)
             if (conv == null) {
@@ -93,7 +107,7 @@ class ConnectionManager(
                     otherDisplayName = "Contato",
                     otherAvatarUrl = null,
                     otherPublicKey = null,
-                    lastMessageContent = message.content,
+                    lastMessageContent = previewContent,
                     lastMessageTimestamp = message.createdAt,
                     unreadCount = if (isCurrentOpen) 0 else 1
                 )
@@ -118,23 +132,22 @@ class ConnectionManager(
                         Log.w(TAG, "Falha ao obter perfil do remetente", e)
                     }
                 }
-            } else {
-                db.conversationDao().updateLastMessage(message.conversationId, message.content, message.createdAt)
-                if (!isCurrentOpen) {
-                    db.conversationDao().incrementUnreadCount(message.conversationId)
-                }
             }
 
             if (isCurrentOpen) {
                 // Mensagem lida imediatamente
                 val readMsg = message.copy(status = "read")
                 db.messageDao().insertOrUpdate(readMsg)
+                db.conversationDao().clearUnreadCount(message.conversationId)
+                db.conversationDao().updateLastMessage(message.conversationId, previewContent, message.createdAt)
                 webSocketClient.sendReceipt(message.id, "read")
                 try { app.apiClient.apiService.markMessageRead(message.id) } catch (e: Exception) {}
             } else {
                 // Mensagem entregue
                 val deliveredMsg = message.copy(status = "delivered")
                 db.messageDao().insertOrUpdate(deliveredMsg)
+                db.conversationDao().recalculateUnreadCount(message.conversationId)
+                db.conversationDao().updateLastMessage(message.conversationId, previewContent, message.createdAt)
                 webSocketClient.sendReceipt(message.id, "delivered")
 
                 // Obter nome para notificação
@@ -144,7 +157,7 @@ class ConnectionManager(
                     context = context,
                     conversationId = message.conversationId,
                     senderName = senderTitle,
-                    content = message.content
+                    content = previewContent
                 )
             }
 
