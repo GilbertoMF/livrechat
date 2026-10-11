@@ -861,9 +861,10 @@ fun SettingsScreen(
                             )
                         }
                         Text(
-                            text = "@$username",
+                            text = if (username.length == 8 && username.all { it.isDigit() }) "Número Virtual: ID $username" else "@$username",
                             fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontWeight = FontWeight.SemiBold,
+                            color = BluePrimary
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(

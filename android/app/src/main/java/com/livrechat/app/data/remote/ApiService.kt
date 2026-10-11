@@ -34,6 +34,12 @@ interface ApiService {
     @POST("api/auth/recover")
     suspend fun recover(@Body request: RecoverRequest): Response<BaseResponse>
 
+    @POST("api/auth/virtual-number/request")
+    suspend fun requestVirtualNumberCode(@Body body: Map<String, String>): Response<com.livrechat.app.data.remote.model.VirtualNumberRequestResponse>
+
+    @POST("api/auth/virtual-number/verify")
+    suspend fun verifyVirtualNumberCode(@Body body: Map<String, String>): Response<LoginResponse>
+
     @GET("api/messages/conversations")
     suspend fun getConversations(): Response<List<ConversationDto>>
 

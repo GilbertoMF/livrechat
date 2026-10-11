@@ -221,4 +221,122 @@ export class AuthService {
   public static async deleteAccount(userId: string) {
     return db.deleteUser(userId);
   }
+
+  // ==========================================
+  // VIRTUAL NUMBER & SMS VERIFICATION
+  // ==========================================
+  private static virtualNumberStore = new Map<string, { code: string; expiresAt: number }>();
+
+  public static async requestVirtualNumberCode(virtualNumber: string) {
+    const cleanNumber = virtualNumber.replace(/\D/g, '');
+    if (cleanNumber.length !== 8) {
+      throw new Error('O número virtual deve conter exatamente 8 dígitos numéricos.');
+    }
+
+    // 4-digit code
+    const code = Math.floor(1000 + Math.random() * 9000).toString();
+    this.virtualNumberStore.set(cleanNumber, {
+      code,
+      expiresAt: Date.now() + 10 * 60 * 1000
+    });
+
+    console.log(`[SMS VIRTUAL] Código de verificação para ${cleanNumber}: ${code}`);
+
+    return {
+      success: true,
+      virtualNumber: cleanNumber,
+      code,
+      message: 'Código de confirmação SMS enviado com sucesso.'
+    };
+  }
+
+  public static async verifyVirtualNumberCode(data: {
+    virtualNumber: string;
+    code: string;
+    deviceName?: string;
+    ipAddress?: string;
+  }) {
+    const cleanNumber = data.virtualNumber.replace(/\D/g, '');
+    if (cleanNumber.length !== 8) {
+      throw new Error('O número virtual deve conter exatamente 8 dígitos numéricos.');
+    }
+
+    const entry = this.virtualNumberStore.get(cleanNumber);
+    if (!entry || entry.code !== data.code.trim() || Date.now() > entry.expiresAt) {
+      throw new Error('Código SMS incorreto ou expirado. Tente novamente.');
+    }
+
+    this.virtualNumberStore.delete(cleanNumber);
+
+    let user = await db.findUserByUsername(cleanNumber);
+    let recoveryKey = '';
+
+    if (!user) {
+      const passwordHash = await bcrypt.hash('vn_' + cleanNumber + '_' + uuidv4(), 10);
+      recoveryKey = generateRecoveryKey();
+      const recoveryHash = await bcrypt.hash(recoveryKey.trim().toLowerCase(), 10);
+
+      const userId = uuidv4();
+      const now = new Date().toISOString();
+
+      user = {
+        id: userId,
+        username: cleanNumber,
+        password_hash: passwordHash,
+        recovery_hash: recoveryHash,
+        created_at: now,
+        updated_at: now
+      };
+      await db.createUser(user);
+
+      const profile: UserProfile = {
+        user_id: userId,
+        display_name: `ID ${cleanNumber}`,
+        updated_at: now
+      };
+      await db.upsertProfile(profile);
+      await db.getPreferences(userId);
+    }
+
+    const profile = await db.getProfile(user.id);
+
+    const sessionId = uuidv4();
+    const refreshToken = uuidv4();
+    const refreshTokenHash = await bcrypt.hash(refreshToken, 8);
+    const now = new Date().toISOString();
+
+    const session: UserSession = {
+      id: sessionId,
+      user_id: user.id,
+      device_name: data.deviceName || 'Android Device',
+      ip_address: data.ipAddress || '127.0.0.1',
+      refresh_token_hash: refreshTokenHash,
+      last_active: now,
+      created_at: now
+    };
+    await db.createSession(session);
+
+    const accessToken = jwt.sign(
+      { userId: user.id, username: user.username, sessionId },
+      CONFIG.JWT_SECRET,
+      { expiresIn: CONFIG.JWT_EXPIRES_IN as any }
+    );
+
+    return {
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: profile?.display_name || `ID ${user.username}`,
+        avatarUrl: profile?.avatar_url,
+        publicKey: profile?.public_key,
+        createdAt: user.created_at
+      },
+      tokens: {
+        accessToken,
+        refreshToken,
+        expiresIn: CONFIG.JWT_EXPIRES_IN
+      },
+      recoveryKey: recoveryKey || 'Conta verificada com sucesso'
+    };
+  }
 }

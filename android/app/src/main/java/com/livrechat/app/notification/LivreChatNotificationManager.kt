@@ -137,4 +137,40 @@ object LivreChatNotificationManager {
             NotificationManagerCompat.from(context).cancel(CALL_NOTIFICATION_ID)
         } catch (e: Exception) {}
     }
+
+    fun showVirtualSmsNotification(
+        context: Context,
+        virtualNumber: String,
+        code: String
+    ) {
+        try {
+            val intent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                7777,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+            val notification = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle("SMS LivreChat • $virtualNumber")
+                .setContentText("Seu código de confirmação é $code. Não compartilhe com ninguém.")
+                .setStyle(NotificationCompat.BigTextStyle()
+                    .bigText("Seu código de confirmação é $code. Digite este código no LivreChat para confirmar seu número virtual de 8 dígitos."))
+                .setAutoCancel(true)
+                .setSound(soundUri)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setContentIntent(pendingIntent)
+                .build()
+
+            NotificationManagerCompat.from(context).notify(7777, notification)
+        } catch (e: Exception) {}
+    }
 }

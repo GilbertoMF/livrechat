@@ -575,14 +575,24 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("LivreChat", fontWeight = FontWeight.Bold, fontSize = 22.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = CircleShape,
-                            color = if (isConnected) SuccessGreen else DangerRed,
-                            modifier = Modifier.size(9.dp)
-                        ) {}
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("LivreChat", fontWeight = FontWeight.Bold, fontSize = 21.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = CircleShape,
+                                color = if (isConnected) SuccessGreen else DangerRed,
+                                modifier = Modifier.size(9.dp)
+                            ) {}
+                        }
+                        prefs.currentUsername?.let { uname ->
+                            Text(
+                                text = if (uname.length == 8 && uname.all { it.isDigit() }) "ID Virtual: $uname" else "@$uname",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 },
                 actions = {

@@ -92,4 +92,30 @@ export class AuthController {
       return res.status(500).json({ error: error.message });
     }
   }
+
+  public static async requestVirtualNumberCode(req: Request, res: Response) {
+    try {
+      const { virtualNumber } = req.body;
+      const result = await AuthService.requestVirtualNumberCode(virtualNumber);
+      return res.status(200).json(result);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'Erro ao gerar código SMS.' });
+    }
+  }
+
+  public static async verifyVirtualNumberCode(req: Request, res: Response) {
+    try {
+      const { virtualNumber, code, deviceName } = req.body;
+      const ipAddress = req.ip || req.socket.remoteAddress;
+      const result = await AuthService.verifyVirtualNumberCode({
+        virtualNumber,
+        code,
+        deviceName,
+        ipAddress
+      });
+      return res.status(200).json(result);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'Falha ao confirmar código SMS.' });
+    }
+  }
 }

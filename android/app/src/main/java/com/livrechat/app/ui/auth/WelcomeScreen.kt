@@ -18,8 +18,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.livrechat.app.ui.theme.BluePrimary
 
+import androidx.compose.material.icons.filled.Pin
+import androidx.compose.ui.graphics.Color
+
 @Composable
 fun WelcomeScreen(
+    onNavigateToVirtualNumber: () -> Unit,
     onNavigateToLogin: () -> Unit,
     onNavigateToRegister: () -> Unit
 ) {
@@ -63,7 +67,7 @@ fun WelcomeScreen(
                 )
 
                 Text(
-                    text = "Mensagens e Chamadas sem número de telefone",
+                    text = "Mensagens e Chamadas com Número Virtual Privado",
                     fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -77,14 +81,14 @@ fun WelcomeScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 FeatureRow(
-                    icon = Icons.Default.Lock,
-                    title = "Privacidade Real",
-                    desc = "Zero SMS ou chip. Cadastro apenas com seu nome de usuário."
+                    icon = Icons.Default.Pin,
+                    title = "Número Virtual de 8 Dígitos",
+                    desc = "Gere seu ID exclusivo sem chip nem operadora e confirme por SMS."
                 )
                 FeatureRow(
-                    icon = Icons.Default.Phone,
-                    title = "Voz sem Limites",
-                    desc = "Chamadas WebRTC de alta qualidade e baixa latência sem custos."
+                    icon = Icons.Default.Lock,
+                    title = "Privacidade Real",
+                    desc = "Criptografia de ponta a ponta e chamadas de voz com baixa latência."
                 )
             }
 
@@ -94,35 +98,54 @@ fun WelcomeScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Button(
-                    onClick = onNavigateToRegister,
+                    onClick = onNavigateToVirtualNumber,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp),
+                        .height(56.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.Pin,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Criar Conta Gratuita",
+                        text = "Gerar Número Virtual",
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
                 OutlinedButton(
-                    onClick = onNavigateToLogin,
+                    onClick = onNavigateToRegister,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp),
+                        .height(52.dp),
                     shape = RoundedCornerShape(14.dp)
                 ) {
                     Text(
-                        text = "Já tenho uma conta",
-                        fontSize = 16.sp,
+                        text = "Criar Conta com Usuário/Senha",
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                TextButton(
+                    onClick = onNavigateToLogin,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Já tenho uma conta (Entrar)",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = BluePrimary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }

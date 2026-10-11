@@ -37,6 +37,8 @@ const authLimiter = rateLimiter(15, 5 * 60 * 1000);
 app.post('/api/auth/register', authLimiter, AuthController.register);
 app.post('/api/auth/login', authLimiter, AuthController.login);
 app.post('/api/auth/recover', authLimiter, AuthController.recover);
+app.post('/api/auth/virtual-number/request', authLimiter, AuthController.requestVirtualNumberCode);
+app.post('/api/auth/virtual-number/verify', authLimiter, AuthController.verifyVirtualNumberCode);
 
 // Protected Auth & Session routes
 app.get('/api/auth/sessions', authenticateToken, AuthController.getSessions);

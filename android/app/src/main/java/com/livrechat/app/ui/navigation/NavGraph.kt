@@ -16,6 +16,7 @@ import com.livrechat.app.ui.auth.AuthViewModel
 import com.livrechat.app.ui.auth.LoginScreen
 import com.livrechat.app.ui.auth.RecoveryScreen
 import com.livrechat.app.ui.auth.RegisterScreen
+import com.livrechat.app.ui.auth.VirtualNumberAuthScreen
 import com.livrechat.app.ui.auth.WelcomeScreen
 import com.livrechat.app.ui.call.ActiveCallScreen
 import com.livrechat.app.ui.call.CallViewModel
@@ -32,6 +33,7 @@ import com.livrechat.app.webrtc.CallState
 
 object Routes {
     const val WELCOME = "welcome"
+    const val VIRTUAL_NUMBER_AUTH = "virtual_number_auth"
     const val LOGIN = "login"
     const val REGISTER = "register"
     const val RECOVERY = "recovery"
@@ -101,8 +103,21 @@ fun LivreChatNavGraph(
     ) {
         composable(Routes.WELCOME) {
             WelcomeScreen(
+                onNavigateToVirtualNumber = { navController.navigate(Routes.VIRTUAL_NUMBER_AUTH) },
                 onNavigateToLogin = { navController.navigate(Routes.LOGIN) },
                 onNavigateToRegister = { navController.navigate(Routes.REGISTER) }
+            )
+        }
+
+        composable(Routes.VIRTUAL_NUMBER_AUTH) {
+            VirtualNumberAuthScreen(
+                viewModel = authViewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onAuthSuccess = {
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(Routes.WELCOME) { inclusive = true }
+                    }
+                }
             )
         }
 
@@ -112,6 +127,7 @@ fun LivreChatNavGraph(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToRegister = { navController.navigate(Routes.REGISTER) },
                 onNavigateToRecovery = { navController.navigate(Routes.RECOVERY) },
+                onNavigateToVirtualNumber = { navController.navigate(Routes.VIRTUAL_NUMBER_AUTH) },
                 onLoginSuccess = {
                     navController.navigate(Routes.HOME) {
                         popUpTo(Routes.WELCOME) { inclusive = true }

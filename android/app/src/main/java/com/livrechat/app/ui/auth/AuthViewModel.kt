@@ -17,6 +17,7 @@ sealed class AuthUiState {
     object Loading : AuthUiState()
     data class RegisterSuccess(val user: UserEntity, val recoveryKey: String) : AuthUiState()
     data class LoginSuccess(val user: UserEntity) : AuthUiState()
+    data class VirtualNumberCodeSent(val virtualNumber: String, val code: String) : AuthUiState()
     data class RecoverySuccess(val message: String) : AuthUiState()
     data class Error(val message: String) : AuthUiState()
 }
@@ -178,6 +179,93 @@ class AuthViewModel : ViewModel() {
 
     fun setServerUrl(url: String) {
         prefs.serverUrl = url
+    }
+
+    fun requestVirtualNumberCode(virtualNumber: String, onCodeGenerated: ((String) -> Unit)? = null) {
+        val cleanNumber = virtualNumber.replace(Regex("\\D"), "")
+        if (cleanNumber.length != 8) {
+            _uiState.value = AuthUiState.Error("O número virtual deve conter exatamente 8 dígitos.")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = AuthUiState.Loading
+            try {
+                val res = apiService.requestVirtualNumberCode(mapOf("virtualNumber" to cleanNumber))
+                if (res.isSuccessful && res.body() != null) {
+                    val code = res.body()!!.code
+                    _uiState.value = AuthUiState.VirtualNumberCodeSent(cleanNumber, code)
+                    onCodeGenerated?.invoke(code)
+                } else {
+                    val err = res.errorBody()?.string() ?: "Erro ao gerar código SMS para o número virtual."
+                    _uiState.value = AuthUiState.Error(err)
+                }
+            } catch (e: Exception) {
+                _uiState.value = AuthUiState.Error("Erro de conexão: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    fun verifyVirtualNumberCode(virtualNumber: String, code: String) {
+        val cleanNumber = virtualNumber.replace(Regex("\\D"), "")
+        val cleanCode = code.trim()
+        if (cleanNumber.length != 8) {
+            _uiState.value = AuthUiState.Error("O número virtual deve ter 8 dígitos.")
+            return
+        }
+        if (cleanCode.length != 4) {
+            _uiState.value = AuthUiState.Error("O código SMS deve conter 4 dígitos.")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = AuthUiState.Loading
+            try {
+                val res = apiService.verifyVirtualNumberCode(
+                    mapOf(
+                        "virtualNumber" to cleanNumber,
+                        "code" to cleanCode,
+                        "deviceName" to "Android ${android.os.Build.MODEL}"
+                    )
+                )
+                if (res.isSuccessful && res.body() != null) {
+                    val body = res.body()!!
+
+                    val prevUserId = prefs.currentUserId
+                    if (prevUserId != null && prevUserId != body.user.id) {
+                        try {
+                            app.database.clearAllTables()
+                        } catch (e: Exception) {}
+                    }
+
+                    prefs.accessToken = body.tokens.accessToken
+                    prefs.refreshToken = body.tokens.refreshToken
+                    prefs.currentUserId = body.user.id
+                    prefs.currentUsername = body.user.username
+                    prefs.currentDisplayName = body.user.displayName
+
+                    val userEntity = UserEntity(
+                        id = body.user.id,
+                        username = body.user.username,
+                        displayName = body.user.displayName,
+                        avatarUrl = body.user.avatarUrl,
+                        publicKey = body.user.publicKey,
+                        isCurrentUser = true
+                    )
+                    userDao.insertOrUpdate(userEntity)
+
+                    app.connectionManager.connect()
+                    com.livrechat.app.service.LivreChatBackgroundService.start(app)
+
+                    _uiState.value = AuthUiState.LoginSuccess(userEntity)
+                } else {
+                    val err = res.errorBody()?.string() ?: "Código de verificação incorreto."
+                    _uiState.value = AuthUiState.Error(err)
+                }
+            } catch (e: Exception) {
+                _uiState.value = AuthUiState.Error("Erro ao verificar código: ${e.localizedMessage}")
+            }
+        }
     }
 
     fun resetState() {

@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.livrechat.app.ui.theme.BluePrimary
 
+import androidx.compose.material.icons.filled.Pin
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
@@ -31,6 +33,7 @@ fun LoginScreen(
     onNavigateBack: () -> Unit,
     onNavigateToRegister: () -> Unit,
     onNavigateToRecovery: () -> Unit,
+    onNavigateToVirtualNumber: () -> Unit = {},
     onLoginSuccess: () -> Unit
 ) {
     var username by remember { mutableStateOf("") }
@@ -182,7 +185,31 @@ fun LoginScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            OutlinedButton(
+                onClick = onNavigateToVirtualNumber,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Pin,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = BluePrimary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Entrar com Número Virtual (SMS)",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = BluePrimary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Não tem uma conta?", fontSize = 14.sp)

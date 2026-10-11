@@ -40,6 +40,13 @@ data class BaseResponse(
     val error: String? = null
 )
 
+data class VirtualNumberRequestResponse(
+    val success: Boolean,
+    val virtualNumber: String,
+    val code: String,
+    val message: String? = null
+)
+
 data class UserDto(
     val id: String,
     val username: String,
