@@ -1,12 +1,19 @@
 package com.livrechat.app.ui.home
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import android.util.Base64
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -161,6 +168,106 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+    }
+
+    var tempStatusCameraFile by remember { mutableStateOf<File?>(null) }
+    var tempStatusCameraUri by remember { mutableStateOf<Uri?>(null) }
+
+    val statusCameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempStatusCameraFile != null && tempStatusCameraFile!!.exists()) {
+            val fileToProcess = tempStatusCameraFile!!
+            scope.launch(Dispatchers.IO) {
+                try {
+                    var bitmap = BitmapFactory.decodeFile(fileToProcess.absolutePath)
+                    if (bitmap != null) {
+                        try {
+                            val exif = ExifInterface(fileToProcess.absolutePath)
+                            val orientation = exif.getAttributeInt(
+                                ExifInterface.TAG_ORIENTATION,
+                                ExifInterface.ORIENTATION_NORMAL
+                            )
+                            val matrix = Matrix()
+                            when (orientation) {
+                                ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                                ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                            }
+                            if (orientation != ExifInterface.ORIENTATION_NORMAL && orientation != ExifInterface.ORIENTATION_UNDEFINED) {
+                                bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                            }
+                        } catch (e: Exception) {}
+
+                        val maxDim = 1080
+                        val width = bitmap.width
+                        val height = bitmap.height
+                        val scale = if (width > height) maxDim.toFloat() / width else maxDim.toFloat() / height
+                        val scaledBitmap = if (scale < 1f) {
+                            Bitmap.createScaledBitmap(
+                                bitmap,
+                                (width * scale).toInt().coerceAtLeast(1),
+                                (height * scale).toInt().coerceAtLeast(1),
+                                true
+                            )
+                        } else {
+                            bitmap
+                        }
+                        val baos = ByteArrayOutputStream()
+                        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 75, baos)
+                        val bytes = baos.toByteArray()
+                        val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        val dataUri = "data:image/jpeg;base64,$base64"
+                        withContext(Dispatchers.Main) {
+                            newImageStatusBase64 = dataUri
+                            newImageStatusCaption = ""
+                            showCreateImageStatusDialog = true
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Erro ao processar foto da câmera", Toast.LENGTH_SHORT).show()
+                    }
+                } finally {
+                    fileToProcess.delete()
+                }
+            }
+        }
+    }
+
+    val statusCameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            tempStatusCameraUri?.let { statusCameraLauncher.launch(it) }
+        } else {
+            Toast.makeText(context, "Permissão de câmera é necessária para tirar foto", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun launchStatusCamera() {
+        try {
+            val file = File(context.cacheDir, "status_cam_${System.currentTimeMillis()}.jpg")
+            tempStatusCameraFile = file
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            tempStatusCameraUri = uri
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (hasPermission) {
+                statusCameraLauncher.launch(uri)
+            } else {
+                statusCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+        } catch (e: Exception) {
+            Toast.makeText(context, "Erro ao abrir câmera: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -338,6 +445,21 @@ fun HomeScreen(
                             Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFF25D366))
                             Spacer(modifier = Modifier.width(14.dp))
                             Text("Texto com fundo colorido", fontWeight = FontWeight.Medium)
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            showStatusOptionsDialog = false
+                            launchStatusCamera()
+                        }
+                    ) {
+                        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF25D366))
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Text("Tirar Foto com a Câmera", fontWeight = FontWeight.Medium)
                         }
                     }
 

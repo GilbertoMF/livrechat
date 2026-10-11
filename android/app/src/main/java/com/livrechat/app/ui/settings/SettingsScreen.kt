@@ -1,17 +1,24 @@
 package com.livrechat.app.ui.settings
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import android.os.Build
 import android.util.Base64
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import java.io.ByteArrayOutputStream
+import java.io.File
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -81,8 +88,104 @@ fun SettingsScreen(
     var newDisplayNameInput by remember { mutableStateOf(displayName) }
     var newBioInput by remember { mutableStateOf(userBio) }
     var newAvatarUrlInput by remember { mutableStateOf(userAvatarUrl) }
+    var customWebUrlInput by remember { mutableStateOf(if (userAvatarUrl.startsWith("http")) userAvatarUrl else "") }
     var userRecoveryPhrase by remember { mutableStateOf<String?>(null) }
     var userPublicKey by remember { mutableStateOf<String?>(null) }
+
+    var tempCameraFile by remember { mutableStateOf<File?>(null) }
+    var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
+
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempCameraFile != null && tempCameraFile!!.exists()) {
+            val fileToProcess = tempCameraFile!!
+            scope.launch(Dispatchers.IO) {
+                try {
+                    var bitmap = BitmapFactory.decodeFile(fileToProcess.absolutePath)
+                    if (bitmap != null) {
+                        try {
+                            val exif = ExifInterface(fileToProcess.absolutePath)
+                            val orientation = exif.getAttributeInt(
+                                ExifInterface.TAG_ORIENTATION,
+                                ExifInterface.ORIENTATION_NORMAL
+                            )
+                            val matrix = Matrix()
+                            when (orientation) {
+                                ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                                ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                            }
+                            if (orientation != ExifInterface.ORIENTATION_NORMAL && orientation != ExifInterface.ORIENTATION_UNDEFINED) {
+                                bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                            }
+                        } catch (e: Exception) {}
+
+                        val minDim = minOf(bitmap.width, bitmap.height)
+                        val cropX = (bitmap.width - minDim) / 2
+                        val cropY = (bitmap.height - minDim) / 2
+                        val squareBitmap = Bitmap.createBitmap(bitmap, cropX, cropY, minDim, minDim)
+                        val targetDim = 512
+                        val scaledBitmap = if (squareBitmap.width > targetDim) {
+                            Bitmap.createScaledBitmap(squareBitmap, targetDim, targetDim, true)
+                        } else {
+                            squareBitmap
+                        }
+                        val baos = ByteArrayOutputStream()
+                        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+                        val bytes = baos.toByteArray()
+                        val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        val dataUri = "data:image/jpeg;base64,$base64"
+                        withContext(Dispatchers.Main) {
+                            newAvatarUrlInput = dataUri
+                            Toast.makeText(context, "Foto capturada com sucesso!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Erro ao processar foto da câmera", Toast.LENGTH_SHORT).show()
+                    }
+                } finally {
+                    fileToProcess.delete()
+                }
+            }
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            tempCameraUri?.let { takePictureLauncher.launch(it) }
+        } else {
+            Toast.makeText(context, "Permissão de câmera é necessária para tirar foto", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun launchCamera() {
+        try {
+            val file = File(context.cacheDir, "avatar_cam_${System.currentTimeMillis()}.jpg")
+            tempCameraFile = file
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            tempCameraUri = uri
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (hasPermission) {
+                takePictureLauncher.launch(uri)
+            } else {
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+        } catch (e: Exception) {
+            Toast.makeText(context, "Erro ao abrir a câmera: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -94,19 +197,15 @@ fun SettingsScreen(
                     val originalBitmap = BitmapFactory.decodeStream(inputStream)
                     inputStream?.close()
                     if (originalBitmap != null) {
-                        val maxDim = 512
-                        val width = originalBitmap.width
-                        val height = originalBitmap.height
-                        val scale = if (width > height) maxDim.toFloat() / width else maxDim.toFloat() / height
-                        val scaledBitmap = if (scale < 1f) {
-                            Bitmap.createScaledBitmap(
-                                originalBitmap,
-                                (width * scale).toInt().coerceAtLeast(1),
-                                (height * scale).toInt().coerceAtLeast(1),
-                                true
-                            )
+                        val minDim = minOf(originalBitmap.width, originalBitmap.height)
+                        val cropX = (originalBitmap.width - minDim) / 2
+                        val cropY = (originalBitmap.height - minDim) / 2
+                        val squareBitmap = Bitmap.createBitmap(originalBitmap, cropX, cropY, minDim, minDim)
+                        val targetDim = 512
+                        val scaledBitmap = if (squareBitmap.width > targetDim) {
+                            Bitmap.createScaledBitmap(squareBitmap, targetDim, targetDim, true)
                         } else {
-                            originalBitmap
+                            squareBitmap
                         }
                         val baos = ByteArrayOutputStream()
                         scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
@@ -115,6 +214,7 @@ fun SettingsScreen(
                         val dataUri = "data:image/jpeg;base64,$base64"
                         withContext(Dispatchers.Main) {
                             newAvatarUrlInput = dataUri
+                            Toast.makeText(context, "Foto da galeria selecionada!", Toast.LENGTH_SHORT).show()
                         }
                     }
                 } catch (e: Exception) {
@@ -147,7 +247,7 @@ fun SettingsScreen(
             },
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // Preview do Avatar com botão da Galeria
+                    // Preview do Avatar com botão da CÂMERA
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -156,14 +256,14 @@ fun SettingsScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(92.dp)
-                                .clickable { galleryLauncher.launch("image/*") },
+                                .size(96.dp)
+                                .clickable { launchCamera() },
                             contentAlignment = Alignment.BottomEnd
                         ) {
                             Surface(
                                 shape = CircleShape,
                                 color = BluePrimary.copy(alpha = 0.2f),
-                                modifier = Modifier.size(92.dp)
+                                modifier = Modifier.size(96.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     if (newAvatarUrlInput.isNotBlank()) {
@@ -185,24 +285,43 @@ fun SettingsScreen(
                             Surface(
                                 shape = CircleShape,
                                 color = BluePrimary,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clickable { launchCamera() }
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         Icons.Default.CameraAlt,
-                                        contentDescription = "Trocar Foto",
+                                        contentDescription = "Tirar Foto com a Câmera",
                                         tint = Color.White,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
                         }
                     }
 
+                    // Botões de ação para Foto: Câmera direta e Galeria
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.Center
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Button(
+                            onClick = { launchCamera() },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = BluePrimary),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Tirar Foto", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
                         OutlinedButton(
                             onClick = { galleryLauncher.launch("image/*") },
                             shape = RoundedCornerShape(20.dp),
@@ -210,15 +329,18 @@ fun SettingsScreen(
                         ) {
                             Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Escolher da Galeria", fontSize = 12.sp)
+                            Text("Galeria", fontSize = 12.sp)
                         }
+
                         if (newAvatarUrlInput.isNotBlank()) {
                             Spacer(modifier = Modifier.width(8.dp))
-                            TextButton(
-                                onClick = { newAvatarUrlInput = "" },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                            IconButton(
+                                onClick = {
+                                    newAvatarUrlInput = ""
+                                    customWebUrlInput = ""
+                                }
                             ) {
-                                Text("Remover", color = DangerRed, fontSize = 12.sp)
+                                Icon(Icons.Default.Delete, contentDescription = "Remover", tint = DangerRed, modifier = Modifier.size(20.dp))
                             }
                         }
                     }
@@ -263,15 +385,41 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    OutlinedTextField(
-                        value = newAvatarUrlInput,
-                        onValueChange = { newAvatarUrlInput = it },
-                        label = { Text("Link da Foto de Perfil (URL)") },
-                        placeholder = { Text("https://...") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    // Proteção contra crash de 659155 caracteres em Constraints:
+                    // Se a imagem for capturada (data:image/...), exibe badge seguro em vez de jogar 600k caracteres no TextField!
+                    if (newAvatarUrlInput.startsWith("data:image/")) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = SuccessGreen.copy(alpha = 0.12f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Foto selecionada pronta para o perfil", fontSize = 12.sp, color = SuccessGreen, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = customWebUrlInput,
+                            onValueChange = { input ->
+                                if (input.length <= 500) {
+                                    customWebUrlInput = input
+                                    newAvatarUrlInput = input
+                                }
+                            },
+                            label = { Text("Link da Foto de Perfil (URL Opcional)") },
+                            placeholder = { Text("https://...") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             },
             confirmButton = {
@@ -815,6 +963,7 @@ fun SettingsScreen(
                             newDisplayNameInput = displayName
                             newBioInput = userBio
                             newAvatarUrlInput = userAvatarUrl
+                            customWebUrlInput = if (userAvatarUrl.startsWith("http")) userAvatarUrl else ""
                             showEditProfileDialog = true
                         }
                         .padding(20.dp),
