@@ -114,12 +114,14 @@ export class WebSocketManager {
         const msgId = clientMessageId || uuidv4();
         const now = new Date().toISOString();
 
-        // Ensure user and conversation exists
-        await db.ensureUserExists(senderId, senderWs.username || 'usuario');
-        await db.ensureConversationMember(conversationId, senderId);
-        if (targetUserId) {
-          await db.ensureConversationMember(conversationId, targetUserId);
-        }
+        // 1. Instant acknowledgment to sender (0ms latency - 1 tick)
+        senderWs.send(JSON.stringify({
+          type: 'chat:ack',
+          messageId: msgId,
+          clientMessageId,
+          status: 'sent',
+          timestamp: now
+        }));
 
         const messageRecord: Message = {
           id: msgId,
@@ -135,51 +137,52 @@ export class WebSocketManager {
           updated_at: now
         };
 
-        // Persist message
-        await db.createMessage(messageRecord);
+        // 2. Immediately forward to online recipients without waiting for DB
+        const forwardToRecipients = async () => {
+          let members = await db.getConversationMembers(conversationId);
+          if (targetUserId && !members.includes(targetUserId)) {
+            members.push(targetUserId);
+          }
 
-        // Acknowledge sender with "sent" status
-        senderWs.send(JSON.stringify({
-          type: 'chat:ack',
-          messageId: msgId,
-          clientMessageId,
-          status: 'sent',
-          timestamp: now
-        }));
-
-        // Broadcast to conversation participants
-        let members = await db.getConversationMembers(conversationId);
-        if (targetUserId && !members.includes(targetUserId)) {
-          members.push(targetUserId);
-        }
-
-        for (const memberId of members) {
-          if (memberId !== senderId) {
-            const delivered = this.sendToUser(memberId, {
-              type: 'chat:message',
-              message: messageRecord
-            });
-
-            // If recipient is currently online, mark delivered
-            if (delivered) {
-              await db.addReceipt({
-                id: uuidv4(),
-                message_id: msgId,
-                user_id: memberId,
-                status: 'delivered',
-                timestamp: new Date().toISOString()
+          for (const memberId of members) {
+            if (memberId !== senderId) {
+              const delivered = this.sendToUser(memberId, {
+                type: 'chat:message',
+                message: messageRecord
               });
 
-              // Notify sender of delivery
-              senderWs.send(JSON.stringify({
-                type: 'chat:receipt',
-                messageId: msgId,
-                status: 'delivered',
-                userId: memberId
-              }));
+              // If recipient is currently online, mark delivered (2 ticks)
+              if (delivered) {
+                senderWs.send(JSON.stringify({
+                  type: 'chat:receipt',
+                  messageId: msgId,
+                  status: 'delivered',
+                  userId: memberId
+                }));
+
+                db.addReceipt({
+                  id: uuidv4(),
+                  message_id: msgId,
+                  user_id: memberId,
+                  status: 'delivered',
+                  timestamp: now
+                }).catch(() => {});
+              }
             }
           }
-        }
+        };
+
+        forwardToRecipients().catch(err => console.error('[WS] Erro ao repassar mensagem:', err));
+
+        // 3. Persist to database in background
+        (async () => {
+          await db.ensureUserExists(senderId, senderWs.username || 'usuario');
+          await db.ensureConversationMember(conversationId, senderId);
+          if (targetUserId) {
+            await db.ensureConversationMember(conversationId, targetUserId);
+          }
+          await db.createMessage(messageRecord);
+        })().catch(err => console.error('[WS] Erro ao persistir mensagem no banco:', err));
         break;
       }
 

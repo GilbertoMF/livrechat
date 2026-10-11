@@ -61,6 +61,16 @@ class PreferencesManager(context: Context) {
         get() = prefs.getLong(KEY_LAST_BACKUP, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_BACKUP, value).apply()
 
+    private val _themeFlow = kotlinx.coroutines.flow.MutableStateFlow(prefs.getString(KEY_APP_THEME, "system") ?: "system")
+    val themeFlow: kotlinx.coroutines.flow.StateFlow<String> = _themeFlow
+
+    var appTheme: String
+        get() = prefs.getString(KEY_APP_THEME, "system") ?: "system"
+        set(value) {
+            prefs.edit().putString(KEY_APP_THEME, value).apply()
+            _themeFlow.value = value
+        }
+
     fun isLoggedIn(): Boolean {
         return !accessToken.isNullOrEmpty() && !currentUserId.isNullOrEmpty()
     }
@@ -86,5 +96,6 @@ class PreferencesManager(context: Context) {
         private const val KEY_AUTO_BACKUP = "auto_backup"
         private const val KEY_BACKUP_WIFI_ONLY = "backup_wifi_only"
         private const val KEY_LAST_BACKUP = "last_backup"
+        private const val KEY_APP_THEME = "app_theme"
     }
 }

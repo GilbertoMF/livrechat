@@ -42,6 +42,7 @@ object LivreChatNotificationManager {
                 description = "Notificações de chamadas de voz recebidas"
                 enableVibration(true)
                 setShowBadge(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
 
             notificationManager.createNotificationChannel(messagesChannel)
@@ -96,7 +97,7 @@ object LivreChatNotificationManager {
     ) {
         try {
             val fullScreenIntent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra("incomingCall", true)
                 putExtra("callerId", callerId)
                 putExtra("callerName", callerDisplayName)
@@ -117,8 +118,10 @@ object LivreChatNotificationManager {
                 .setContentText("$callerDisplayName (@$callerUsername) está ligando...")
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setOngoing(true)
                 .setSound(ringtoneUri)
-                .setAutoCancel(true)
+                .setAutoCancel(false)
                 .setFullScreenIntent(fullScreenPendingIntent, true)
                 .setContentIntent(fullScreenPendingIntent)
                 .build()

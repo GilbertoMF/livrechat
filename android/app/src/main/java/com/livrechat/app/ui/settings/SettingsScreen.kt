@@ -59,6 +59,7 @@ fun SettingsScreen(
     var showDevicesDialog by remember { mutableStateOf(false) }
     var showBlockedDialog by remember { mutableStateOf(false) }
     var showRecoveryPhraseDialog by remember { mutableStateOf(false) }
+    var showThemeDialog by remember { mutableStateOf(false) }
 
     var newDisplayNameInput by remember { mutableStateOf(displayName) }
     var userRecoveryPhrase by remember { mutableStateOf<String?>(null) }
@@ -380,6 +381,79 @@ fun SettingsScreen(
         )
     }
 
+    // DIALOG: Tema do Aplicativo
+    if (showThemeDialog) {
+        val themeOptions = listOf(
+            "system" to "Padrão do Sistema",
+            "dark" to "Modo Escuro",
+            "light" to "Modo Claro"
+        )
+        var selectedOption by remember { mutableStateOf(prefs.appTheme) }
+
+        AlertDialog(
+            onDismissRequest = { showThemeDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Palette, contentDescription = null, tint = BluePrimary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Tema e Aparência", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        "Selecione o tema para todo o aplicativo:",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    themeOptions.forEach { (key, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedOption = key
+                                    prefs.appTheme = key
+                                }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedOption == key,
+                                onClick = {
+                                    selectedOption = key
+                                    prefs.appTheme = key
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = label,
+                                fontSize = 15.sp,
+                                fontWeight = if (selectedOption == key) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        prefs.appTheme = selectedOption
+                        showThemeDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                ) {
+                    Text("Concluir")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showThemeDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
     // DIALOG: Sair da Conta
     if (showLogoutDialog) {
         AlertDialog(
@@ -489,7 +563,22 @@ fun SettingsScreen(
                 Divider(color = MaterialTheme.colorScheme.surfaceVariant, thickness = 1.dp)
             }
 
-            // Opção 1: Backup e Restauração
+            // Opção 1: Tema e Aparência
+            item {
+                val themeLabel = when (prefs.appTheme) {
+                    "dark" -> "Modo Escuro"
+                    "light" -> "Modo Claro"
+                    else -> "Padrão do Sistema"
+                }
+                SettingsOptionItem(
+                    icon = Icons.Default.Palette,
+                    title = "Tema e Aparência",
+                    subtitle = themeLabel,
+                    onClick = { showThemeDialog = true }
+                )
+            }
+
+            // Opção 2: Backup e Restauração
             item {
                 SettingsOptionItem(
                     icon = Icons.Default.CloudUpload,

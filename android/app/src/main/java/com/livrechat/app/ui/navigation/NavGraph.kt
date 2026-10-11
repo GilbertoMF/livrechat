@@ -1,5 +1,6 @@
 package com.livrechat.app.ui.navigation
 
+import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,6 +48,8 @@ object Routes {
 @Composable
 fun LivreChatNavGraph(
     navController: NavHostController,
+    pendingIntent: Intent? = null,
+    onIntentHandled: () -> Unit = {},
     authViewModel: AuthViewModel = viewModel(),
     chatViewModel: ChatViewModel = viewModel(),
     callViewModel: CallViewModel = viewModel(),
@@ -57,6 +60,31 @@ fun LivreChatNavGraph(
 
     val callState by callViewModel.callState.collectAsState()
     val callInfo by callViewModel.callInfo.collectAsState()
+
+    // Handle background notification click or incoming call intent
+    LaunchedEffect(pendingIntent) {
+        if (pendingIntent != null) {
+            val isIncomingCall = pendingIntent.getBooleanExtra("incomingCall", false)
+            if (isIncomingCall) {
+                val currentRoute = navController.currentBackStackEntry?.destination?.route
+                if (currentRoute != Routes.INCOMING_CALL && currentRoute != Routes.ACTIVE_CALL) {
+                    navController.navigate(Routes.INCOMING_CALL)
+                }
+                onIntentHandled()
+            } else {
+                val convId = pendingIntent.getStringExtra("conversationId")
+                val senderName = pendingIntent.getStringExtra("senderName") ?: "Contato"
+                if (!convId.isNullOrEmpty()) {
+                    val currentRoute = navController.currentBackStackEntry?.destination?.route
+                    val targetRoute = "chat/$convId/unknown/$senderName"
+                    if (currentRoute != targetRoute) {
+                        navController.navigate(targetRoute)
+                    }
+                    onIntentHandled()
+                }
+            }
+        }
+    }
 
     LaunchedEffect(callState, callInfo) {
         if (callState == CallState.RINGING && callInfo != null && !callInfo!!.isOutgoing) {

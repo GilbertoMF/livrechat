@@ -193,6 +193,63 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         }
     }
 
+    fun sendAudioMessage(conversationId: String, audioBase64: String, durationSeconds: Int, targetUserId: String? = null) {
+        if (audioBase64.isBlank()) return
+
+        val myId = prefs.currentUserId ?: return
+        val target = targetUserId ?: _currentOtherUserId.value
+        val clientMessageId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+
+        val localMessage = MessageEntity(
+            id = clientMessageId,
+            conversationId = conversationId,
+            senderId = myId,
+            content = audioBase64,
+            messageType = "audio",
+            replyToId = null,
+            status = "sending",
+            isOutgoing = true,
+            createdAt = now
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.messageDao().insertOrUpdate(localMessage)
+            db.conversationDao().updateLastMessage(conversationId, "🎤 Áudio (${durationSeconds}s)", now)
+
+            val wsSent = connectionManager.getClient().sendChatMessage(
+                conversationId = conversationId,
+                content = audioBase64,
+                iv = null,
+                messageType = "audio",
+                replyToId = null,
+                clientMessageId = clientMessageId,
+                targetUserId = target
+            )
+
+            if (!wsSent) {
+                try {
+                    val res = apiService.sendMessage(
+                        SendMessageRequest(
+                            conversationId = conversationId,
+                            content = audioBase64,
+                            clientMessageId = clientMessageId,
+                            messageType = "audio",
+                            targetUserId = target
+                        )
+                    )
+                    if (res.isSuccessful) {
+                        db.messageDao().updateStatus(clientMessageId, "sent")
+                    } else {
+                        db.messageDao().updateStatus(clientMessageId, "failed")
+                    }
+                } catch (e: Exception) {
+                    db.messageDao().updateStatus(clientMessageId, "failed")
+                }
+            }
+        }
+    }
+
     fun sendTyping(isTyping: Boolean, targetUserId: String? = null) {
         val convId = _currentConversationId.value ?: return
         val target = targetUserId ?: _currentOtherUserId.value

@@ -9,6 +9,7 @@ import com.livrechat.app.data.local.entity.CallRecordEntity
 import com.livrechat.app.data.remote.WebSocketClient
 import com.livrechat.app.data.remote.WebSocketEventsListener
 import com.livrechat.app.data.local.entity.MessageEntity
+import com.livrechat.app.notification.LivreChatNotificationManager
 import com.livrechat.app.service.CallForegroundService
 import com.livrechat.app.webrtc.CallState
 import com.livrechat.app.webrtc.WebRTCCallback
@@ -107,6 +108,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     }
 
     fun answerIncomingCall() {
+        LivreChatNotificationManager.cancelCallNotification(app)
         val info = _callInfo.value ?: return
         val sdp = info.remoteSdp ?: return
 
@@ -115,6 +117,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     }
 
     fun rejectIncomingCall() {
+        LivreChatNotificationManager.cancelCallNotification(app)
         val info = _callInfo.value
         if (info != null) {
             connectionManager.getClient().sendCallReject(info.contactUserId, "Chamada recusada")
@@ -154,6 +157,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     }
 
     private fun cleanupCall() {
+        LivreChatNotificationManager.cancelCallNotification(app)
         timerJob?.cancel()
         CallForegroundService.stop(app)
         _callState.value = CallState.IDLE

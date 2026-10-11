@@ -1,5 +1,8 @@
 package com.livrechat.app.ui.chat
 
+import android.util.Base64
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,6 +12,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,20 +21,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.livrechat.app.data.local.entity.MessageEntity
+import com.livrechat.app.media.AudioPlayerHelper
+import com.livrechat.app.media.AudioRecorderHelper
 import com.livrechat.app.ui.theme.BlueAccent
 import com.livrechat.app.ui.theme.BluePrimary
+import com.livrechat.app.ui.theme.DangerRed
 import com.livrechat.app.ui.theme.OfflineGray
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,10 +51,18 @@ fun ChatScreen(
     onNavigateBack: () -> Unit,
     onStartCall: (String, String, String, String?) -> Unit
 ) {
+    val context = LocalContext.current
+    val audioRecorderHelper = remember { AudioRecorderHelper(context) }
+    val audioPlayerHelper = remember { AudioPlayerHelper(context) }
+
     var textInput by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var typingDebounceJob by remember { mutableStateOf<Job?>(null) }
+
+    var isRecording by remember { mutableStateOf(false) }
+    var recordingSeconds by remember { mutableIntStateOf(0) }
+    var recordingJob by remember { mutableStateOf<Job?>(null) }
 
     val currentFlow by viewModel.messagesFlow.collectAsState()
     val messages by currentFlow.collectAsState(initial = emptyList())
@@ -57,6 +75,11 @@ fun ChatScreen(
     DisposableEffect(conversationId) {
         onDispose {
             typingDebounceJob?.cancel()
+            recordingJob?.cancel()
+            audioPlayerHelper.stop()
+            if (isRecording) {
+                audioRecorderHelper.cancelRecording()
+            }
             viewModel.sendTyping(false, otherUserId)
             viewModel.unselectConversation()
         }
@@ -87,7 +110,7 @@ fun ChatScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Voltar")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
                     }
                 },
                 actions = {
@@ -110,53 +133,166 @@ fun ChatScreen(
                 shadowElevation = 8.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = textInput,
-                        onValueChange = {
-                            textInput = it
-                            if (it.isNotBlank()) {
-                                viewModel.sendTyping(true, otherUserId)
-                                typingDebounceJob?.cancel()
-                                typingDebounceJob = scope.launch {
-                                    delay(2500)
+                if (isRecording) {
+                    // Audio Recording Mode
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Trash button
+                        IconButton(
+                            onClick = {
+                                recordingJob?.cancel()
+                                audioRecorderHelper.cancelRecording()
+                                isRecording = false
+                                recordingSeconds = 0
+                                Toast.makeText(context, "Gravação cancelada", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = IconButtonDefaults.iconButtonColors(containerColor = DangerRed.copy(alpha = 0.15f))
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Cancelar", tint = DangerRed)
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        // Duration label with red dot
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .background(DangerRed, CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Gravando: %02d:%02d".format(recordingSeconds / 60, recordingSeconds % 60),
+                                fontWeight = FontWeight.Bold,
+                                color = DangerRed,
+                                fontSize = 15.sp
+                            )
+                        }
+
+                        // Send Audio Button
+                        IconButton(
+                            onClick = {
+                                recordingJob?.cancel()
+                                val recordedFile = audioRecorderHelper.stopRecording()
+                                val seconds = recordingSeconds
+                                isRecording = false
+                                recordingSeconds = 0
+
+                                if (recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
+                                    scope.launch(Dispatchers.IO) {
+                                        try {
+                                            val bytes = recordedFile.readBytes()
+                                            val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                                            val audioUri = "data:audio/mp4;base64,$base64"
+                                            viewModel.sendAudioMessage(
+                                                conversationId = conversationId,
+                                                audioBase64 = audioUri,
+                                                durationSeconds = seconds.coerceAtLeast(1),
+                                                targetUserId = otherUserId
+                                            )
+                                        } catch (e: Exception) {
+                                            Log.e("ChatScreen", "Erro ao processar áudio", e)
+                                        }
+                                    }
+                                }
+                            },
+                            colors = IconButtonDefaults.iconButtonColors(containerColor = BluePrimary),
+                            modifier = Modifier.size(46.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Enviar Áudio",
+                                tint = Color.White
+                            )
+                        }
+                    }
+                } else {
+                    // Standard Text & Mic Mode
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = textInput,
+                            onValueChange = {
+                                textInput = it
+                                if (it.isNotBlank()) {
+                                    viewModel.sendTyping(true, otherUserId)
+                                    typingDebounceJob?.cancel()
+                                    typingDebounceJob = scope.launch {
+                                        delay(2500)
+                                        viewModel.sendTyping(false, otherUserId)
+                                    }
+                                } else {
+                                    typingDebounceJob?.cancel()
                                     viewModel.sendTyping(false, otherUserId)
                                 }
-                            } else {
-                                typingDebounceJob?.cancel()
-                                viewModel.sendTyping(false, otherUserId)
-                            }
-                        },
-                        placeholder = { Text("Digite uma mensagem...", fontSize = 14.sp) },
-                        maxLines = 4,
-                        shape = RoundedCornerShape(24.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 8.dp)
-                    )
-
-                    IconButton(
-                        onClick = {
-                            if (textInput.isNotBlank()) {
-                                typingDebounceJob?.cancel()
-                                viewModel.sendMessage(conversationId, textInput.trim(), targetUserId = otherUserId)
-                                textInput = ""
-                                viewModel.sendTyping(false, otherUserId)
-                            }
-                        },
-                        colors = IconButtonDefaults.iconButtonColors(containerColor = BluePrimary),
-                        modifier = Modifier.size(46.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Send,
-                            contentDescription = "Enviar",
-                            tint = Color.White
+                            },
+                            placeholder = { Text("Digite uma mensagem...", fontSize = 14.sp) },
+                            maxLines = 4,
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp)
                         )
+
+                        if (textInput.isNotBlank()) {
+                            IconButton(
+                                onClick = {
+                                    if (textInput.isNotBlank()) {
+                                        typingDebounceJob?.cancel()
+                                        viewModel.sendMessage(conversationId, textInput.trim(), targetUserId = otherUserId)
+                                        textInput = ""
+                                        viewModel.sendTyping(false, otherUserId)
+                                    }
+                                },
+                                colors = IconButtonDefaults.iconButtonColors(containerColor = BluePrimary),
+                                modifier = Modifier.size(46.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "Enviar",
+                                    tint = Color.White
+                                )
+                            }
+                        } else {
+                            // Mic Button
+                            IconButton(
+                                onClick = {
+                                    val file = audioRecorderHelper.startRecording()
+                                    if (file != null) {
+                                        isRecording = true
+                                        recordingSeconds = 0
+                                        recordingJob?.cancel()
+                                        recordingJob = scope.launch {
+                                            while (isActive) {
+                                                delay(1000)
+                                                recordingSeconds++
+                                            }
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "Permissão de microfone necessária ou erro ao gravar", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                colors = IconButtonDefaults.iconButtonColors(containerColor = BluePrimary),
+                                modifier = Modifier.size(46.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Mic,
+                                    contentDescription = "Gravar Áudio",
+                                    tint = Color.White
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -171,14 +307,20 @@ fun ChatScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(messages, key = { it.id }) { message ->
-                MessageBubble(message = message)
+                MessageBubble(
+                    message = message,
+                    audioPlayerHelper = audioPlayerHelper
+                )
             }
         }
     }
 }
 
 @Composable
-fun MessageBubble(message: MessageEntity) {
+fun MessageBubble(
+    message: MessageEntity,
+    audioPlayerHelper: AudioPlayerHelper
+) {
     val isOutgoing = message.isOutgoing
     val alignment = if (isOutgoing) Alignment.End else Alignment.Start
 
@@ -194,14 +336,22 @@ fun MessageBubble(message: MessageEntity) {
                 bottomEnd = if (isOutgoing) 4.dp else 16.dp
             ),
             color = if (isOutgoing) BluePrimary else MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.widthIn(max = 290.dp)
+            modifier = Modifier.widthIn(max = 295.dp)
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                Text(
-                    text = message.content,
-                    color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 15.sp
-                )
+                if (message.messageType == "audio") {
+                    AudioMessageBubbleContent(
+                        message = message,
+                        audioPlayerHelper = audioPlayerHelper,
+                        isOutgoing = isOutgoing
+                    )
+                } else {
+                    Text(
+                        text = message.content,
+                        color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 15.sp
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -219,6 +369,79 @@ fun MessageBubble(message: MessageEntity) {
                         Spacer(modifier = Modifier.width(4.dp))
                         MessageStatusIcon(status = message.status)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AudioMessageBubbleContent(
+    message: MessageEntity,
+    audioPlayerHelper: AudioPlayerHelper,
+    isOutgoing: Boolean
+) {
+    val playingId by audioPlayerHelper.playingMessageId.collectAsState()
+    val isPlayingState by audioPlayerHelper.isPlaying.collectAsState()
+    val progress by audioPlayerHelper.progress.collectAsState()
+
+    val isThisPlaying = playingId == message.id && isPlayingState
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(
+            onClick = {
+                audioPlayerHelper.playAudio(message.id, message.content)
+            },
+            colors = IconButtonDefaults.iconButtonColors(
+                containerColor = if (isOutgoing) Color.White.copy(alpha = 0.25f) else BluePrimary.copy(alpha = 0.15f)
+            ),
+            modifier = Modifier.size(38.dp)
+        ) {
+            Icon(
+                imageVector = if (isThisPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                contentDescription = if (isThisPlaying) "Pausar" else "Reproduzir",
+                tint = if (isOutgoing) Color.White else BluePrimary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            LinearProgressIndicator(
+                progress = { if (playingId == message.id) progress else 0f },
+                color = if (isOutgoing) Color.White else BluePrimary,
+                trackColor = if (isOutgoing) Color.White.copy(alpha = 0.3f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Mic,
+                        contentDescription = null,
+                        tint = if (isOutgoing) Color.White.copy(alpha = 0.7f) else BluePrimary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isThisPlaying) "Reproduzindo..." else "Mensagem de voz",
+                        fontSize = 11.sp,
+                        color = if (isOutgoing) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
