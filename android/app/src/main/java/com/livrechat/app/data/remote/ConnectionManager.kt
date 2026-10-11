@@ -8,6 +8,7 @@ import com.livrechat.app.data.local.entity.ConversationEntity
 import com.livrechat.app.data.local.entity.MessageEntity
 import com.livrechat.app.notification.LivreChatNotificationManager
 import com.livrechat.app.util.ChatSoundManager
+import com.livrechat.app.util.MediaFileManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -94,11 +95,33 @@ class ConnectionManager(
             val isCurrentOpen = _activeConversationId.value == message.conversationId
 
             val actualType = when {
-                message.messageType == "audio" || message.content.startsWith("data:audio") || message.content.contains("base64,") -> "audio"
                 message.messageType == "image" || message.content.startsWith("data:image") -> "image"
                 message.messageType == "video" || message.content.startsWith("data:video") -> "video"
                 message.messageType == "file" || message.content.startsWith("data:application") -> "file"
+                message.messageType == "audio" || message.content.startsWith("data:audio") || message.content.contains("base64,") -> "audio"
                 else -> message.messageType
+            }
+
+            // Save incoming media to local storage so SQLite never stores heavy base64 blobs
+            var processedMessage = message.copy(messageType = actualType)
+            if (actualType in listOf("image", "video", "file", "audio") || message.content.startsWith("data:") || message.content.length > 50000) {
+                if (!MediaFileManager.isLocalFilePath(message.content)) {
+                    val ext = when (actualType) {
+                        "image" -> "jpg"
+                        "video" -> "mp4"
+                        "audio" -> "m4a"
+                        else -> {
+                            val fn = message.iv?.split("|")?.firstOrNull() ?: ""
+                            fn.substringAfterLast(".", "bin")
+                        }
+                    }
+                    val localFile = MediaFileManager.saveBase64ToLocalFile(context, message.content, "received_${message.id}.$ext")
+                    if (localFile != null) {
+                        processedMessage = processedMessage.copy(content = localFile.absolutePath)
+                    } else if (message.content.length > 250000) {
+                        processedMessage = processedMessage.copy(content = "[Arquivo transferido]")
+                    }
+                }
             }
 
             val previewContent = when (actualType) {
@@ -106,20 +129,20 @@ class ConnectionManager(
                 "image" -> "📷 Foto"
                 "video" -> "🎥 Vídeo"
                 "file" -> "📄 Documento/Arquivo"
-                else -> message.content
+                else -> processedMessage.content
             }
 
-            var conv = db.conversationDao().getConversationById(message.conversationId)
+            var conv = db.conversationDao().getConversationById(processedMessage.conversationId)
             if (conv == null) {
                 val newConv = ConversationEntity(
-                    id = message.conversationId,
-                    otherUserId = message.senderId,
+                    id = processedMessage.conversationId,
+                    otherUserId = processedMessage.senderId,
                     otherUsername = "Contato",
                     otherDisplayName = "Contato",
                     otherAvatarUrl = null,
                     otherPublicKey = null,
                     lastMessageContent = previewContent,
-                    lastMessageTimestamp = message.createdAt,
+                    lastMessageTimestamp = processedMessage.createdAt,
                     unreadCount = if (isCurrentOpen) 0 else 1
                 )
                 db.conversationDao().insertOrUpdate(newConv)
@@ -127,7 +150,7 @@ class ConnectionManager(
 
                 launch {
                     try {
-                        val userRes = app.apiClient.apiService.getUserProfile(message.senderId)
+                        val userRes = app.apiClient.apiService.getUserProfile(processedMessage.senderId)
                         if (userRes.isSuccessful && userRes.body() != null) {
                             val userDto = userRes.body()!!
                             db.conversationDao().insertOrUpdate(
@@ -147,35 +170,35 @@ class ConnectionManager(
 
             if (isCurrentOpen) {
                 // Mensagem lida imediatamente
-                val readMsg = message.copy(status = "read")
+                val readMsg = processedMessage.copy(status = "read")
                 db.messageDao().insertOrUpdate(readMsg)
-                db.conversationDao().clearUnreadCount(message.conversationId)
-                db.conversationDao().updateLastMessage(message.conversationId, previewContent, message.createdAt)
-                webSocketClient.sendReceipt(message.id, "read")
-                try { app.apiClient.apiService.markMessageRead(message.id) } catch (e: Exception) {}
+                db.conversationDao().clearUnreadCount(processedMessage.conversationId)
+                db.conversationDao().updateLastMessage(processedMessage.conversationId, previewContent, processedMessage.createdAt)
+                webSocketClient.sendReceipt(processedMessage.id, "read")
+                try { app.apiClient.apiService.markMessageRead(processedMessage.id) } catch (e: Exception) {}
             } else {
                 // Mensagem entregue
-                val deliveredMsg = message.copy(status = "delivered")
+                val deliveredMsg = processedMessage.copy(status = "delivered")
                 db.messageDao().insertOrUpdate(deliveredMsg)
-                db.conversationDao().recalculateUnreadCount(message.conversationId)
-                db.conversationDao().updateLastMessage(message.conversationId, previewContent, message.createdAt)
-                webSocketClient.sendReceipt(message.id, "delivered")
+                db.conversationDao().recalculateUnreadCount(processedMessage.conversationId)
+                db.conversationDao().updateLastMessage(processedMessage.conversationId, previewContent, processedMessage.createdAt)
+                webSocketClient.sendReceipt(processedMessage.id, "delivered")
 
                 // Obter nome para notificação
                 val senderTitle = conv.otherDisplayName.ifBlank { conv.otherUsername.ifBlank { "LivreChat" } }
 
                 LivreChatNotificationManager.showMessageNotification(
                     context = context,
-                    conversationId = message.conversationId,
+                    conversationId = processedMessage.conversationId,
                     senderName = senderTitle,
                     content = previewContent,
-                    messageId = message.id,
+                    messageId = processedMessage.id,
                     messageType = actualType
                 )
             }
 
             synchronized(listeners) {
-                listeners.forEach { it.onMessageReceived(message) }
+                listeners.forEach { it.onMessageReceived(processedMessage) }
             }
         }
     }

@@ -849,7 +849,7 @@ fun HomeScreen(
                 newMusicStatusArtist = track.artist
                 newMusicStatusAlbumArt = track.albumArtUrl
                 newMusicStatusCaption = ""
-                newMusicStatusBgColor = "#075E54"
+                newMusicStatusBgColor = "#0A1128"
                 showCreateMusicStatusDialog = true
             },
             onPickLocalFile = {
@@ -859,9 +859,9 @@ fun HomeScreen(
         )
     }
 
-    // DIALOG: Criar Status com Música (Estilo WhatsApp)
+    // DIALOG: Criar Status com Música (Design LivreChat)
     if (showCreateMusicStatusDialog) {
-        val colorOptions = listOf("#075E54", "#128C7E", "#7B1FA2", "#C2185B", "#1976D2", "#212121", "#E65100")
+        val colorOptions = listOf("#0A1128", "#1C2541", "#2E1A47", "#004E92", "#1F4068", "#232931", "#3F0071")
         var isPlayingPreview by remember { mutableStateOf(false) }
         var previewPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
 
@@ -887,7 +887,7 @@ fun HomeScreen(
         ) {
             val bgColor = remember(newMusicStatusBgColor) {
                 try { Color(android.graphics.Color.parseColor(newMusicStatusBgColor)) }
-                catch (e: Exception) { Color(0xFF075E54) }
+                catch (e: Exception) { Color(0xFF0A1128) }
             }
 
             Scaffold(
@@ -1420,70 +1420,6 @@ fun HomeScreen(
                             )
                             IconButton(onClick = { loadStatuses() }) {
                                 Icon(Icons.Default.Refresh, contentDescription = "Atualizar", tint = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                    }
-
-                    // Ações Rápidas em Estilo WhatsApp / Redes
-                    item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { showStatusOptionsDialog = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.Center,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF25D366), modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Câmera", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { showCreateTextStatusDialog = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.Center,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Texto", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { showCreateMusicStatusDialog = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.Center,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color(0xFFE91E63), modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Música", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
                             }
                         }
                     }

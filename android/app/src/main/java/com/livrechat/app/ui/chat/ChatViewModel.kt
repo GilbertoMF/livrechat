@@ -11,6 +11,7 @@ import com.livrechat.app.data.remote.WebSocketClient
 import com.livrechat.app.data.remote.WebSocketEventsListener
 import com.livrechat.app.data.remote.model.SendMessageRequest
 import com.livrechat.app.util.ChatSoundManager
+import com.livrechat.app.util.MediaFileManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -150,11 +151,35 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             "read"
                         }
 
+                        // Prevent SQLiteBlobTooBigException: never store raw Base64 media directly into SQLite
+                        var safeContent = dto.content
+                        if (existing != null && MediaFileManager.isLocalFilePath(existing.content)) {
+                            safeContent = existing.content
+                        } else if (dto.messageType in listOf("image", "video", "file", "audio") || dto.content.startsWith("data:") || dto.content.length > 50000) {
+                            if (!MediaFileManager.isLocalFilePath(dto.content)) {
+                                val ext = when (dto.messageType) {
+                                    "image" -> "jpg"
+                                    "video" -> "mp4"
+                                    "audio" -> "m4a"
+                                    else -> {
+                                        val fn = dto.iv?.split("|")?.firstOrNull() ?: ""
+                                        fn.substringAfterLast(".", "bin")
+                                    }
+                                }
+                                val localFile = MediaFileManager.saveBase64ToLocalFile(app, dto.content, "received_${dto.id}.$ext")
+                                if (localFile != null) {
+                                    safeContent = localFile.absolutePath
+                                } else if (dto.content.length > 250000) {
+                                    safeContent = "[Arquivo transferido]"
+                                }
+                            }
+                        }
+
                         MessageEntity(
                             id = dto.id,
                             conversationId = dto.conversationId,
                             senderId = dto.senderId,
-                            content = dto.content,
+                            content = safeContent,
                             iv = dto.iv,
                             messageType = dto.messageType,
                             replyToId = dto.replyToId,
@@ -249,7 +274,8 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         audioBase64: String,
         durationSeconds: Int,
         targetUserId: String? = null,
-        waveform: String? = null
+        waveform: String? = null,
+        localAudioFilePath: String? = null
     ) {
         if (audioBase64.isBlank()) return
 
@@ -258,11 +284,17 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         val clientMessageId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
 
+        // Store local file path in SQLite to keep database rows tiny
+        val safeLocalContent = localAudioFilePath ?: run {
+            val localFile = MediaFileManager.saveBase64ToLocalFile(app, audioBase64, "voice_${clientMessageId}.m4a")
+            localFile?.absolutePath ?: audioBase64
+        }
+
         val localMessage = MessageEntity(
             id = clientMessageId,
             conversationId = conversationId,
             senderId = myId,
-            content = audioBase64,
+            content = safeLocalContent,
             messageType = "audio",
             iv = waveform,
             replyToId = null,
@@ -316,7 +348,8 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         caption: String? = null,
         fileName: String? = null,
         fileSize: Long? = null,
-        targetUserId: String? = null
+        targetUserId: String? = null,
+        networkPayload: String? = null
     ) {
         if (content.isBlank()) return
 
@@ -339,11 +372,48 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
             else -> "📎 Arquivo"
         }
 
+        // Determine local content (file path) for SQLite vs network payload
+        var localContent = content
+        var payloadToSend = networkPayload
+
+        if (payloadToSend == null) {
+            if (MediaFileManager.isLocalFilePath(content)) {
+                // Content is local path; construct network payload from file
+                try {
+                    val file = java.io.File(content.removePrefix("file://"))
+                    val bytes = file.readBytes()
+                    val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                    val mime = when (messageType) {
+                        "image" -> "image/jpeg"
+                        "video" -> "video/mp4"
+                        "audio" -> "audio/mp3"
+                        else -> "application/octet-stream"
+                    }
+                    payloadToSend = "data:$mime;base64,$b64"
+                } catch (e: Exception) {
+                    payloadToSend = content
+                }
+            } else {
+                // Content is raw Base64; save to disk so SQLite never stores > 2MB!
+                val ext = when (messageType) {
+                    "image" -> "jpg"
+                    "video" -> "mp4"
+                    "audio" -> "m4a"
+                    else -> (fileName ?: "doc").substringAfterLast(".", "bin")
+                }
+                val localFile = MediaFileManager.saveBase64ToLocalFile(app, content, "sent_${clientMessageId}.$ext")
+                if (localFile != null) {
+                    localContent = localFile.absolutePath
+                }
+                payloadToSend = content
+            }
+        }
+
         val localMessage = MessageEntity(
             id = clientMessageId,
             conversationId = conversationId,
             senderId = myId,
-            content = content,
+            content = localContent,
             messageType = messageType,
             iv = metaIv,
             replyToId = null,
@@ -358,7 +428,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
 
             val wsSent = connectionManager.getClient().sendChatMessage(
                 conversationId = conversationId,
-                content = content,
+                content = payloadToSend ?: "",
                 iv = metaIv,
                 messageType = messageType,
                 replyToId = null,
@@ -371,7 +441,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                     val res = apiService.sendMessage(
                         SendMessageRequest(
                             conversationId = conversationId,
-                            content = content,
+                            content = payloadToSend ?: "",
                             iv = metaIv,
                             clientMessageId = clientMessageId,
                             messageType = messageType,

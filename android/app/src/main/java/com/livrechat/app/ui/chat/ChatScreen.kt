@@ -35,6 +35,7 @@ import com.livrechat.app.ui.theme.BlueAccent
 import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
 import com.livrechat.app.ui.theme.OfflineGray
+import com.livrechat.app.util.MediaFileManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -147,11 +148,13 @@ fun ChatScreen(
                     val baos = ByteArrayOutputStream()
                     bmp.compress(Bitmap.CompressFormat.JPEG, 85, baos)
                     val bytes = baos.toByteArray()
+                    val localFile = MediaFileManager.saveBytesToLocalFile(context, bytes, "cam_${System.currentTimeMillis()}.jpg")
                     val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                     val dataUri = "data:image/jpeg;base64,$b64"
                     viewModel.sendMediaMessage(
                         conversationId = conversationId,
-                        content = dataUri,
+                        content = localFile.absolutePath,
+                        networkPayload = dataUri,
                         messageType = "image",
                         targetUserId = otherUserId
                     )
@@ -183,11 +186,13 @@ fun ChatScreen(
                         val baos = ByteArrayOutputStream()
                         scaled.compress(Bitmap.CompressFormat.JPEG, 80, baos)
                         val bytes = baos.toByteArray()
+                        val localFile = MediaFileManager.saveBytesToLocalFile(context, bytes, "photo_${System.currentTimeMillis()}.jpg")
                         val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                         val dataUri = "data:image/jpeg;base64,$b64"
                         viewModel.sendMediaMessage(
                             conversationId = conversationId,
-                            content = dataUri,
+                            content = localFile.absolutePath,
+                            networkPayload = dataUri,
                             messageType = "image",
                             targetUserId = otherUserId
                         )
@@ -206,23 +211,25 @@ fun ChatScreen(
             scope.launch(Dispatchers.IO) {
                 try {
                     val (fileName, fileSize) = getFileNameAndSize(context, uri)
-                    if (fileSize > 25 * 1024 * 1024) {
+                    if (fileSize > 8 * 1024 * 1024) {
                         launch(Dispatchers.Main) {
-                            Toast.makeText(context, "O vídeo deve ter menos de 25MB", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "O vídeo deve ter no máximo 8MB para envio rápido", Toast.LENGTH_LONG).show()
                         }
                         return@launch
                     }
-                    val input = context.contentResolver.openInputStream(uri)
-                    val bytes = input?.readBytes() ?: return@launch
+                    val input = context.contentResolver.openInputStream(uri) ?: return@launch
+                    val localFile = MediaFileManager.saveStreamToLocalFile(context, input, fileName)
                     input.close()
+                    val bytes = localFile.readBytes()
                     val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                     val dataUri = "data:video/mp4;base64,$b64"
                     viewModel.sendMediaMessage(
                         conversationId = conversationId,
-                        content = dataUri,
+                        content = localFile.absolutePath,
+                        networkPayload = dataUri,
                         messageType = "video",
                         fileName = fileName,
-                        fileSize = fileSize,
+                        fileSize = localFile.length(),
                         targetUserId = otherUserId
                     )
                 } catch (e: Exception) {
@@ -239,23 +246,25 @@ fun ChatScreen(
             scope.launch(Dispatchers.IO) {
                 try {
                     val (fileName, fileSize) = getFileNameAndSize(context, uri)
-                    if (fileSize > 25 * 1024 * 1024) {
+                    if (fileSize > 8 * 1024 * 1024) {
                         launch(Dispatchers.Main) {
-                            Toast.makeText(context, "O arquivo deve ter menos de 25MB", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "O arquivo deve ter no máximo 8MB para envio rápido", Toast.LENGTH_LONG).show()
                         }
                         return@launch
                     }
-                    val input = context.contentResolver.openInputStream(uri)
-                    val bytes = input?.readBytes() ?: return@launch
+                    val input = context.contentResolver.openInputStream(uri) ?: return@launch
+                    val localFile = MediaFileManager.saveStreamToLocalFile(context, input, fileName)
                     input.close()
+                    val bytes = localFile.readBytes()
                     val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                     val dataUri = "data:application/octet-stream;base64,$b64"
                     viewModel.sendMediaMessage(
                         conversationId = conversationId,
-                        content = dataUri,
+                        content = localFile.absolutePath,
+                        networkPayload = dataUri,
                         messageType = "file",
                         fileName = fileName,
-                        fileSize = fileSize,
+                        fileSize = localFile.length(),
                         targetUserId = otherUserId
                     )
                 } catch (e: Exception) {
@@ -272,22 +281,24 @@ fun ChatScreen(
             scope.launch(Dispatchers.IO) {
                 try {
                     val (fileName, fileSize) = getFileNameAndSize(context, uri)
-                    if (fileSize > 25 * 1024 * 1024) {
+                    if (fileSize > 8 * 1024 * 1024) {
                         launch(Dispatchers.Main) {
-                            Toast.makeText(context, "O áudio deve ter menos de 25MB", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "O áudio deve ter no máximo 8MB", Toast.LENGTH_LONG).show()
                         }
                         return@launch
                     }
-                    val input = context.contentResolver.openInputStream(uri)
-                    val bytes = input?.readBytes() ?: return@launch
+                    val input = context.contentResolver.openInputStream(uri) ?: return@launch
+                    val localFile = MediaFileManager.saveStreamToLocalFile(context, input, fileName)
                     input.close()
+                    val bytes = localFile.readBytes()
                     val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                     val dataUri = "data:audio/mp3;base64,$b64"
                     viewModel.sendAudioMessage(
                         conversationId = conversationId,
                         audioBase64 = dataUri,
                         durationSeconds = 0,
-                        targetUserId = otherUserId
+                        targetUserId = otherUserId,
+                        localAudioFilePath = localFile.absolutePath
                     )
                 } catch (e: Exception) {
                     Log.e("ChatScreen", "Erro ao enviar áudio", e)
@@ -1163,6 +1174,16 @@ fun ImageMessageBubbleContent(
     LaunchedEffect(message.content) {
         withContext(Dispatchers.IO) {
             try {
+                if (MediaFileManager.isLocalFilePath(message.content)) {
+                    val local = java.io.File(message.content.removePrefix("file://"))
+                    if (local.exists()) {
+                        val bmp = BitmapFactory.decodeFile(local.absolutePath)
+                        withContext(Dispatchers.Main) {
+                            decodedBitmap = bmp
+                        }
+                        return@withContext
+                    }
+                }
                 val clean = if (message.content.contains(",")) message.content.substringAfter(",") else message.content
                 val bytes = Base64.decode(clean, Base64.DEFAULT)
                 val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
@@ -1370,6 +1391,16 @@ fun FullscreenImageViewerDialog(
     LaunchedEffect(base64Content) {
         withContext(Dispatchers.IO) {
             try {
+                if (MediaFileManager.isLocalFilePath(base64Content)) {
+                    val local = java.io.File(base64Content.removePrefix("file://"))
+                    if (local.exists()) {
+                        val bmp = BitmapFactory.decodeFile(local.absolutePath)
+                        withContext(Dispatchers.Main) {
+                            decodedBitmap = bmp
+                        }
+                        return@withContext
+                    }
+                }
                 val clean = if (base64Content.contains(",")) base64Content.substringAfter(",") else base64Content
                 val bytes = Base64.decode(clean, Base64.DEFAULT)
                 val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
@@ -1456,12 +1487,24 @@ fun formatFileSize(bytes: Long): String {
 
 fun openMediaFile(context: Context, base64Content: String, fileName: String, mimeType: String) {
     try {
-        val cleanBase64 = if (base64Content.contains(",")) base64Content.substringAfter(",") else base64Content
-        val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
-        val cacheFile = File(context.cacheDir, fileName)
-        FileOutputStream(cacheFile).use { it.write(bytes) }
+        val targetFile: File = if (MediaFileManager.isLocalFilePath(base64Content)) {
+            val local = java.io.File(base64Content.removePrefix("file://"))
+            if (local.exists()) local else {
+                val cleanBase64 = if (base64Content.contains(",")) base64Content.substringAfter(",") else base64Content
+                val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
+                val cacheFile = File(context.cacheDir, fileName)
+                FileOutputStream(cacheFile).use { it.write(bytes) }
+                cacheFile
+            }
+        } else {
+            val cleanBase64 = if (base64Content.contains(",")) base64Content.substringAfter(",") else base64Content
+            val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
+            val cacheFile = File(context.cacheDir, fileName)
+            FileOutputStream(cacheFile).use { it.write(bytes) }
+            cacheFile
+        }
 
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", cacheFile)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", targetFile)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, mimeType)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

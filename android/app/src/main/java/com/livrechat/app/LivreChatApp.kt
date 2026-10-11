@@ -13,6 +13,9 @@ import com.livrechat.app.data.remote.ConnectionManager
 import com.livrechat.app.data.remote.WebSocketClient
 import com.livrechat.app.data.remote.WebSocketEventsListener
 import com.livrechat.app.notification.LivreChatNotificationManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class LivreChatApp : Application() {
 
@@ -69,6 +72,18 @@ class LivreChatApp : Application() {
             }
             com.livrechat.app.service.LivreChatBackgroundService.stop(this)
         } catch (e: Exception) {}
+
+        // Rescue existing SQLite database from SQLiteBlobTooBigException crashes:
+        // Truncate any raw Base64 blobs exceeding 250KB in the messages table
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                database.openHelper.writableDatabase.execSQL(
+                    "UPDATE messages SET content = '[Arquivo transferido / salvo]' WHERE length(content) > 250000 AND (content NOT LIKE 'file://%' AND content NOT LIKE '/%')"
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("LivreChatApp", "Falha ao sanitizar mensagens grandes do SQLite", e)
+            }
+        }
     }
 
     private fun createNotificationChannels() {

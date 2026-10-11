@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -38,6 +39,14 @@ import com.livrechat.app.data.remote.MusicTrack
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private val BgDarkNavy = Color(0xFF090D1A)
+private val CardSurface = Color(0xFF13192B)
+private val CardSurfaceHover = Color(0xFF1C2540)
+private val AccentSapphire = Color(0xFF2563EB)
+private val AccentViolet = Color(0xFF7C3AED)
+private val AccentCyan = Color(0xFF38BDF8)
+private val GoldStar = Color(0xFFFFC107)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MusicPickerDialog(
@@ -49,38 +58,35 @@ fun MusicPickerDialog(
     val scope = rememberCoroutineScope()
 
     var searchQuery by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("Sugestões") }
+    var selectedCategory by remember { mutableStateOf("🔥 Em Alta") }
     var isLoading by remember { mutableStateOf(false) }
     var tracksList by remember { mutableStateOf<List<MusicTrack>>(emptyList()) }
     var playingTrackId by remember { mutableStateOf<String?>(null) }
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
     var favoritesSet by remember { mutableStateOf(setOf<String>()) }
 
-    // Atualiza favoritos
     LaunchedEffect(Unit) {
         val favs = MusicCatalogService.getFavoriteTracks(context).map { it.id }.toSet()
         favoritesSet = favs
     }
 
-    // Carrega músicas por categoria
     fun loadCategoryTracks(category: String) {
         scope.launch {
             isLoading = true
             try {
-                if (category == "Favoritas") {
+                if (category == "⭐ Favoritas") {
                     tracksList = MusicCatalogService.getFavoriteTracks(context)
                 } else {
                     val searchTerm = when (category) {
-                        "Sugestões" -> "Top Brasil 2026"
-                        "Astral" -> "Good Vibes Acústico"
-                        "Gênero musical" -> "Pop Sertanejo"
-                        "Sertanejo" -> "Sertanejo 2026"
-                        "Forró" -> "Vilões do Forró Wesley Safadão"
-                        "Pop" -> "Pop Hits 2026"
-                        "Gospel" -> "Gospel Louvor"
-                        "Funk" -> "Funk Brasil"
-                        "Trap & Rap" -> "Trap Brasil"
-                        "Rock" -> "Rock Nacional"
+                        "🔥 Em Alta" -> "Top Brasil 2026"
+                        "🇧🇷 Sertanejo" -> "Sertanejo 2026"
+                        "⚡ Trap & Rap" -> "Trap Brasil Matue"
+                        "🕺 Funk" -> "Funk Brasil Hits"
+                        "✨ Pop" -> "Pop Hits Brasil"
+                        "🎸 Rock" -> "Rock Nacional"
+                        "🙏 Gospel" -> "Gospel Louvor"
+                        "🌴 Forró" -> "Forró Wesley Safadão"
+                        "🎷 MPB" -> "MPB Acústico"
                         else -> category
                     }
                     val results = MusicCatalogService.searchMusic(searchTerm, limit = 30)
@@ -94,16 +100,14 @@ fun MusicPickerDialog(
         }
     }
 
-    // Carrega primeira categoria ao abrir
     LaunchedEffect(Unit) {
-        loadCategoryTracks("Sugestões")
+        loadCategoryTracks("🔥 Em Alta")
     }
 
-    // Busca com debounce quando o usuário digita
     LaunchedEffect(searchQuery) {
         val query = searchQuery.trim()
         if (query.isNotEmpty()) {
-            delay(400) // Debounce de 400ms
+            delay(400)
             isLoading = true
             try {
                 val results = MusicCatalogService.searchMusic(query, limit = 30)
@@ -113,12 +117,11 @@ fun MusicPickerDialog(
             } finally {
                 isLoading = false
             }
-        } else if (searchQuery.isEmpty() && selectedCategory != "Favoritas") {
+        } else if (searchQuery.isEmpty() && selectedCategory != "⭐ Favoritas") {
             loadCategoryTracks(selectedCategory)
         }
     }
 
-    // Controle de reprodução de prévia
     fun togglePlayTrack(track: MusicTrack) {
         if (playingTrackId == track.id) {
             try {
@@ -171,17 +174,16 @@ fun MusicPickerDialog(
     }
 
     val categories = listOf(
-        "Sugestões",
-        "Astral",
-        "Gênero musical",
-        "Favoritas",
-        "Sertanejo",
-        "Forró",
-        "Pop",
-        "Gospel",
-        "Funk",
-        "Trap & Rap",
-        "Rock"
+        "🔥 Em Alta",
+        "⭐ Favoritas",
+        "🇧🇷 Sertanejo",
+        "⚡ Trap & Rap",
+        "🕺 Funk",
+        "✨ Pop",
+        "🎸 Rock",
+        "🙏 Gospel",
+        "🌴 Forró",
+        "🎷 MPB"
     )
 
     Dialog(
@@ -193,75 +195,94 @@ fun MusicPickerDialog(
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
+            color = BgDarkNavy
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Top drag handle & header
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp, bottom = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(40.dp)
-                            .height(4.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-                    )
-                }
-
+                // Top Custom LivreChat Header
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                        .padding(horizontal = 18.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "Músicas",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = AccentSapphire.copy(alpha = 0.2f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, AccentSapphire.copy(alpha = 0.5f)),
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.GraphicEq,
+                                    contentDescription = null,
+                                    tint = AccentCyan,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "LivreChat Music",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Escolha qualquer trilha para seu status",
+                                fontSize = 11.sp,
+                                color = Color.White.copy(alpha = 0.65f)
+                            )
+                        }
+                    }
 
-                    IconButton(onClick = {
-                        try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (e: Exception) {}
-                        onDismiss()
-                    }) {
-                        Icon(Icons.Default.Close, contentDescription = "Fechar")
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.08f),
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clickable {
+                                try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (e: Exception) {}
+                                onDismiss()
+                            }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White, modifier = Modifier.size(18.dp))
+                        }
                     }
                 }
 
-                // 1. Barra de Pesquisa (Estilo WhatsApp/Instagram)
+                // 1. Barra de Busca LivreChat (Futuristic Sapphire Outline)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
                 ) {
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         placeholder = {
                             Text(
-                                "Pesquisar por astral, músicas ou cantores",
-                                fontSize = 14.sp,
+                                "Buscar artistas, músicas ou lançamentos...",
+                                fontSize = 13.sp,
+                                color = Color.White.copy(alpha = 0.5f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         },
                         leadingIcon = {
-                            Icon(Icons.Default.Search, contentDescription = "Pesquisar", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Default.Search, contentDescription = "Buscar", tint = AccentCyan)
                         },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
                                 IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Limpar")
+                                    Icon(Icons.Default.Clear, contentDescription = "Limpar", tint = Color.White)
                                 }
                             }
                         },
-                        shape = RoundedCornerShape(24.dp),
+                        shape = RoundedCornerShape(16.dp),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = {
@@ -274,10 +295,12 @@ fun MusicPickerDialog(
                             }
                         }),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                            focusedBorderColor = Color(0xFF25D366),
-                            unfocusedBorderColor = Color.Transparent
+                            focusedContainerColor = CardSurface,
+                            unfocusedContainerColor = CardSurface.copy(alpha = 0.7f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = AccentSapphire,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.12f)
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -285,47 +308,50 @@ fun MusicPickerDialog(
                     )
                 }
 
-                // 2. Chips de Categorias (Horizontal Scroll)
+                // 2. Chips de Categorias Originais com Gradiente LivreChat
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = 10.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(categories) { cat ->
                         val isSelected = selectedCategory == cat && searchQuery.isEmpty()
-                        val chipBg = if (isSelected) Color(0xFF25D366).copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        val chipText = if (isSelected) Color(0xFF1E8E3E) else MaterialTheme.colorScheme.onSurfaceVariant
-                        val chipBorder = if (isSelected) Color(0xFF25D366) else Color.Transparent
+                        val chipBrush = if (isSelected) {
+                            Brush.horizontalGradient(listOf(AccentSapphire, AccentViolet))
+                        } else {
+                            Brush.linearGradient(listOf(CardSurface, CardSurface))
+                        }
+                        val borderColor = if (isSelected) AccentCyan else Color.White.copy(alpha = 0.08f)
 
-                        Surface(
-                            shape = RoundedCornerShape(18.dp),
-                            color = chipBg,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, chipBorder),
+                        Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(18.dp))
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(chipBrush)
+                                .border(1.dp, borderColor, RoundedCornerShape(20.dp))
                                 .clickable {
                                     searchQuery = ""
                                     selectedCategory = cat
                                     loadCategoryTracks(cat)
                                 }
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
                         ) {
                             Text(
                                 text = cat,
-                                fontSize = 13.sp,
+                                fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = chipText,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                color = Color.White
                             )
                         }
                     }
                 }
 
-                // Opção de Escolher arquivo local do aparelho
+                // Opção de Escolher arquivo do aparelho
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    color = CardSurface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 4.dp)
@@ -335,33 +361,47 @@ fun MusicPickerDialog(
                         }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.FolderOpen,
-                            contentDescription = null,
-                            tint = Color(0xFF007AFF),
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Escolher arquivo de áudio do meu aparelho",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
+                        Surface(
+                            shape = CircleShape,
+                            color = AccentCyan.copy(alpha = 0.15f),
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.FolderOpen,
+                                    contentDescription = null,
+                                    tint = AccentCyan,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Usar áudio do seu celular",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "MP3, M4A, gravações ou qualquer arquivo local",
+                                fontSize = 11.sp,
+                                color = Color.White.copy(alpha = 0.55f)
+                            )
+                        }
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = Color.White.copy(alpha = 0.5f),
                             modifier = Modifier.size(16.dp)
                         )
                     }
                 }
 
-                // 3. Conteúdo Principal: Carrossel em Destaque + Lista de Músicas
+                // 3. Conteúdo Principal
                 if (isLoading) {
                     Box(
                         modifier = Modifier
@@ -369,7 +409,7 @@ fun MusicPickerDialog(
                             .weight(1f),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Color(0xFF25D366))
+                        CircularProgressIndicator(color = AccentSapphire)
                     }
                 } else if (tracksList.isEmpty()) {
                     Box(
@@ -382,20 +422,20 @@ fun MusicPickerDialog(
                             Icon(
                                 Icons.Default.MusicOff,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(48.dp)
+                                tint = Color.White.copy(alpha = 0.4f),
+                                modifier = Modifier.size(46.dp)
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
                                 "Nenhuma música encontrada",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = Color.White,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Medium
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                "Tente pesquisar outro cantor ou gênero musical",
-                                color = MaterialTheme.colorScheme.outline,
+                                "Tente pesquisar outro cantor, banda ou título",
+                                color = Color.White.copy(alpha = 0.5f),
                                 fontSize = 12.sp
                             )
                         }
@@ -405,127 +445,156 @@ fun MusicPickerDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Card em Destaque no topo (Estilo WhatsApp / Instagram banner escuro da foto)
+                        // Card em Destaque no topo (Estilo LivreChat Luxury Audio Card)
                         val featuredTrack = tracksList.firstOrNull()
                         if (featuredTrack != null && searchQuery.isEmpty()) {
                             item {
-                                Surface(
-                                    shape = RoundedCornerShape(20.dp),
-                                    color = Color(0xFF424A32), // Tom verde-oliva elegante do screenshot
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(bottom = 14.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(14.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        // Capa com botão de Play
-                                        Box(
-                                            modifier = Modifier
-                                                .size(62.dp)
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .clickable { togglePlayTrack(featuredTrack) },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            AsyncImage(
-                                                model = featuredTrack.albumArtUrl,
-                                                contentDescription = null,
-                                                modifier = Modifier.fillMaxSize(),
-                                                contentScale = ContentScale.Crop
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .background(
+                                            Brush.linearGradient(
+                                                listOf(
+                                                    Color(0xFF1B2444),
+                                                    Color(0xFF11172A),
+                                                    Color(0xFF251640)
+                                                )
                                             )
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .background(Color.Black.copy(alpha = 0.35f)),
-                                                contentAlignment = Alignment.Center
+                                        )
+                                        .border(1.dp, AccentSapphire.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
+                                        .padding(14.dp)
+                                ) {
+                                    Column {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = AccentSapphire.copy(alpha = 0.25f),
+                                                border = androidx.compose.foundation.BorderStroke(1.dp, AccentCyan.copy(alpha = 0.5f))
+                                            ) {
+                                                Text(
+                                                    text = "✨ EM ALTA NO LIVRECHAT",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = AccentCyan,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
+                                            }
+
+                                            val isFav = favoritesSet.contains(featuredTrack.id)
+                                            IconButton(
+                                                onClick = {
+                                                    val nowFav = MusicCatalogService.toggleFavorite(context, featuredTrack)
+                                                    favoritesSet = if (nowFav) favoritesSet + featuredTrack.id else favoritesSet - featuredTrack.id
+                                                },
+                                                modifier = Modifier.size(28.dp)
                                             ) {
                                                 Icon(
-                                                    imageVector = if (playingTrackId == featuredTrack.id) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                                    contentDescription = null,
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(28.dp)
+                                                    imageVector = if (isFav) Icons.Default.Star else Icons.Default.StarBorder,
+                                                    contentDescription = "Favoritar",
+                                                    tint = if (isFav) GoldStar else Color.White.copy(alpha = 0.7f),
+                                                    modifier = Modifier.size(20.dp)
                                                 )
                                             }
                                         }
 
-                                        Spacer(modifier = Modifier.width(14.dp))
+                                        Spacer(modifier = Modifier.height(10.dp))
 
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = featuredTrack.title,
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 16.sp,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            Text(
-                                                text = featuredTrack.artist,
-                                                color = Color.White.copy(alpha = 0.8f),
-                                                fontSize = 13.sp,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-
-                                        // Botão Estrela (Favoritos)
-                                        val isFav = favoritesSet.contains(featuredTrack.id)
-                                        IconButton(onClick = {
-                                            val nowFav = MusicCatalogService.toggleFavorite(context, featuredTrack)
-                                            favoritesSet = if (nowFav) favoritesSet + featuredTrack.id else favoritesSet - featuredTrack.id
-                                        }) {
-                                            Icon(
-                                                imageVector = if (isFav) Icons.Default.Star else Icons.Default.StarBorder,
-                                                contentDescription = "Favoritar",
-                                                tint = if (isFav) Color(0xFFFFD700) else Color.White
-                                            )
-                                        }
-
-                                        // Botão Próximo / Selecionar ->
-                                        Surface(
-                                            shape = CircleShape,
-                                            color = Color.White.copy(alpha = 0.22f),
-                                            modifier = Modifier
-                                                .size(38.dp)
-                                                .clickable {
-                                                    try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (e: Exception) {}
-                                                    onSelectTrack(featuredTrack)
-                                                }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Icon(
-                                                    Icons.AutoMirrored.Filled.ArrowForward,
-                                                    contentDescription = "Selecionar",
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(18.dp)
+                                            // Capa do Álbum com Play/Pause
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(68.dp)
+                                                    .clip(RoundedCornerShape(14.dp))
+                                                    .clickable { togglePlayTrack(featuredTrack) },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                AsyncImage(
+                                                    model = featuredTrack.albumArtUrl,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentScale = ContentScale.Crop
+                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .background(
+                                                            if (playingTrackId == featuredTrack.id) AccentSapphire.copy(alpha = 0.6f)
+                                                            else Color.Black.copy(alpha = 0.4f)
+                                                        ),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (playingTrackId == featuredTrack.id) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                        contentDescription = null,
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(30.dp)
+                                                    )
+                                                }
+                                            }
+
+                                            Spacer(modifier = Modifier.width(14.dp))
+
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = featuredTrack.title,
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 16.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = featuredTrack.artist,
+                                                    color = Color.White.copy(alpha = 0.75f),
+                                                    fontSize = 13.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = "Duração • ${featuredTrack.durationFormatted}",
+                                                    color = AccentCyan,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Medium
                                                 )
                                             }
                                         }
-                                    }
-                                }
 
-                                // Indicador de carrossel (pontinhos)
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(bottom = 14.dp),
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    repeat(5) { i ->
-                                        Box(
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        // Botão Adicionar ao Status
+                                        Button(
+                                            onClick = {
+                                                try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (e: Exception) {}
+                                                onSelectTrack(featuredTrack)
+                                            },
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                                            contentPadding = PaddingValues(0.dp),
                                             modifier = Modifier
-                                                .padding(horizontal = 3.dp)
-                                                .size(6.dp)
-                                                .clip(CircleShape)
-                                                .background(
-                                                    if (i == 0) Color(0xFF25D366)
-                                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                                                )
-                                        )
+                                                .fillMaxWidth()
+                                                .height(40.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(Brush.horizontalGradient(listOf(AccentSapphire, AccentViolet)))
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("Usar esta música no Status", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White)
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -537,99 +606,115 @@ fun MusicPickerDialog(
                             val isPlaying = playingTrackId == track.id
                             val isFav = favoritesSet.contains(track.id)
 
-                            Row(
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isPlaying) CardSurfaceHover else CardSurface,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (isPlaying) AccentSapphire.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.05f)
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
                                         try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (e: Exception) {}
                                         onSelectTrack(track)
                                     }
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Capa do Álbum com Play/Pause Overlay
-                                Box(
-                                    modifier = Modifier
-                                        .size(54.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .clickable { togglePlayTrack(track) },
-                                    contentAlignment = Alignment.Center
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    AsyncImage(
-                                        model = track.albumArtUrl,
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop
-                                    )
+                                    // Capa do Álbum com Play/Pause
                                     Box(
                                         modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(
-                                                if (isPlaying) Color(0xFF25D366).copy(alpha = 0.45f)
-                                                else Color.Black.copy(alpha = 0.35f)
-                                            ),
+                                            .size(52.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable { togglePlayTrack(track) },
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
-                                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        AsyncImage(
+                                            model = track.albumArtUrl,
                                             contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(24.dp)
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(
+                                                    if (isPlaying) AccentSapphire.copy(alpha = 0.65f)
+                                                    else Color.Black.copy(alpha = 0.35f)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(12.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = track.title,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isPlaying) AccentCyan else Color.White,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "${track.artist} • ${track.durationFormatted}",
+                                            fontSize = 12.sp,
+                                            color = Color.White.copy(alpha = 0.6f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
-                                }
 
-                                Spacer(modifier = Modifier.width(14.dp))
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = track.title,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (isPlaying) Color(0xFF25D366) else MaterialTheme.colorScheme.onBackground,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "${track.artist} · ${track.durationFormatted}",
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                // Botão Estrela (Favoritos)
-                                IconButton(onClick = {
-                                    val nowFav = MusicCatalogService.toggleFavorite(context, track)
-                                    favoritesSet = if (nowFav) favoritesSet + track.id else favoritesSet - track.id
-                                }) {
-                                    Icon(
-                                        imageVector = if (isFav) Icons.Default.Star else Icons.Default.StarBorder,
-                                        contentDescription = "Favoritar",
-                                        tint = if (isFav) Color(0xFFFFD700) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                    )
-                                }
-
-                                // Botão de Selecionar (Seta para a direita cinza circular)
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clickable {
-                                            try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (e: Exception) {}
-                                            onSelectTrack(track)
-                                        }
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
+                                    // Favoritar
+                                    IconButton(
+                                        onClick = {
+                                            val nowFav = MusicCatalogService.toggleFavorite(context, track)
+                                            favoritesSet = if (nowFav) favoritesSet + track.id else favoritesSet - track.id
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
                                         Icon(
-                                            Icons.AutoMirrored.Filled.ArrowForward,
-                                            contentDescription = "Selecionar",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(16.dp)
+                                            imageVector = if (isFav) Icons.Default.Star else Icons.Default.StarBorder,
+                                            contentDescription = "Favoritar",
+                                            tint = if (isFav) GoldStar else Color.White.copy(alpha = 0.4f),
+                                            modifier = Modifier.size(18.dp)
                                         )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(4.dp))
+
+                                    // Botão Selecionar
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = AccentSapphire.copy(alpha = 0.2f),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, AccentSapphire.copy(alpha = 0.4f)),
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clickable {
+                                                try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (e: Exception) {}
+                                                onSelectTrack(track)
+                                            }
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                Icons.AutoMirrored.Filled.ArrowForward,
+                                                contentDescription = "Selecionar",
+                                                tint = AccentCyan,
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }

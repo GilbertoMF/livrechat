@@ -198,6 +198,10 @@ class AudioPlayerHelper(private val context: Context) {
     }
 
     private fun getOrCreateAudioFile(messageId: String, content: String): File? {
+        if (content.startsWith("/") || content.startsWith("file://")) {
+            val local = File(content.removePrefix("file://"))
+            if (local.exists() && local.length() > 0) return local
+        }
         val file = File(context.cacheDir, "audio_msg_$messageId.m4a")
         if (file.exists() && file.length() > 0) return file
 
