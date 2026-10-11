@@ -1,9 +1,17 @@
 package com.livrechat.app.ui.home
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.util.Base64
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,22 +25,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.fragment.app.FragmentActivity
 import coil.compose.AsyncImage
 import com.livrechat.app.LivreChatApp
 import com.livrechat.app.data.local.entity.CallRecordEntity
 import com.livrechat.app.data.local.entity.ConversationEntity
+import com.livrechat.app.data.remote.model.StatusDto
 import com.livrechat.app.ui.call.CallViewModel
 import com.livrechat.app.ui.chat.ChatViewModel
 import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
 import com.livrechat.app.ui.theme.SuccessGreen
 import com.livrechat.app.util.BiometricHelper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -48,22 +66,151 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit,
     onStartCall: (String, String, String, String?) -> Unit
 ) {
-    var selectedTab by remember { mutableStateOf(0) } // 0 = Conversas, 1 = Chamadas
+    // Tabs: 0 = Conversas, 1 = Atualizações (Status), 2 = Chamadas
+    var selectedTab by remember { mutableStateOf(0) }
     val conversations by chatViewModel.conversationsFlow.collectAsState(initial = emptyList())
     val callHistory by callViewModel.callHistoryFlow.collectAsState(initial = emptyList())
     val isConnected by chatViewModel.isConnected.collectAsState()
     val typingStatus by chatViewModel.typingStatus.collectAsState()
 
     val context = LocalContext.current
-    val prefs = remember { LivreChatApp.instance.preferencesManager }
+    val scope = rememberCoroutineScope()
+    val app = LivreChatApp.instance
+    val prefs = remember { app.preferencesManager }
+    val db = remember { app.database }
+    val apiService = remember { app.apiClient.apiService }
+    val currentUserId = prefs.currentUserId
+
+    // Dialogs State
     var showClearCallHistoryDialog by remember { mutableStateOf(false) }
     var selectedConvForAction by remember { mutableStateOf<ConversationEntity?>(null) }
     var showClearConvDialog by remember { mutableStateOf<ConversationEntity?>(null) }
+
+    // Status State
+    var statusesList by remember { mutableStateOf<List<StatusDto>>(emptyList()) }
+    var activeStatusViewerList by remember { mutableStateOf<List<StatusDto>?>(null) }
+    var showStatusOptionsDialog by remember { mutableStateOf(false) }
+    var showCreateTextStatusDialog by remember { mutableStateOf(false) }
+    var showCreateImageStatusDialog by remember { mutableStateOf(false) }
+    var newTextStatusContent by remember { mutableStateOf("") }
+    var newStatusBgColor by remember { mutableStateOf("#075E54") }
+    var newImageStatusBase64 by remember { mutableStateOf("") }
+    var newImageStatusCaption by remember { mutableStateOf("") }
+    var isPostingStatus by remember { mutableStateOf(false) }
+
+    fun loadStatuses() {
+        scope.launch {
+            try {
+                val res = apiService.getStatuses()
+                if (res.isSuccessful && res.body() != null) {
+                    statusesList = res.body()!!
+                }
+            } catch (e: Exception) {}
+        }
+    }
 
     LaunchedEffect(isConnected) {
         chatViewModel.syncConversations()
     }
 
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == 1) {
+            loadStatuses()
+        }
+    }
+
+    // Status Image Picker
+    val statusImagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val originalBitmap = BitmapFactory.decodeStream(inputStream)
+                    inputStream?.close()
+                    if (originalBitmap != null) {
+                        val maxDim = 1080
+                        val width = originalBitmap.width
+                        val height = originalBitmap.height
+                        val scale = if (width > height) maxDim.toFloat() / width else maxDim.toFloat() / height
+                        val scaledBitmap = if (scale < 1f) {
+                            Bitmap.createScaledBitmap(
+                                originalBitmap,
+                                (width * scale).toInt().coerceAtLeast(1),
+                                (height * scale).toInt().coerceAtLeast(1),
+                                true
+                            )
+                        } else {
+                            originalBitmap
+                        }
+                        val baos = ByteArrayOutputStream()
+                        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 75, baos)
+                        val bytes = baos.toByteArray()
+                        val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        val dataUri = "data:image/jpeg;base64,$base64"
+                        withContext(Dispatchers.Main) {
+                            newImageStatusBase64 = dataUri
+                            newImageStatusCaption = ""
+                            showCreateImageStatusDialog = true
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Erro ao carregar imagem", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    // Status Audio Picker
+    val statusAudioPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val bytes = inputStream?.readBytes()
+                    inputStream?.close()
+                    if (bytes != null && bytes.size <= 8 * 1024 * 1024) {
+                        val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        val dataUri = "data:audio/mp3;base64,$base64"
+                        withContext(Dispatchers.Main) {
+                            isPostingStatus = true
+                        }
+                        val res = apiService.createStatus(
+                            mapOf(
+                                "contentType" to "audio",
+                                "content" to dataUri,
+                                "caption" to "Áudio de Status"
+                            )
+                        )
+                        withContext(Dispatchers.Main) {
+                            isPostingStatus = false
+                            if (res.isSuccessful) {
+                                Toast.makeText(context, "Áudio compartilhado no Status!", Toast.LENGTH_SHORT).show()
+                                loadStatuses()
+                            } else {
+                                Toast.makeText(context, "Falha ao enviar áudio", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Arquivo de áudio muito grande (máx 8MB)", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Erro ao carregar áudio", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    // DIALOG: Limpar histórico de chamadas
     if (showClearCallHistoryDialog) {
         AlertDialog(
             onDismissRequest = { showClearCallHistoryDialog = false },
@@ -86,13 +233,14 @@ fun HomeScreen(
         )
     }
 
+    // DIALOG: Opções da conversa (Long click)
     if (selectedConvForAction != null) {
         val conv = selectedConvForAction!!
         val isLocked = prefs.isConversationLocked(conv.id)
         AlertDialog(
             onDismissRequest = { selectedConvForAction = null },
             title = { Text(conv.otherDisplayName, fontWeight = FontWeight.Bold) },
-            text = { Text("Opções da conversa:") },
+            text = { Text("Selecione uma ação para esta conversa:") },
             confirmButton = {
                 TextButton(onClick = {
                     val newLocked = !isLocked
@@ -110,10 +258,27 @@ fun HomeScreen(
             dismissButton = {
                 Row {
                     TextButton(onClick = {
+                        val toDel = conv
+                        selectedConvForAction = null
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                apiService.clearConversation(toDel.id)
+                            } catch (e: Exception) {}
+                            db.conversationDao().deleteConversation(toDel.id)
+                            db.messageDao().clearConversationMessages(toDel.id)
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "Conversa apagada", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }) {
+                        Text("Apagar conversa", color = DangerRed, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    TextButton(onClick = {
                         showClearConvDialog = conv
                         selectedConvForAction = null
                     }) {
-                        Text("Limpar conversa", color = DangerRed)
+                        Text("Limpar", color = DangerRed)
                     }
                     TextButton(onClick = { selectedConvForAction = null }) {
                         Text("Cancelar")
@@ -123,11 +288,12 @@ fun HomeScreen(
         )
     }
 
+    // DIALOG: Limpar conversa
     if (showClearConvDialog != null) {
         val conv = showClearConvDialog!!
         AlertDialog(
             onDismissRequest = { showClearConvDialog = null },
-            title = { Text("Limpar conversa?", fontWeight = FontWeight.Bold) },
+            title = { Text("Limpar mensagens?", fontWeight = FontWeight.Bold) },
             text = { Text("Todas as mensagens com ${conv.otherDisplayName} serão apagadas.") },
             confirmButton = {
                 TextButton(onClick = {
@@ -135,7 +301,7 @@ fun HomeScreen(
                     showClearConvDialog = null
                     Toast.makeText(context, "Conversa limpa", Toast.LENGTH_SHORT).show()
                 }) {
-                    Text("Limpar mensagens", color = DangerRed, fontWeight = FontWeight.Bold)
+                    Text("Limpar", color = DangerRed, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -144,6 +310,260 @@ fun HomeScreen(
                 }
             }
         )
+    }
+
+    // DIALOG: Opções de Status (Texto, Foto, Áudio)
+    if (showStatusOptionsDialog) {
+        AlertDialog(
+            onDismissRequest = { showStatusOptionsDialog = false },
+            title = { Text("Adicionar ao Status", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Escolha o que você gostaria de compartilhar:")
+                    
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            showStatusOptionsDialog = false
+                            showCreateTextStatusDialog = true
+                        }
+                    ) {
+                        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFF25D366))
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Text("Texto com fundo colorido", fontWeight = FontWeight.Medium)
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            showStatusOptionsDialog = false
+                            statusImagePickerLauncher.launch("image/*")
+                        }
+                    ) {
+                        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = BluePrimary)
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Text("Foto da Galeria", fontWeight = FontWeight.Medium)
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            showStatusOptionsDialog = false
+                            statusAudioPickerLauncher.launch("audio/*")
+                        }
+                    ) {
+                        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color(0xFFE91E63))
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Text("Áudio / Música", fontWeight = FontWeight.Medium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showStatusOptionsDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // DIALOG: Criar Status de Texto
+    if (showCreateTextStatusDialog) {
+        val colorOptions = listOf("#075E54", "#128C7E", "#7B1FA2", "#D81B60", "#1E88E5", "#263238")
+        AlertDialog(
+            onDismissRequest = { if (!isPostingStatus) showCreateTextStatusDialog = false },
+            title = { Text("Novo Status de Texto", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = newTextStatusContent,
+                        onValueChange = { newTextStatusContent = it },
+                        placeholder = { Text("Digite o que está pensando...") },
+                        maxLines = 6,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text("Cor de fundo:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        colorOptions.forEach { hex ->
+                            val color = try { Color(android.graphics.Color.parseColor(hex)) } catch (e: Exception) { Color.Black }
+                            Surface(
+                                shape = CircleShape,
+                                color = color,
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .border(
+                                        width = if (newStatusBgColor == hex) 3.dp else 0.dp,
+                                        color = if (newStatusBgColor == hex) Color.White else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { newStatusBgColor = hex }
+                            ) {}
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = newTextStatusContent.trim()
+                        if (trimmed.isNotBlank()) {
+                            scope.launch {
+                                isPostingStatus = true
+                                try {
+                                    val res = apiService.createStatus(
+                                        mapOf(
+                                            "contentType" to "text",
+                                            "content" to trimmed,
+                                            "backgroundColor" to newStatusBgColor
+                                        )
+                                    )
+                                    if (res.isSuccessful) {
+                                        showCreateTextStatusDialog = false
+                                        newTextStatusContent = ""
+                                        Toast.makeText(context, "Status publicado!", Toast.LENGTH_SHORT).show()
+                                        loadStatuses()
+                                    } else {
+                                        Toast.makeText(context, "Falha ao publicar status", Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                } finally {
+                                    isPostingStatus = false
+                                }
+                            }
+                        }
+                    },
+                    enabled = newTextStatusContent.isNotBlank() && !isPostingStatus,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
+                ) {
+                    Text(if (isPostingStatus) "Publicando..." else "Compartilhar", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateTextStatusDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // DIALOG: Preview e Legenda de Foto do Status
+    if (showCreateImageStatusDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isPostingStatus) showCreateImageStatusDialog = false },
+            title = { Text("Compartilhar Foto no Status", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.size(200.dp)
+                    ) {
+                        AsyncImage(
+                            model = newImageStatusBase64,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    OutlinedTextField(
+                        value = newImageStatusCaption,
+                        onValueChange = { newImageStatusCaption = it },
+                        placeholder = { Text("Adicionar legenda...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            isPostingStatus = true
+                            try {
+                                val res = apiService.createStatus(
+                                    mapOf(
+                                        "contentType" to "image",
+                                        "content" to newImageStatusBase64,
+                                        "caption" to newImageStatusCaption.trim()
+                                    )
+                                )
+                                if (res.isSuccessful) {
+                                    showCreateImageStatusDialog = false
+                                    newImageStatusBase64 = ""
+                                    newImageStatusCaption = ""
+                                    Toast.makeText(context, "Foto publicada no Status!", Toast.LENGTH_SHORT).show()
+                                    loadStatuses()
+                                } else {
+                                    Toast.makeText(context, "Falha ao publicar foto", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                            } finally {
+                                isPostingStatus = false
+                            }
+                        }
+                    },
+                    enabled = !isPostingStatus,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
+                ) {
+                    Text(if (isPostingStatus) "Enviando..." else "Compartilhar", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateImageStatusDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Full-Screen Status Story Viewer
+    if (activeStatusViewerList != null) {
+        FullScreenStatusViewer(
+            statuses = activeStatusViewerList!!,
+            currentUserId = currentUserId,
+            onDismiss = { activeStatusViewerList = null },
+            onDeleteStatus = { statusId ->
+                scope.launch {
+                    try {
+                        val res = apiService.deleteStatus(statusId)
+                        if (res.isSuccessful) {
+                            statusesList = statusesList.filter { it.id != statusId }
+                            activeStatusViewerList = activeStatusViewerList?.filter { it.id != statusId }
+                            if (activeStatusViewerList.isNullOrEmpty()) {
+                                activeStatusViewerList = null
+                            }
+                            Toast.makeText(context, "Status excluído", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {}
+                }
+            }
+        )
+    }
+
+    val myStatuses = remember(statusesList, currentUserId) {
+        statusesList.filter { it.userId == currentUserId }
+    }
+    val contactsStatuses = remember(statusesList, currentUserId) {
+        statusesList.filter { it.userId != currentUserId }
     }
 
     Scaffold(
@@ -161,7 +581,11 @@ fun HomeScreen(
                     }
                 },
                 actions = {
-                    if (selectedTab == 1 && callHistory.isNotEmpty()) {
+                    if (selectedTab == 1) {
+                        IconButton(onClick = { loadStatuses() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Atualizar Status")
+                        }
+                    } else if (selectedTab == 2 && callHistory.isNotEmpty()) {
                         IconButton(onClick = { showClearCallHistoryDialog = true }) {
                             Icon(Icons.Default.DeleteSweep, contentDescription = "Limpar Histórico", tint = DangerRed)
                         }
@@ -179,16 +603,48 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onNavigateToSearch,
-                containerColor = Color(0xFF25D366),
-                contentColor = Color.White,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(
-                    imageVector = if (selectedTab == 0) Icons.Default.AddComment else Icons.Default.Call,
-                    contentDescription = "Novo"
-                )
+            when (selectedTab) {
+                0 -> {
+                    FloatingActionButton(
+                        onClick = onNavigateToSearch,
+                        containerColor = Color(0xFF25D366),
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.AddComment, contentDescription = "Novo Chat")
+                    }
+                }
+                1 -> {
+                    Column(horizontalAlignment = Alignment.End) {
+                        SmallFloatingActionButton(
+                            onClick = { showCreateTextStatusDialog = true },
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            shape = CircleShape
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = "Status de Texto", modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        FloatingActionButton(
+                            onClick = { showStatusOptionsDialog = true },
+                            containerColor = Color(0xFF25D366),
+                            contentColor = Color.White,
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.CameraAlt, contentDescription = "Novo Status")
+                        }
+                    }
+                }
+                2 -> {
+                    FloatingActionButton(
+                        onClick = onNavigateToSearch,
+                        containerColor = Color(0xFF25D366),
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Call, contentDescription = "Nova Chamada")
+                    }
+                }
             }
         }
     ) { padding ->
@@ -197,7 +653,7 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Tabs: Conversas / Chamadas
+            // Tabs: Conversas / Atualizações / Chamadas
             TabRow(selectedTabIndex = selectedTab) {
                 Tab(
                     selected = selectedTab == 0,
@@ -214,15 +670,25 @@ fun HomeScreen(
                     onClick = { selectedTab = 1 },
                     text = {
                         Text(
-                            text = "Chamadas",
+                            text = "Atualizações",
                             fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                )
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    text = {
+                        Text(
+                            text = "Chamadas",
+                            fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal
                         )
                     }
                 )
             }
 
             if (selectedTab == 0) {
-                // Conversations Tab
+                // CONVERSATIONS TAB
                 if (conversations.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -284,8 +750,186 @@ fun HomeScreen(
                         }
                     }
                 }
+            } else if (selectedTab == 1) {
+                // STATUS / ATUALIZAÇÕES TAB
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    item {
+                        Text(
+                            text = "Status",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+
+                    // "Meu status" Row
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (myStatuses.isNotEmpty()) {
+                                        activeStatusViewerList = myStatuses
+                                    } else {
+                                        showStatusOptionsDialog = true
+                                    }
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier.size(56.dp),
+                                contentAlignment = Alignment.BottomEnd
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (myStatuses.isNotEmpty()) Color(0xFF25D366).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .then(
+                                            if (myStatuses.isNotEmpty()) Modifier.border(2.5.dp, Color(0xFF25D366), CircleShape).padding(2.dp)
+                                            else Modifier
+                                        )
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        if (!prefs.userAvatarUrl.isNullOrEmpty()) {
+                                            AsyncImage(
+                                                model = prefs.userAvatarUrl,
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                            )
+                                        } else {
+                                            Text(
+                                                text = (prefs.currentDisplayName ?: "V").take(1).uppercase(),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 22.sp,
+                                                color = BluePrimary
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color(0xFF25D366),
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clickable { showStatusOptionsDialog = true }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Adicionar status",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(16.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Meu status", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = if (myStatuses.isNotEmpty()) "${myStatuses.size} atualização(ões) ativa(s)" else "Toque para adicionar atualização",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Divider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    }
+
+                    // "Atualizações recentes"
+                    item {
+                        Text(
+                            text = "Atualizações recentes",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+
+                    if (contactsStatuses.isEmpty()) {
+                        item {
+                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Default.HistoryToggleOff,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Nenhuma atualização recente", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                                    Text("Os status dos seus contatos aparecerão aqui por 24h", color = MaterialTheme.colorScheme.outline, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    } else {
+                        val grouped = contactsStatuses.groupBy { it.userId }
+                        items(grouped.keys.toList(), key = { it }) { contactUserId ->
+                            val userStatuses = grouped[contactUserId] ?: emptyList()
+                            val latestStatus = userStatuses.last()
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { activeStatusViewerList = userStatuses }
+                                    .padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .border(2.5.dp, Color(0xFF25D366), CircleShape)
+                                        .padding(2.5.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        if (!latestStatus.avatarUrl.isNullOrEmpty()) {
+                                            AsyncImage(
+                                                model = latestStatus.avatarUrl,
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                            )
+                                        } else {
+                                            Text(
+                                                text = latestStatus.displayName.take(1).uppercase(),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 20.sp,
+                                                color = BluePrimary
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(16.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(latestStatus.displayName, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        formatRelativeTime(latestStatus.createdAt),
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Divider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), thickness = 0.5.dp)
+                        }
+                    }
+                }
             } else {
-                // Calls Tab
+                // CALLS TAB
                 if (callHistory.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -318,6 +962,269 @@ fun HomeScreen(
                                 }
                             )
                             Divider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), thickness = 0.5.dp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FullScreenStatusViewer(
+    statuses: List<StatusDto>,
+    currentUserId: String?,
+    onDismiss: () -> Unit,
+    onDeleteStatus: (String) -> Unit
+) {
+    if (statuses.isEmpty()) {
+        onDismiss()
+        return
+    }
+    var currentIndex by remember { mutableStateOf(0) }
+    var progress by remember { mutableStateOf(0f) }
+    var isPaused by remember { mutableStateOf(false) }
+
+    val currentStatus = statuses.getOrNull(currentIndex) ?: run {
+        onDismiss()
+        return
+    }
+
+    LaunchedEffect(currentIndex, isPaused) {
+        progress = 0f
+        val stepMs = 50L
+        val totalMs = 5000L
+        val steps = (totalMs / stepMs).toInt()
+        for (i in 1..steps) {
+            if (isPaused) {
+                while (isPaused) {
+                    delay(100)
+                }
+            }
+            delay(stepMs)
+            progress = i.toFloat() / steps
+        }
+        if (currentIndex < statuses.size - 1) {
+            currentIndex++
+        } else {
+            onDismiss()
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        val backgroundColor = remember(currentStatus) {
+            if (currentStatus.contentType == "text" && !currentStatus.backgroundColor.isNullOrBlank()) {
+                try {
+                    Color(android.graphics.Color.parseColor(currentStatus.backgroundColor))
+                } catch (e: Exception) {
+                    Color(0xFF075E54)
+                }
+            } else {
+                Color.Black
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(backgroundColor)
+        ) {
+            // Tap area: Left half previous, Right half next
+            Row(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(1f)
+                        .clickable {
+                            if (currentIndex > 0) {
+                                currentIndex--
+                            }
+                        }
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(1f)
+                        .clickable {
+                            if (currentIndex < statuses.size - 1) {
+                                currentIndex++
+                            } else {
+                                onDismiss()
+                            }
+                        }
+                )
+            }
+
+            // Main Content Centered
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(vertical = 80.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                when (currentStatus.contentType) {
+                    "text" -> {
+                        Text(
+                            text = currentStatus.content,
+                            color = Color.White,
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(32.dp)
+                        )
+                    }
+                    "image" -> {
+                        AsyncImage(
+                            model = currentStatus.content,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                    "audio" -> {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFF25D366).copy(alpha = 0.2f),
+                                modifier = Modifier.size(96.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.Audiotrack,
+                                        contentDescription = null,
+                                        tint = Color(0xFF25D366),
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Text(
+                                "Áudio de Status",
+                                color = Color.White,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (!currentStatus.caption.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    currentStatus.caption,
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    fontSize = 15.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Image Caption at bottom
+            if (currentStatus.contentType == "image" && !currentStatus.caption.isNullOrBlank()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = currentStatus.caption,
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            // Top Progress Bar & Header
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                // Segmented Progress Bars
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 24.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    statuses.forEachIndexed { idx, _ ->
+                        val segProgress = when {
+                            idx < currentIndex -> 1f
+                            idx == currentIndex -> progress
+                            else -> 0f
+                        }
+                        LinearProgressIndicator(
+                            progress = { segProgress },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(3.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = Color.White,
+                            trackColor = Color.White.copy(alpha = 0.3f)
+                        )
+                    }
+                }
+
+                // Header Info
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = Color.White)
+                    }
+
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.2f),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            if (!currentStatus.avatarUrl.isNullOrEmpty()) {
+                                AsyncImage(
+                                    model = currentStatus.avatarUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                )
+                            } else {
+                                Text(
+                                    text = currentStatus.displayName.take(1).uppercase(),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = currentStatus.displayName,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = formatRelativeTime(currentStatus.createdAt),
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    if (currentStatus.userId == currentUserId) {
+                        IconButton(onClick = { onDeleteStatus(currentStatus.id) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Apagar Status", tint = DangerRed)
                         }
                     }
                 }
@@ -448,7 +1355,7 @@ fun ConversationItem(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = conversation.unreadCount.toString(),
+                                text = if (conversation.unreadCount > 99) "99+" else conversation.unreadCount.toString(),
                                 color = Color.White,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
@@ -479,12 +1386,20 @@ fun CallHistoryItem(
             modifier = Modifier.size(48.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = call.contactDisplayName.take(1).uppercase(),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = BluePrimary
-                )
+                if (!call.contactAvatarUrl.isNullOrEmpty()) {
+                    AsyncImage(
+                        model = call.contactAvatarUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape)
+                    )
+                } else {
+                    Text(
+                        text = call.contactDisplayName.take(1).uppercase(),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = BluePrimary
+                    )
+                }
             }
         }
 
@@ -533,4 +1448,22 @@ private fun formatTimestamp(timestamp: Long): String {
         SimpleDateFormat("dd/MM", Locale.getDefault())
     }
     return sdf.format(Date(timestamp))
+}
+
+private fun formatRelativeTime(isoString: String): String {
+    return try {
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+        val cleanIso = if (isoString.contains(".")) isoString.substringBefore(".") else isoString.removeSuffix("Z")
+        val date = sdf.parse(cleanIso) ?: Date()
+        val diffMs = System.currentTimeMillis() - date.time
+        val minutes = diffMs / (60 * 1000)
+        when {
+            minutes < 1 -> "Agora mesmo"
+            minutes < 60 -> "há ${minutes}m"
+            minutes < 1440 -> "hoje às " + SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+            else -> SimpleDateFormat("dd/MM 'às' HH:mm", Locale.getDefault()).format(date)
+        }
+    } catch (e: Exception) {
+        "Recente"
+    }
 }

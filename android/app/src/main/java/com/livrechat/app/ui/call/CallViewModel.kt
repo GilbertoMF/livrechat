@@ -146,10 +146,9 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     }
 
     private fun startTimer() {
-        timerJob?.cancel()
+        if (timerJob?.isActive == true) return
         timerJob = viewModelScope.launch {
-            _durationSeconds.value = 0
-            while (_callState.value == CallState.CONNECTED) {
+            while (_callState.value == CallState.CONNECTED || _callState.value == CallState.RECONNECTING) {
                 delay(1000)
                 _durationSeconds.value++
             }

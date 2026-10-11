@@ -176,3 +176,18 @@ CREATE TABLE IF NOT EXISTS backup_metadata (
     checksum VARCHAR(64),
     last_backup_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 17. Status / Stories (24h ephemeral updates)
+CREATE TABLE IF NOT EXISTS statuses (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content_type VARCHAR(16) NOT NULL, -- 'text', 'image', 'audio', 'video'
+    content TEXT NOT NULL,
+    caption TEXT,
+    background_color VARCHAR(16),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP + INTERVAL '24 hours')
+);
+CREATE INDEX IF NOT EXISTS idx_statuses_user ON statuses(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_statuses_expires ON statuses(expires_at);
+

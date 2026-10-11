@@ -8,6 +8,7 @@ import { AuthController } from './modules/auth/auth.controller';
 import { UsersController } from './modules/users/users.controller';
 import { MessagesController } from './modules/messages/messages.controller';
 import { CallsController } from './modules/calls/calls.controller';
+import { StatusController } from './modules/status/status.controller';
 import { WebSocketManager } from './websocket/ws.server';
 
 const app = express();
@@ -86,6 +87,13 @@ app.get('/api/calls/ice-servers', authenticateToken, CallsController.getIceServe
 app.get('/api/calls/history', authenticateToken, CallsController.getCallHistory);
 app.post('/api/calls/record', authenticateToken, CallsController.recordCall);
 app.delete('/api/calls/history', authenticateToken, CallsController.clearCallHistory);
+
+// ==========================================
+// STATUS / STORIES ROUTES
+// ==========================================
+app.get('/api/status', authenticateToken, StatusController.getStatuses);
+app.post('/api/status', authenticateToken, StatusController.createStatus);
+app.delete('/api/status/:statusId', authenticateToken, StatusController.deleteStatus);
 
 // Attach WebSocket Manager
 export const wsManager = new WebSocketManager(server);

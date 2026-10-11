@@ -26,6 +26,7 @@ import com.livrechat.app.data.local.entity.ConversationEntity
 import com.livrechat.app.data.remote.model.AddContactRequest
 import com.livrechat.app.data.remote.model.UserDto
 import com.livrechat.app.ui.theme.BluePrimary
+import com.livrechat.app.ui.theme.DangerRed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,6 +63,7 @@ fun SearchContactScreen(
     var showAddContactDialog by remember { mutableStateOf(false) }
     var newContactUsername by remember { mutableStateOf("") }
     var isAddingContact by remember { mutableStateOf(false) }
+    var contactToDelete by remember { mutableStateOf<ContactUiModel?>(null) }
 
     fun loadContacts() {
         scope.launch {
@@ -101,22 +103,6 @@ fun SearchContactScreen(
                                 )
                             )
                         }
-                    }
-                }
-
-                // 3. Include users from local active conversations if not present
-                val convs = withContext(Dispatchers.IO) { db.conversationDao().getAllConversationsSync() }
-                convs.forEach { conv ->
-                    if (conv.otherUserId != currentUserId && list.none { it.userId == conv.otherUserId }) {
-                        list.add(
-                            ContactUiModel(
-                                userId = conv.otherUserId,
-                                displayName = conv.otherDisplayName,
-                                username = conv.otherUsername,
-                                avatarUrl = conv.otherAvatarUrl,
-                                bio = "Conversa ativa"
-                            )
-                        )
                     }
                 }
 
@@ -245,6 +231,47 @@ fun SearchContactScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showAddContactDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (contactToDelete != null) {
+        val target = contactToDelete!!
+        AlertDialog(
+            onDismissRequest = { contactToDelete = null },
+            title = { Text("Excluir contato?", fontWeight = FontWeight.Bold) },
+            text = { Text("Deseja realmente excluir ${target.displayName} da sua lista de contatos? O contato e a conversa local serão removidos.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val toDel = target
+                        contactToDelete = null
+                        scope.launch {
+                            try {
+                                apiService.removeContact(toDel.userId)
+                                withContext(Dispatchers.IO) {
+                                    db.contactDao().deleteContact(toDel.userId)
+                                    val conv = db.conversationDao().getConversationByUserId(toDel.userId)
+                                    if (conv != null) {
+                                        db.conversationDao().deleteConversation(conv.id)
+                                        db.messageDao().clearConversationMessages(conv.id)
+                                    }
+                                }
+                                contactsList = contactsList.filter { it.userId != toDel.userId }
+                                Toast.makeText(context, "Contato excluído com sucesso", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Erro ao excluir contato", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                ) {
+                    Text("Excluir", color = DangerRed, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { contactToDelete = null }) {
                     Text("Cancelar")
                 }
             }
@@ -439,7 +466,8 @@ fun SearchContactScreen(
                             targetUsername = contact.username,
                             avatarUrl = contact.avatarUrl
                         )
-                    }
+                    },
+                    onDeleteClick = if (!contact.isSelf) { { contactToDelete = contact } } else null
                 )
             }
 
@@ -517,7 +545,8 @@ fun ActionContactTile(
 @Composable
 fun ContactRowItem(
     contact: ContactUiModel,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDeleteClick: (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
@@ -564,6 +593,17 @@ fun ContactRowItem(
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+
+        if (!contact.isSelf && onDeleteClick != null) {
+            IconButton(onClick = onDeleteClick) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Excluir contato",
+                    tint = DangerRed.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

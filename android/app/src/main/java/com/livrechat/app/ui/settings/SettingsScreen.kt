@@ -3,8 +3,15 @@ package com.livrechat.app.ui.settings
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Build
+import android.util.Base64
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import java.io.ByteArrayOutputStream
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -77,6 +84,48 @@ fun SettingsScreen(
     var userRecoveryPhrase by remember { mutableStateOf<String?>(null) }
     var userPublicKey by remember { mutableStateOf<String?>(null) }
 
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val originalBitmap = BitmapFactory.decodeStream(inputStream)
+                    inputStream?.close()
+                    if (originalBitmap != null) {
+                        val maxDim = 512
+                        val width = originalBitmap.width
+                        val height = originalBitmap.height
+                        val scale = if (width > height) maxDim.toFloat() / width else maxDim.toFloat() / height
+                        val scaledBitmap = if (scale < 1f) {
+                            Bitmap.createScaledBitmap(
+                                originalBitmap,
+                                (width * scale).toInt().coerceAtLeast(1),
+                                (height * scale).toInt().coerceAtLeast(1),
+                                true
+                            )
+                        } else {
+                            originalBitmap
+                        }
+                        val baos = ByteArrayOutputStream()
+                        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+                        val bytes = baos.toByteArray()
+                        val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        val dataUri = "data:image/jpeg;base64,$base64"
+                        withContext(Dispatchers.Main) {
+                            newAvatarUrlInput = dataUri
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Erro ao carregar imagem da galeria", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val user = db.userDao().getCurrentUser()
@@ -98,31 +147,78 @@ fun SettingsScreen(
             },
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // Preview do Avatar
+                    // Preview do Avatar com botão da Galeria
                     Box(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = BluePrimary.copy(alpha = 0.2f),
-                            modifier = Modifier.size(72.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(92.dp)
+                                .clickable { galleryLauncher.launch("image/*") },
+                            contentAlignment = Alignment.BottomEnd
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                if (newAvatarUrlInput.isNotBlank()) {
-                                    AsyncImage(
-                                        model = newAvatarUrlInput,
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize().clip(CircleShape)
-                                    )
-                                } else {
-                                    Text(
-                                        text = newDisplayNameInput.take(1).uppercase(),
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 28.sp,
-                                        color = BluePrimary
+                            Surface(
+                                shape = CircleShape,
+                                color = BluePrimary.copy(alpha = 0.2f),
+                                modifier = Modifier.size(92.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    if (newAvatarUrlInput.isNotBlank()) {
+                                        AsyncImage(
+                                            model = newAvatarUrlInput,
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                        )
+                                    } else {
+                                        Text(
+                                            text = newDisplayNameInput.take(1).uppercase(),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 32.sp,
+                                            color = BluePrimary
+                                        )
+                                    }
+                                }
+                            }
+                            Surface(
+                                shape = CircleShape,
+                                color = BluePrimary,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.CameraAlt,
+                                        contentDescription = "Trocar Foto",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        OutlinedButton(
+                            onClick = { galleryLauncher.launch("image/*") },
+                            shape = RoundedCornerShape(20.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Escolher da Galeria", fontSize = 12.sp)
+                        }
+                        if (newAvatarUrlInput.isNotBlank()) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            TextButton(
+                                onClick = { newAvatarUrlInput = "" },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Text("Remover", color = DangerRed, fontSize = 12.sp)
                             }
                         }
                     }
@@ -669,6 +765,11 @@ fun SettingsScreen(
                         com.livrechat.app.service.LivreChatBackgroundService.stop(context)
                         connectionManager.disconnect()
                         prefs.clearAuth()
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                db.clearAllTables()
+                            } catch (e: Exception) {}
+                        }
                         onLogout()
                     }
                 ) {

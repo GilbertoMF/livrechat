@@ -135,3 +135,18 @@ data class ContactDto(
     val publicKey: String? = null,
     val bio: String = ""
 )
+
+data class StatusDto(
+    val id: String,
+    @SerializedName("user_id") val userId: String,
+    @SerializedName("display_name") val displayName: String,
+    val username: String,
+    @SerializedName("avatar_url") val avatarUrl: String? = null,
+    @SerializedName("content_type") val contentType: String,
+    val content: String,
+    val caption: String? = null,
+    @SerializedName("background_color") val backgroundColor: String? = null,
+    @SerializedName("created_at") val createdAt: String,
+    @SerializedName("expires_at") val expiresAt: String? = null
+)
+

@@ -50,6 +50,13 @@ class AuthViewModel : ViewModel() {
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
 
+                    val prevUserId = prefs.currentUserId
+                    if (prevUserId != null && prevUserId != body.user.id) {
+                        try {
+                            app.database.clearAllTables()
+                        } catch (e: Exception) {}
+                    }
+
                     // Save auth tokens
                     prefs.accessToken = body.tokens.accessToken
                     prefs.refreshToken = body.tokens.refreshToken
@@ -101,6 +108,13 @@ class AuthViewModel : ViewModel() {
 
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
+
+                    val prevUserId = prefs.currentUserId
+                    if (prevUserId != null && prevUserId != body.user.id) {
+                        try {
+                            app.database.clearAllTables()
+                        } catch (e: Exception) {}
+                    }
 
                     prefs.accessToken = body.tokens.accessToken
                     prefs.refreshToken = body.tokens.refreshToken

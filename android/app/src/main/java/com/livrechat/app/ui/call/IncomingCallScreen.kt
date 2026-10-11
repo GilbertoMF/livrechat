@@ -28,11 +28,15 @@ fun IncomingCallScreen(
 ) {
     val callInfo by viewModel.callInfo.collectAsState()
     val callState by viewModel.callState.collectAsState()
+    var hasNavigated by remember { mutableStateOf(false) }
 
     LaunchedEffect(callState) {
         if (callState == CallState.CONNECTED || callState == CallState.CONNECTING) {
-            onCallAnswered()
-        } else if (callState == CallState.ENDED || callState == CallState.IDLE) {
+            if (!hasNavigated) {
+                hasNavigated = true
+                onCallAnswered()
+            }
+        } else if ((callState == CallState.ENDED || callState == CallState.IDLE) && !hasNavigated) {
             onCallRejected()
         }
     }
@@ -117,8 +121,11 @@ fun IncomingCallScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     FloatingActionButton(
                         onClick = {
-                            viewModel.answerIncomingCall()
-                            onCallAnswered()
+                            if (!hasNavigated) {
+                                hasNavigated = true
+                                viewModel.answerIncomingCall()
+                                onCallAnswered()
+                            }
                         },
                         containerColor = SuccessGreen,
                         contentColor = Color.White,

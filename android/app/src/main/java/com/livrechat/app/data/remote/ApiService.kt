@@ -13,6 +13,7 @@ import com.livrechat.app.data.remote.model.RecoverRequest
 import com.livrechat.app.data.remote.model.RegisterRequest
 import com.livrechat.app.data.remote.model.RegisterResponse
 import com.livrechat.app.data.remote.model.SendMessageRequest
+import com.livrechat.app.data.remote.model.StatusDto
 import com.livrechat.app.data.remote.model.UserDto
 import retrofit2.Response
 import retrofit2.http.Body
@@ -102,4 +103,14 @@ interface ApiService {
 
     @GET("api/calls/history")
     suspend fun getCallHistory(): Response<List<CallHistoryDto>>
+
+    @GET("api/status")
+    suspend fun getStatuses(): Response<List<StatusDto>>
+
+    @POST("api/status")
+    suspend fun createStatus(@Body body: Map<String, String>): Response<StatusDto>
+
+    @DELETE("api/status/{statusId}")
+    suspend fun deleteStatus(@Path("statusId") statusId: String): Response<BaseResponse>
 }
+

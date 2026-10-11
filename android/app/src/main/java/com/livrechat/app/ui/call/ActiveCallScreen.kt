@@ -30,7 +30,7 @@ fun ActiveCallScreen(
     val durationSeconds by viewModel.durationSeconds.collectAsState()
 
     LaunchedEffect(callState) {
-        if (callState == CallState.ENDED || callState == CallState.IDLE) {
+        if (callState == CallState.ENDED) {
             onCallFinished()
         }
     }

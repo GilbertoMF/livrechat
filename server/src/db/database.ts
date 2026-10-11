@@ -121,6 +121,20 @@ export interface BackupMetadata {
   last_backup_at: string;
 }
 
+export interface StatusRecord {
+  id: string;
+  user_id: string;
+  display_name: string;
+  username: string;
+  avatar_url?: string;
+  content_type: 'text' | 'image' | 'audio' | 'video';
+  content: string;
+  caption?: string;
+  background_color?: string;
+  created_at: string;
+  expires_at: string;
+}
+
 class DatabaseService {
   private pgPool: Pool | null = null;
   private localDataFile: string;
@@ -138,6 +152,7 @@ class DatabaseService {
     reports: Report[];
     preferences: UserPreferences[];
     backup_metadata: BackupMetadata[];
+    statuses: StatusRecord[];
   };
 
   constructor() {
@@ -160,7 +175,8 @@ class DatabaseService {
       blocked_users: [],
       reports: [],
       preferences: [],
-      backup_metadata: []
+      backup_metadata: [],
+      statuses: []
     };
 
     this.loadFromLocal();
@@ -1484,6 +1500,101 @@ class DatabaseService {
     }
     return meta;
   }
+
+  // ==========================================
+  // STATUS / STORIES
+  // ==========================================
+  public async createStatus(status: StatusRecord): Promise<StatusRecord> {
+    this.memoryStore.statuses.push(status);
+    this.saveToLocal();
+
+    if (this.pgPool) {
+      try {
+        await this.ensureUserExists(status.user_id, status.username);
+        await this.pgPool.query(`
+          INSERT INTO statuses (id, user_id, content_type, content, caption, background_color, created_at, expires_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [
+          status.id,
+          status.user_id,
+          status.content_type,
+          status.content,
+          status.caption || null,
+          status.background_color || null,
+          status.created_at,
+          status.expires_at
+        ]);
+      } catch (e) {
+        console.warn('[Database] Erro PG createStatus:', e);
+      }
+    }
+    return status;
+  }
+
+  public async getActiveStatuses(userId: string): Promise<StatusRecord[]> {
+    const now = new Date().toISOString();
+
+    if (this.pgPool) {
+      try {
+        const query = `
+          SELECT s.*, u.username, up.display_name, up.avatar_url
+          FROM statuses s
+          JOIN users u ON u.id = s.user_id
+          LEFT JOIN user_profiles up ON up.user_id = s.user_id
+          WHERE s.expires_at > NOW()
+            AND (
+              s.user_id = $1
+              OR s.user_id IN (SELECT contact_user_id FROM contacts WHERE user_id = $1)
+              OR s.user_id IN (
+                SELECT cm2.user_id 
+                FROM conversation_members cm1 
+                JOIN conversation_members cm2 ON cm1.conversation_id = cm2.conversation_id 
+                WHERE cm1.user_id = $1
+              )
+            )
+          ORDER BY s.created_at ASC
+        `;
+        const res = await this.pgPool.query(query, [userId]);
+        return res.rows.map(r => ({
+          id: r.id,
+          user_id: r.user_id,
+          display_name: r.display_name || r.username,
+          username: r.username,
+          avatar_url: r.avatar_url,
+          content_type: r.content_type,
+          content: r.content,
+          caption: r.caption,
+          background_color: r.background_color,
+          created_at: r.created_at?.toISOString?.() || r.created_at,
+          expires_at: r.expires_at?.toISOString?.() || r.expires_at
+        }));
+      } catch (e) {
+        console.warn('[Database] Erro PG getActiveStatuses:', e);
+      }
+    }
+
+    // Fallback in-memory
+    const active = this.memoryStore.statuses.filter(s => s.expires_at > now);
+    return active.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
+  public async deleteStatus(statusId: string, userId: string): Promise<boolean> {
+    const idx = this.memoryStore.statuses.findIndex(s => s.id === statusId && s.user_id === userId);
+    if (idx >= 0) {
+      this.memoryStore.statuses.splice(idx, 1);
+      this.saveToLocal();
+    }
+
+    if (this.pgPool) {
+      try {
+        await this.pgPool.query('DELETE FROM statuses WHERE id = $1 AND user_id = $2', [statusId, userId]);
+      } catch (e) {
+        console.warn('[Database] Erro PG deleteStatus:', e);
+      }
+    }
+    return true;
+  }
 }
 
 export const db = new DatabaseService();
+

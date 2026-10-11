@@ -88,10 +88,13 @@ class WebRTCManager(
             .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
             .createPeerConnectionFactory()
 
-        // Default Google STUN servers
+        // Robust public STUN servers for NAT traversal
         iceServers.add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer())
         iceServers.add(PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer())
         iceServers.add(PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer())
+        iceServers.add(PeerConnection.IceServer.builder("stun:stun3.l.google.com:19302").createIceServer())
+        iceServers.add(PeerConnection.IceServer.builder("stun:stun4.l.google.com:19302").createIceServer())
+        iceServers.add(PeerConnection.IceServer.builder("stun:global.stun.twilio.com:3478").createIceServer())
     }
 
     fun setIceServers(servers: List<PeerConnection.IceServer>) {
@@ -123,7 +126,6 @@ class WebRTCManager(
 
     fun answerCall(remoteSdp: String) {
         isRemoteDescriptionSet = false
-        synchronized(pendingIceCandidates) { pendingIceCandidates.clear() }
         callback.onCallStateChanged(CallState.CONNECTING)
         setupPeerConnection()
         setRemoteDescription(SessionDescription(SessionDescription.Type.OFFER, remoteSdp)) {
@@ -136,6 +138,7 @@ class WebRTCManager(
     }
 
     private fun setupPeerConnection() {
+        enableVoIPAudioMode()
         createAudioTrack()
 
         val rtcConfig = PeerConnection.RTCConfiguration(iceServers).apply {
@@ -163,9 +166,14 @@ class WebRTCManager(
                         callback.onCallStateChanged(CallState.RECONNECTING)
                     }
                     PeerConnection.IceConnectionState.FAILED -> {
-                        Log.w(TAG, "ICE Connection Failed")
-                        callback.onCallStateChanged(CallState.ENDED)
-                        resetAudioMode()
+                        Log.w(TAG, "ICE Connection Failed, tentando restart...")
+                        try {
+                            peerConnection?.restartIce()
+                            callback.onCallStateChanged(CallState.RECONNECTING)
+                        } catch (e: Exception) {
+                            callback.onCallStateChanged(CallState.ENDED)
+                            resetAudioMode()
+                        }
                     }
                     PeerConnection.IceConnectionState.CLOSED -> {
                         callback.onCallStateChanged(CallState.ENDED)
@@ -300,8 +308,28 @@ class WebRTCManager(
     fun toggleSpeaker(): Boolean {
         isSpeakerOn = !isSpeakerOn
         audioManager.isSpeakerphoneOn = isSpeakerOn
-        if (isSpeakerOn && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            audioManager.clearCommunicationDevice()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                if (isSpeakerOn) {
+                    val speakerDevice = audioManager.availableCommunicationDevices.firstOrNull {
+                        it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                    }
+                    if (speakerDevice != null) {
+                        audioManager.setCommunicationDevice(speakerDevice)
+                    }
+                } else {
+                    val earpieceDevice = audioManager.availableCommunicationDevices.firstOrNull {
+                        it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+                    }
+                    if (earpieceDevice != null) {
+                        audioManager.setCommunicationDevice(earpieceDevice)
+                    } else {
+                        audioManager.clearCommunicationDevice()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Falha ao definir communication device: ${e.message}")
+            }
         }
         return isSpeakerOn
     }
