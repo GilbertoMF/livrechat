@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth';
 import { db, Message, MessageReceipt } from '../../db/database';
 import { v4 as uuidv4 } from 'uuid';
+import { WebSocketManager } from '../../websocket/ws.server';
 
 export class MessagesController {
   public static async getConversations(req: AuthRequest, res: Response) {
@@ -61,12 +62,16 @@ export class MessagesController {
 
       const messages = await db.getMessages(conversationId, limit, before);
 
-      // Attach receipts
+      // Attach receipts & consolidated status
       const enriched = await Promise.all(
         messages.map(async m => {
           const receipts = await db.getReceiptsForMessage(m.id);
+          const hasRead = receipts.some(r => r.status === 'read');
+          const hasDelivered = receipts.some(r => r.status === 'delivered');
+          const status = hasRead ? 'read' : (hasDelivered ? 'delivered' : 'sent');
           return {
             ...m,
+            status,
             receipts
           };
         })
@@ -166,6 +171,13 @@ export class MessagesController {
         user_id: userId,
         status: 'read',
         timestamp: new Date().toISOString()
+      });
+
+      WebSocketManager.getInstance()?.broadcast({
+        type: 'chat:receipt',
+        messageId,
+        status: 'read',
+        userId
       });
 
       return res.status(200).json({ success: true });

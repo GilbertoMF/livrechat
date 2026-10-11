@@ -78,6 +78,7 @@ data class MessageDto(
     @SerializedName("is_deleted") val isDeleted: Boolean = false,
     @SerializedName("is_edited") val isEdited: Boolean = false,
     @SerializedName("created_at") val createdAt: String,
+    val status: String? = null,
     val receipts: List<ReceiptDto>? = null
 )
 

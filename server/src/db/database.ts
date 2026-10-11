@@ -1077,6 +1077,50 @@ class DatabaseService {
     return filtered.slice(0, limit).reverse();
   }
 
+  public async getPendingMessagesForUser(userId: string): Promise<Message[]> {
+    if (this.pgPool) {
+      try {
+        const query = `
+          SELECT m.*
+          FROM messages m
+          JOIN conversation_members cm ON m.conversation_id = cm.conversation_id
+          WHERE cm.user_id = $1
+            AND m.sender_id != $1
+            AND m.is_deleted = false
+            AND NOT EXISTS (
+              SELECT 1 FROM message_receipts r
+              WHERE r.message_id = m.id AND r.user_id = $1 AND r.status IN ('delivered', 'read')
+            )
+          ORDER BY m.created_at ASC
+          LIMIT 100
+        `;
+        const res = await this.pgPool.query(query, [userId]);
+        return res.rows.map(m => ({
+          id: m.id,
+          conversation_id: m.conversation_id,
+          sender_id: m.sender_id,
+          content: m.content,
+          iv: m.iv || undefined,
+          message_type: m.message_type,
+          reply_to_id: m.reply_to_id || undefined,
+          is_deleted: m.is_deleted,
+          is_edited: m.is_edited,
+          created_at: m.created_at?.toISOString?.() || m.created_at,
+          updated_at: m.updated_at?.toISOString?.() || m.updated_at
+        }));
+      } catch (e) {
+        console.warn('[Database] Erro PG getPendingMessagesForUser:', e);
+      }
+    }
+
+    const userConvs = this.memoryStore.conversation_members.filter(cm => cm.user_id === userId).map(cm => cm.conversation_id);
+    return this.memoryStore.messages.filter(m => {
+      if (!userConvs.includes(m.conversation_id) || m.sender_id === userId || m.is_deleted) return false;
+      const hasReceipt = this.memoryStore.message_receipts.some(r => r.message_id === m.id && r.user_id === userId && (r.status === 'delivered' || r.status === 'read'));
+      return !hasReceipt;
+    });
+  }
+
   public async editMessage(messageId: string, senderId: string, newContent: string): Promise<Message | null> {
     const msg = this.memoryStore.messages.find(m => m.id === messageId && m.sender_id === senderId);
     if (msg) {

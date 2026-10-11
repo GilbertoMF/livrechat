@@ -464,6 +464,7 @@ fun SettingsScreen(
                 TextButton(
                     onClick = {
                         showLogoutDialog = false
+                        com.livrechat.app.service.LivreChatBackgroundService.stop(context)
                         connectionManager.disconnect()
                         prefs.clearAuth()
                         onLogout()

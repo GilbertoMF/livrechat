@@ -47,6 +47,10 @@ fun HomeScreen(
     val isConnected by chatViewModel.isConnected.collectAsState()
     val typingStatus by chatViewModel.typingStatus.collectAsState()
 
+    LaunchedEffect(isConnected) {
+        chatViewModel.syncConversations()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(

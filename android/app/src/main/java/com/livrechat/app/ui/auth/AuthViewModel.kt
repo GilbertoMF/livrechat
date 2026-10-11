@@ -69,6 +69,9 @@ class AuthViewModel : ViewModel() {
                     )
                     userDao.insertOrUpdate(userEntity)
 
+                    app.connectionManager.connect()
+                    com.livrechat.app.service.LivreChatBackgroundService.start(app)
+
                     _uiState.value = AuthUiState.RegisterSuccess(userEntity, body.recoveryKey)
                 } else {
                     val err = response.errorBody()?.string() ?: "Erro ao registrar usuário."
@@ -114,6 +117,9 @@ class AuthViewModel : ViewModel() {
                         isCurrentUser = true
                     )
                     userDao.insertOrUpdate(userEntity)
+
+                    app.connectionManager.connect()
+                    com.livrechat.app.service.LivreChatBackgroundService.start(app)
 
                     _uiState.value = AuthUiState.LoginSuccess(userEntity)
                 } else {

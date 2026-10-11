@@ -177,10 +177,26 @@ class ConnectionManager(
         }
     }
 
+    private val typingTimeoutJobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+
     override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean) {
+        typingTimeoutJobs[conversationId]?.cancel()
+
         val current = _typingStatus.value.toMutableMap()
         current[conversationId] = isTyping
         _typingStatus.value = current
+
+        if (isTyping) {
+            typingTimeoutJobs[conversationId] = scope.launch {
+                kotlinx.coroutines.delay(3500)
+                val updated = _typingStatus.value.toMutableMap()
+                updated[conversationId] = false
+                _typingStatus.value = updated
+                synchronized(listeners) {
+                    listeners.forEach { it.onTyping(conversationId, userId, username, false) }
+                }
+            }
+        }
 
         synchronized(listeners) {
             listeners.forEach { it.onTyping(conversationId, userId, username, isTyping) }

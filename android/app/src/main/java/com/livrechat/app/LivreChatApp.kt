@@ -58,6 +58,7 @@ class LivreChatApp : Application() {
 
         if (preferencesManager.isLoggedIn()) {
             connectionManager.connect()
+            com.livrechat.app.service.LivreChatBackgroundService.start(this)
         }
     }
 

@@ -59,6 +59,7 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var typingDebounceJob by remember { mutableStateOf<Job?>(null) }
+    var lastTypingSentTime by remember { mutableLongStateOf(0L) }
 
     var isRecording by remember { mutableStateOf(false) }
     var recordingSeconds by remember { mutableIntStateOf(0) }
@@ -226,15 +227,21 @@ fun ChatScreen(
                             onValueChange = {
                                 textInput = it
                                 if (it.isNotBlank()) {
-                                    viewModel.sendTyping(true, otherUserId)
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastTypingSentTime > 2000L) {
+                                        lastTypingSentTime = now
+                                        viewModel.sendTyping(true, otherUserId)
+                                    }
                                     typingDebounceJob?.cancel()
                                     typingDebounceJob = scope.launch {
-                                        delay(2500)
+                                        delay(3000)
                                         viewModel.sendTyping(false, otherUserId)
+                                        lastTypingSentTime = 0L
                                     }
                                 } else {
                                     typingDebounceJob?.cancel()
                                     viewModel.sendTyping(false, otherUserId)
+                                    lastTypingSentTime = 0L
                                 }
                             },
                             placeholder = { Text("Digite uma mensagem...", fontSize = 14.sp) },
@@ -253,6 +260,7 @@ fun ChatScreen(
                                         viewModel.sendMessage(conversationId, textInput.trim(), targetUserId = otherUserId)
                                         textInput = ""
                                         viewModel.sendTyping(false, otherUserId)
+                                        lastTypingSentTime = 0L
                                     }
                                 },
                                 colors = IconButtonDefaults.iconButtonColors(containerColor = BluePrimary),

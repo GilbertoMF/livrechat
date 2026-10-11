@@ -11,6 +11,8 @@ import com.livrechat.app.data.remote.WebSocketClient
 import com.livrechat.app.data.remote.WebSocketEventsListener
 import com.livrechat.app.data.remote.model.SendMessageRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -109,7 +111,25 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                 val res = apiService.getMessages(conversationId)
                 if (res.isSuccessful && res.body() != null) {
                     val myId = prefs.currentUserId ?: ""
-                    val entities = res.body()!!.map { dto ->
+                    val dtoList = res.body()!!
+                    val existingMap = db.messageDao().getMessagesForConversation(conversationId).associateBy { it.id }
+
+                    val entities = dtoList.map { dto ->
+                        val existing = existingMap[dto.id]
+                        val calculatedStatus: String = if (dto.senderId == myId) {
+                            when {
+                                existing?.status == "read" -> "read"
+                                dto.status == "read" -> "read"
+                                dto.receipts?.any { it.status == "read" } == true -> "read"
+                                existing?.status == "delivered" -> "delivered"
+                                dto.status == "delivered" -> "delivered"
+                                dto.receipts?.any { it.status == "delivered" } == true -> "delivered"
+                                else -> existing?.status ?: "sent"
+                            }
+                        } else {
+                            "read"
+                        }
+
                         MessageEntity(
                             id = dto.id,
                             conversationId = dto.conversationId,
@@ -118,7 +138,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             iv = dto.iv,
                             messageType = dto.messageType,
                             replyToId = dto.replyToId,
-                            status = if (dto.senderId == myId) "sent" else "read",
+                            status = calculatedStatus,
                             isOutgoing = dto.senderId == myId,
                             isEdited = dto.isEdited,
                             isDeleted = dto.isDeleted,
@@ -126,6 +146,17 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                         )
                     }
                     db.messageDao().insertAll(entities)
+
+                    // For every incoming message that wasn't previously marked read, send read receipts!
+                    for (dto in dtoList) {
+                        if (dto.senderId != myId) {
+                            val wasRead = existingMap[dto.id]?.status == "read" || dto.receipts?.any { it.status == "read" && it.userId == myId } == true
+                            if (!wasRead) {
+                                connectionManager.getClient().sendReceipt(dto.id, "read")
+                                try { apiService.markMessageRead(dto.id) } catch (e: Exception) {}
+                            }
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 // Offline fallback
@@ -263,8 +294,16 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         }
     }
 
+    private var contactTypingJob: Job? = null
+
     // WebSocketEventsListener implementations
-    override fun onConnected() {}
+    override fun onConnected() {
+        syncConversations()
+        val currentConv = _currentConversationId.value
+        if (!currentConv.isNullOrEmpty()) {
+            syncMessagesForConversation(currentConv)
+        }
+    }
     override fun onDisconnected() {}
 
     override fun onMessageReceived(message: MessageEntity) {
@@ -281,7 +320,14 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
 
     override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean) {
         if (_currentConversationId.value == conversationId) {
+            contactTypingJob?.cancel()
             _isContactTyping.value = isTyping
+            if (isTyping) {
+                contactTypingJob = viewModelScope.launch {
+                    delay(3500)
+                    _isContactTyping.value = false
+                }
+            }
         }
     }
 

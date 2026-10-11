@@ -13,11 +13,17 @@ export type AuthenticatedSocket = WebSocket & {
 };
 
 export class WebSocketManager {
+  private static instance: WebSocketManager | null = null;
+  public static getInstance(): WebSocketManager | null {
+    return WebSocketManager.instance;
+  }
+
   private wss: WebSocketServer;
   // Map userId to active sockets
   private userSockets: Map<string, Set<AuthenticatedSocket>> = new Map();
 
   constructor(server: HttpServer) {
+    WebSocketManager.instance = this;
     this.wss = new WebSocketServer({ server, path: '/ws' });
     this.setup();
   }
@@ -55,6 +61,38 @@ export class WebSocketManager {
           userId: ws.userId,
           timestamp: new Date().toISOString()
         }));
+
+        // Deliver pending offline messages immediately
+        (async () => {
+          try {
+            const pending = await db.getPendingMessagesForUser(ws.userId!);
+            for (const msg of pending) {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                  type: 'chat:message',
+                  message: msg
+                }));
+                // Record delivered receipt
+                await db.addReceipt({
+                  id: uuidv4(),
+                  message_id: msg.id,
+                  user_id: ws.userId!,
+                  status: 'delivered',
+                  timestamp: new Date().toISOString()
+                });
+                // Notify sender that message was delivered
+                this.sendToUser(msg.sender_id, {
+                  type: 'chat:receipt',
+                  messageId: msg.id,
+                  status: 'delivered',
+                  userId: ws.userId
+                });
+              }
+            }
+          } catch (err) {
+            console.error('[WS] Erro ao entregar mensagens pendentes:', err);
+          }
+        })();
 
         // Handle Heartbeat
         ws.on('pong', () => {
