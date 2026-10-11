@@ -308,9 +308,47 @@ class ConnectionManager(
         scope.launch {
             val db = LivreChatApp.instance.database
             db.messageDao().softDeleteMessage(messageId)
+            val lastMsg = db.messageDao().getMessagesForConversation(conversationId).lastOrNull()
+            if (lastMsg != null && lastMsg.id == messageId) {
+                db.conversationDao().updateLastMessage(conversationId, "🚫 Esta mensagem foi apagada", lastMsg.createdAt)
+            }
             synchronized(listeners) {
                 listeners.forEach { it.onMessageDeleted(messageId, conversationId) }
             }
+        }
+    }
+
+    override fun onMessageReaction(messageId: String, conversationId: String, userId: String, emoji: String, reactions: String?) {
+        scope.launch {
+            val db = LivreChatApp.instance.database
+            if (reactions != null) {
+                db.messageDao().updateReactions(messageId, reactions)
+            } else {
+                val msg = db.messageDao().getMessageById(messageId)
+                if (msg != null) {
+                    val current = com.livrechat.app.data.local.model.ReactionUtils.parseReactions(msg.reactions).toMutableList()
+                    val idx = current.indexOfFirst { it.userId == userId }
+                    if (idx >= 0) {
+                        if (current[idx].emoji == emoji) {
+                            current.removeAt(idx)
+                        } else {
+                            current[idx] = current[idx].copy(emoji = emoji)
+                        }
+                    } else {
+                        current.add(com.livrechat.app.data.local.model.MessageReaction(emoji, userId))
+                    }
+                    db.messageDao().updateReactions(messageId, com.livrechat.app.data.local.model.ReactionUtils.serializeReactions(current))
+                }
+            }
+            synchronized(listeners) {
+                listeners.forEach { it.onMessageReaction(messageId, conversationId, userId, emoji, reactions) }
+            }
+        }
+    }
+
+    override fun onStatusReaction(statusId: String, fromUserId: String, fromUsername: String, emoji: String) {
+        synchronized(listeners) {
+            listeners.forEach { it.onStatusReaction(statusId, fromUserId, fromUsername, emoji) }
         }
     }
 

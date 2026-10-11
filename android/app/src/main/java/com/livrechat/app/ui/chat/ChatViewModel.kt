@@ -478,12 +478,64 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         viewModelScope.launch(Dispatchers.IO) {
             if (deleteForEveryone) {
                 db.messageDao().softDeleteMessage(messageId)
+                val lastMsg = db.messageDao().getMessagesForConversation(conversationId).lastOrNull()
+                if (lastMsg != null && lastMsg.id == messageId) {
+                    db.conversationDao().updateLastMessage(conversationId, "🚫 Esta mensagem foi apagada", lastMsg.createdAt)
+                }
                 connectionManager.getClient().sendDeleteMessage(messageId, conversationId, target)
                 try {
                     apiService.deleteMessage(messageId)
                 } catch (e: Exception) {}
             } else {
                 db.messageDao().deletePermanently(messageId)
+            }
+        }
+    }
+
+    fun toggleReaction(messageId: String, emoji: String) {
+        val convId = _currentConversationId.value ?: return
+        val myId = prefs.currentUserId ?: return
+        val target = _currentOtherUserId.value
+        viewModelScope.launch(Dispatchers.IO) {
+            val msg = db.messageDao().getMessageById(messageId) ?: return@launch
+            val current = com.livrechat.app.data.local.model.ReactionUtils.parseReactions(msg.reactions).toMutableList()
+            val idx = current.indexOfFirst { it.userId == myId }
+            if (idx >= 0) {
+                if (current[idx].emoji == emoji) {
+                    current.removeAt(idx)
+                } else {
+                    current[idx] = current[idx].copy(emoji = emoji)
+                }
+            } else {
+                current.add(com.livrechat.app.data.local.model.MessageReaction(emoji, myId, prefs.currentDisplayName ?: prefs.currentUsername ?: "Você"))
+            }
+            val updatedJson = com.livrechat.app.data.local.model.ReactionUtils.serializeReactions(current)
+            db.messageDao().updateReactions(messageId, updatedJson)
+            connectionManager.getClient().sendReaction(messageId, convId, emoji, target)
+        }
+    }
+
+    fun sendSticker(conversationId: String, stickerContent: String, targetUserId: String? = null) {
+        sendMediaMessage(
+            conversationId = conversationId,
+            content = stickerContent,
+            messageType = "sticker",
+            caption = "Figurinha",
+            targetUserId = targetUserId
+        )
+    }
+
+    fun sendStatusReaction(statusId: String, authorId: String, emoji: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            connectionManager.getClient().sendStatusReaction(statusId, authorId, emoji)
+            val myId = prefs.currentUserId
+            if (myId != null && authorId.isNotBlank() && myId != authorId) {
+                val convId = if (myId < authorId) "conv_${myId}_${authorId}" else "conv_${authorId}_${myId}"
+                sendMessage(
+                    conversationId = convId,
+                    text = "Reagiu ao seu status: $emoji",
+                    targetUserId = authorId
+                )
             }
         }
     }

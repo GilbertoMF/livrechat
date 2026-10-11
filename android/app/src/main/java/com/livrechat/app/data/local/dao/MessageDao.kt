@@ -37,6 +37,9 @@ interface MessageDao {
     @Query("UPDATE messages SET content = 'Mensagem apagada', isDeleted = 1 WHERE id = :messageId")
     suspend fun softDeleteMessage(messageId: String)
 
+    @Query("UPDATE messages SET reactions = :reactions WHERE id = :messageId")
+    suspend fun updateReactions(messageId: String, reactions: String?)
+
     @Query("SELECT * FROM messages WHERE conversationId = :convId AND isOutgoing = 0 AND status != 'read'")
     suspend fun getUnreadIncomingMessages(convId: String): List<MessageEntity>
 

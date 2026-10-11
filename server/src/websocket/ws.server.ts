@@ -266,14 +266,59 @@ export class WebSocketManager {
       }
 
       case 'chat:delete': {
-        const { messageId, conversationId, deleteForEveryone } = event;
-        if (deleteForEveryone) {
-          await db.deleteMessage(messageId, senderId);
-          this.broadcast({
+        const { messageId, conversationId, targetUserId } = event;
+        await db.deleteMessage(messageId, senderId);
+        
+        let members = await db.getConversationMembers(conversationId);
+        if (targetUserId && !members.includes(targetUserId)) {
+          members.push(targetUserId);
+        }
+        for (const memberId of members) {
+          this.sendToUser(memberId, {
             type: 'chat:delete',
             messageId,
             conversationId,
             deleteForEveryone: true
+          });
+        }
+        this.broadcast({
+          type: 'chat:delete',
+          messageId,
+          conversationId,
+          deleteForEveryone: true
+        });
+        break;
+      }
+
+      case 'chat:reaction': {
+        const { messageId, conversationId, emoji, targetUserId } = event;
+        const reactionsStr = await db.addOrToggleReaction(messageId, senderId, emoji);
+        let members = await db.getConversationMembers(conversationId);
+        if (targetUserId && !members.includes(targetUserId)) {
+          members.push(targetUserId);
+        }
+        for (const memberId of members) {
+          this.sendToUser(memberId, {
+            type: 'chat:reaction',
+            messageId,
+            conversationId,
+            userId: senderId,
+            emoji,
+            reactions: reactionsStr
+          });
+        }
+        break;
+      }
+
+      case 'status:reaction': {
+        const { statusId, authorId, emoji } = event;
+        if (authorId) {
+          this.sendToUser(authorId, {
+            type: 'status:reaction',
+            statusId,
+            fromUserId: senderId,
+            fromUsername: senderWs.username,
+            emoji
           });
         }
         break;

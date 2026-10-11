@@ -18,6 +18,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import coil.compose.AsyncImage
+import com.livrechat.app.data.local.model.ReactionUtils
+import com.livrechat.app.ui.camera.CustomCameraDialog
+import com.livrechat.app.ui.chat.EmojiStickerBottomSheet
+import com.livrechat.app.ui.chat.MessageActionMenuDialog
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -126,9 +144,55 @@ fun ChatScreen(
         }
     }
 
+    var initialScrollCompleted by remember { mutableStateOf(false) }
+    var unreadBelowCount by remember { mutableIntStateOf(0) }
+    var showScrollToBottomButton by remember { mutableStateOf(false) }
+
+    val isNearBottom by remember {
+        derivedStateOf {
+            val totalItems = messages.size
+            if (totalItems <= 1) return@derivedStateOf true
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisible >= totalItems - 2
+        }
+    }
+
+    LaunchedEffect(isNearBottom) {
+        if (isNearBottom) {
+            showScrollToBottomButton = false
+            unreadBelowCount = 0
+        }
+    }
+
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+        if (messages.isEmpty()) return@LaunchedEffect
+
+        if (!initialScrollCompleted) {
+            val firstUnreadIndex = messages.indexOfFirst { !it.isOutgoing && it.status != "read" }
+            if (firstUnreadIndex > 0) {
+                listState.scrollToItem(firstUnreadIndex)
+                showScrollToBottomButton = true
+                unreadBelowCount = messages.size - firstUnreadIndex
+            } else {
+                listState.scrollToItem(messages.size - 1)
+            }
+            initialScrollCompleted = true
+        } else {
+            val lastMsg = messages.lastOrNull()
+            if (lastMsg?.isOutgoing == true) {
+                listState.animateScrollToItem(messages.size - 1)
+                showScrollToBottomButton = false
+                unreadBelowCount = 0
+            } else {
+                if (isNearBottom) {
+                    listState.animateScrollToItem(messages.size - 1)
+                    showScrollToBottomButton = false
+                    unreadBelowCount = 0
+                } else {
+                    unreadBelowCount++
+                    showScrollToBottomButton = true
+                }
+            }
         }
     }
 
@@ -143,6 +207,10 @@ fun ChatScreen(
     var showContactProfile by remember { mutableStateOf(false) }
     var showCryptoInfoDialog by remember { mutableStateOf(false) }
     var selectedMessageForAction by remember { mutableStateOf<MessageEntity?>(null) }
+    var messageActionTarget by remember { mutableStateOf<MessageEntity?>(null) }
+    var replyingToMessage by remember { mutableStateOf<MessageEntity?>(null) }
+    var showCameraDialog by remember { mutableStateOf(false) }
+    var showEmojiStickerSheet by remember { mutableStateOf(false) }
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var viewingImageBase64 by remember { mutableStateOf<String?>(null) }
 
@@ -556,7 +624,60 @@ fun ChatScreen(
                 shadowElevation = 8.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                if (isRecording) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Quoted message preview if replying
+                    if (replyingToMessage != null) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(4.dp)
+                                        .height(36.dp)
+                                        .background(BluePrimary, RoundedCornerShape(2.dp))
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (replyingToMessage!!.isOutgoing) "Você" else otherDisplayName,
+                                        color = BluePrimary,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        text = when (replyingToMessage!!.messageType) {
+                                            "audio" -> "🎤 Mensagem de voz"
+                                            "image" -> "📷 Foto"
+                                            "video" -> "🎥 Vídeo"
+                                            "sticker" -> "📑 Figurinha"
+                                            "file" -> "📄 Documento"
+                                            else -> replyingToMessage!!.content
+                                        },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { replyingToMessage = null },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Cancelar resposta", modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    if (isRecording) {
                     // Audio Recording Mode
                     Row(
                         modifier = Modifier
@@ -692,6 +813,15 @@ fun ChatScreen(
                                 }
                             },
                             placeholder = { Text("Digite uma mensagem...", fontSize = 14.sp) },
+                            leadingIcon = {
+                                IconButton(onClick = { showEmojiStickerSheet = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.SentimentSatisfied,
+                                        contentDescription = "Emojis e Figurinhas",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
                             trailingIcon = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     IconButton(onClick = { showAttachmentSheet = true }) {
@@ -702,7 +832,7 @@ fun ChatScreen(
                                         )
                                     }
                                     if (textInput.isBlank()) {
-                                        IconButton(onClick = { takePhotoLauncher.launch(null) }) {
+                                        IconButton(onClick = { showCameraDialog = true }) {
                                             Icon(
                                                 imageVector = Icons.Default.CameraAlt,
                                                 contentDescription = "Câmera",
@@ -724,8 +854,15 @@ fun ChatScreen(
                                 onClick = {
                                     if (textInput.isNotBlank()) {
                                         typingDebounceJob?.cancel()
-                                        viewModel.sendMessage(conversationId, textInput.trim(), targetUserId = otherUserId)
+                                        val replyId = replyingToMessage?.id
+                                        viewModel.sendMessage(
+                                            conversationId = conversationId,
+                                            text = textInput.trim(),
+                                            replyToId = replyId,
+                                            targetUserId = otherUserId
+                                        )
                                         textInput = ""
+                                        replyingToMessage = null
                                         viewModel.sendTyping(false, otherUserId)
                                         lastTypingSentTime = 0L
                                     }
@@ -779,22 +916,73 @@ fun ChatScreen(
                 }
             }
         }
+        }
     ) { padding ->
-        LazyColumn(
-            state = listState,
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(messages, key = { it.id }) { message ->
-                MessageBubble(
-                    message = message,
-                    audioPlayerHelper = audioPlayerHelper,
-                    onLongPress = { selectedMessageForAction = it },
-                    onImageClick = { viewingImageBase64 = it }
-                )
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(messages, key = { it.id }) { message ->
+                    MessageBubble(
+                        message = message,
+                        audioPlayerHelper = audioPlayerHelper,
+                        onLongPress = { messageActionTarget = it },
+                        onSwipeToReply = { replyingToMessage = it },
+                        onReactionClick = { viewModel.toggleReaction(it.id, "❤️") },
+                        onImageClick = { viewingImageBase64 = it }
+                    )
+                }
+            }
+
+            // Floating "Scroll to Bottom" button when user scrolled up and new messages exist
+            AnimatedVisibility(
+                visible = showScrollToBottomButton,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut(),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp)
+            ) {
+                SmallFloatingActionButton(
+                    onClick = {
+                        scope.launch {
+                            listState.animateScrollToItem(messages.size - 1)
+                            showScrollToBottomButton = false
+                            unreadBelowCount = 0
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = BluePrimary,
+                    shape = CircleShape,
+                    elevation = FloatingActionButtonDefaults.elevation(6.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Descer para as novas mensagens",
+                            modifier = Modifier.size(24.dp)
+                        )
+                        if (unreadBelowCount > 0) {
+                            Badge(
+                                containerColor = BluePrimary,
+                                contentColor = Color.White,
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 6.dp, y = (-6).dp)
+                            ) {
+                                Text(text = "$unreadBelowCount", fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -836,7 +1024,7 @@ fun ChatScreen(
                         color = Color(0xFFE91E63)
                     ) {
                         showAttachmentSheet = false
-                        takePhotoLauncher.launch(null)
+                        showCameraDialog = true
                     }
 
                     AttachmentItem(
@@ -881,6 +1069,86 @@ fun ChatScreen(
         }
     }
 
+    if (showCameraDialog) {
+        CustomCameraDialog(
+            onDismiss = { showCameraDialog = false },
+            onMediaCaptured = { file, mediaType, caption ->
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        val bytes = file.readBytes()
+                        val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        val dataUri = "data:image/jpeg;base64,$b64"
+                        viewModel.sendMediaMessage(
+                            conversationId = conversationId,
+                            content = file.absolutePath,
+                            networkPayload = dataUri,
+                            messageType = "image",
+                            caption = caption.ifBlank { null },
+                            targetUserId = otherUserId
+                        )
+                    } catch (e: Exception) {
+                        Log.e("ChatScreen", "Erro ao enviar foto da câmera", e)
+                    }
+                }
+            }
+        )
+    }
+
+    if (showEmojiStickerSheet) {
+        EmojiStickerBottomSheet(
+            onDismiss = { showEmojiStickerSheet = false },
+            onEmojiSelected = { emoji ->
+                textInput += emoji
+            },
+            onSendSticker = { stickerContent ->
+                viewModel.sendSticker(conversationId, stickerContent, targetUserId = otherUserId)
+            }
+        )
+    }
+
+    if (messageActionTarget != null) {
+        val target = messageActionTarget!!
+        MessageActionMenuDialog(
+            message = target,
+            onDismiss = { messageActionTarget = null },
+            onReact = { emoji ->
+                viewModel.toggleReaction(target.id, emoji)
+                messageActionTarget = null
+            },
+            onReply = {
+                replyingToMessage = target
+                messageActionTarget = null
+            },
+            onForward = {
+                messageActionTarget = null
+                try {
+                    val sendIntent = Intent().apply {
+                        action = Intent.ACTION_SEND
+                        putExtra(Intent.EXTRA_TEXT, target.content)
+                        type = "text/plain"
+                    }
+                    context.startActivity(Intent.createChooser(sendIntent, "Encaminhar via"))
+                } catch (e: Exception) {}
+            },
+            onDelete = {
+                selectedMessageForAction = target
+                messageActionTarget = null
+            },
+            onStar = {
+                Toast.makeText(context, "Mensagem favoritada ⭐", Toast.LENGTH_SHORT).show()
+                messageActionTarget = null
+            },
+            onPin = {
+                Toast.makeText(context, "Mensagem fixada 📌", Toast.LENGTH_SHORT).show()
+                messageActionTarget = null
+            },
+            onInfo = {
+                showCryptoInfoDialog = true
+                messageActionTarget = null
+            }
+        )
+    }
+
     if (viewingImageBase64 != null) {
         FullscreenImageViewerDialog(
             base64Content = viewingImageBase64!!,
@@ -895,102 +1163,285 @@ fun MessageBubble(
     message: MessageEntity,
     audioPlayerHelper: AudioPlayerHelper,
     onLongPress: (MessageEntity) -> Unit,
+    onSwipeToReply: (MessageEntity) -> Unit,
+    onReactionClick: (MessageEntity) -> Unit,
     onImageClick: (String) -> Unit
 ) {
     val isOutgoing = message.isOutgoing
     val alignment = if (isOutgoing) Alignment.End else Alignment.Start
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = alignment
-    ) {
-        Surface(
-            shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomStart = if (isOutgoing) 16.dp else 4.dp,
-                bottomEnd = if (isOutgoing) 4.dp else 16.dp
-            ),
-            color = if (isOutgoing) BluePrimary else MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier
-                .widthIn(max = 295.dp)
-                .combinedClickable(
-                    onClick = {},
-                    onLongClick = { onLongPress(message) }
-                )
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                if (message.isDeleted) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Block,
-                            contentDescription = null,
-                            tint = if (isOutgoing) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Esta mensagem foi apagada",
-                            fontStyle = FontStyle.Italic,
-                            color = if (isOutgoing) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            fontSize = 14.sp
-                        )
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val animatedOffset by animateFloatAsState(
+        targetValue = dragOffset,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "swipe_reply"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(message.id) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (dragOffset > 55f) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onSwipeToReply(message)
+                        }
+                        dragOffset = 0f
+                    },
+                    onDragCancel = { dragOffset = 0f },
+                    onHorizontalDrag = { _, dragAmount ->
+                        if (dragAmount > 0 || dragOffset > 0) {
+                            dragOffset = (dragOffset + dragAmount * 0.6f).coerceIn(0f, 100f)
+                        }
                     }
-                } else if (message.messageType == "audio") {
-                    AudioMessageBubbleContent(
+                )
+            }
+    ) {
+        // Reply circle icon appears on left while dragging right
+        if (animatedOffset > 8f) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .align(Alignment.CenterStart)
+                    .offset(x = (animatedOffset * 0.35f - 18f).dp)
+                    .clip(CircleShape)
+                    .background(BluePrimary.copy(alpha = (animatedOffset / 55f).coerceIn(0.2f, 1f))),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Reply,
+                    contentDescription = "Responder",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset(x = animatedOffset.dp),
+            horizontalAlignment = alignment
+        ) {
+            if (message.messageType == "sticker") {
+                // Sticker without speech bubble container
+                Column(
+                    modifier = Modifier
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = { onLongPress(message) }
+                        )
+                ) {
+                    StickerMessageBubbleContent(
                         message = message,
-                        audioPlayerHelper = audioPlayerHelper,
                         isOutgoing = isOutgoing
                     )
-                } else if (message.messageType == "image" || message.content.startsWith("data:image")) {
-                    ImageMessageBubbleContent(
-                        message = message,
-                        isOutgoing = isOutgoing,
-                        onImageClick = { onImageClick(message.content) }
-                    )
-                } else if (message.messageType == "video" || message.content.startsWith("data:video")) {
-                    VideoMessageBubbleContent(
-                        message = message,
-                        isOutgoing = isOutgoing,
-                        context = context
-                    )
-                } else if (message.messageType == "file" || message.content.startsWith("data:application")) {
-                    FileMessageBubbleContent(
-                        message = message,
-                        isOutgoing = isOutgoing,
-                        context = context
-                    )
-                } else {
-                    Text(
-                        text = message.content,
-                        color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 15.sp
-                    )
+                    Row(
+                        modifier = Modifier.align(Alignment.End).padding(end = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.createdAt)),
+                            color = OfflineGray,
+                            fontSize = 11.sp
+                        )
+                        if (isOutgoing && !message.isDeleted) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            MessageStatusIcon(status = message.status)
+                        }
+                    }
                 }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.align(Alignment.End),
-                    verticalAlignment = Alignment.CenterVertically
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(
+                        topStart = 16.dp,
+                        topEnd = 16.dp,
+                        bottomStart = if (isOutgoing) 16.dp else 4.dp,
+                        bottomEnd = if (isOutgoing) 4.dp else 16.dp
+                    ),
+                    color = if (isOutgoing) BluePrimary else MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .widthIn(max = 295.dp)
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = { onLongPress(message) }
+                        )
                 ) {
-                    Text(
-                        text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.createdAt)),
-                        color = if (isOutgoing) Color.White.copy(alpha = 0.7f) else OfflineGray,
-                        fontSize = 11.sp
-                    )
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        // Render quoted reply banner inside bubble if replying
+                        if (!message.replyToContent.isNullOrBlank() || message.replyToId != null) {
+                            Surface(
+                                color = if (isOutgoing) Color.Black.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(3.dp)
+                                            .height(28.dp)
+                                            .background(if (isOutgoing) Color.White else BluePrimary, RoundedCornerShape(2.dp))
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "Resposta",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = if (isOutgoing) Color.White.copy(alpha = 0.9f) else BluePrimary
+                                        )
+                                        Text(
+                                            text = message.replyToContent ?: "Mensagem respondida",
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            color = if (isOutgoing) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
 
-                    if (isOutgoing && !message.isDeleted) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        MessageStatusIcon(status = message.status)
+                        if (message.isDeleted) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Block,
+                                    contentDescription = null,
+                                    tint = if (isOutgoing) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Esta mensagem foi apagada",
+                                    fontStyle = FontStyle.Italic,
+                                    color = if (isOutgoing) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    fontSize = 14.sp
+                                )
+                            }
+                        } else if (message.messageType == "audio") {
+                            AudioMessageBubbleContent(
+                                message = message,
+                                audioPlayerHelper = audioPlayerHelper,
+                                isOutgoing = isOutgoing
+                            )
+                        } else if (message.messageType == "image" || message.content.startsWith("data:image")) {
+                            ImageMessageBubbleContent(
+                                message = message,
+                                isOutgoing = isOutgoing,
+                                onImageClick = { onImageClick(message.content) }
+                            )
+                        } else if (message.messageType == "video" || message.content.startsWith("data:video")) {
+                            VideoMessageBubbleContent(
+                                message = message,
+                                isOutgoing = isOutgoing,
+                                context = context
+                            )
+                        } else if (message.messageType == "file" || message.content.startsWith("data:application")) {
+                            FileMessageBubbleContent(
+                                message = message,
+                                isOutgoing = isOutgoing,
+                                context = context
+                            )
+                        } else {
+                            Text(
+                                text = message.content,
+                                color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 15.sp
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Row(
+                            modifier = Modifier.align(Alignment.End),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.createdAt)),
+                                color = if (isOutgoing) Color.White.copy(alpha = 0.7f) else OfflineGray,
+                                fontSize = 11.sp
+                            )
+
+                            if (isOutgoing && !message.isDeleted) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                MessageStatusIcon(status = message.status)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Floating Reactions Pill attached to bottom corner of bubble
+            val reactions = remember(message.reactions) {
+                ReactionUtils.parseReactions(message.reactions)
+            }
+            if (reactions.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 4.dp,
+                    tonalElevation = 4.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
+                    modifier = Modifier
+                        .offset(y = (-6).dp)
+                        .padding(horizontal = 4.dp)
+                        .clickable { onReactionClick(message) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        val uniqueEmojis = reactions.map { it.emoji }.distinct()
+                        Text(text = uniqueEmojis.joinToString(""), fontSize = 13.sp)
+                        if (reactions.size > 1) {
+                            Text(
+                                text = "${reactions.size}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun StickerMessageBubbleContent(
+    message: MessageEntity,
+    isOutgoing: Boolean
+) {
+    val model = if (message.content.startsWith("http") || message.content.startsWith("data:")) {
+        message.content
+    } else {
+        File(message.content)
+    }
+
+    Box(
+        modifier = Modifier
+            .size(140.dp)
+            .padding(4.dp)
+    ) {
+        AsyncImage(
+            model = model,
+            contentDescription = "Figurinha",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 

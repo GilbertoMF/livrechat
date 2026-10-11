@@ -20,6 +20,7 @@ data class MessageEntity(
     val messageType: String = "text",
     val replyToId: String? = null,
     val replyToContent: String? = null,
+    val reactions: String? = null,
     val status: String = "sent", // sending, sent, delivered, read, failed
     val isOutgoing: Boolean,
     val isEdited: Boolean = false,

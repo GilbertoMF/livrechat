@@ -55,6 +55,7 @@ import com.livrechat.app.data.local.entity.ConversationEntity
 import com.livrechat.app.data.remote.model.StatusDto
 import com.livrechat.app.ui.call.CallViewModel
 import com.livrechat.app.ui.chat.ChatViewModel
+import com.livrechat.app.ui.camera.CustomCameraDialog
 import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
 import com.livrechat.app.ui.theme.SuccessGreen
@@ -104,6 +105,7 @@ fun HomeScreen(
     var statusesList by remember { mutableStateOf<List<StatusDto>>(emptyList()) }
     var activeStatusViewerList by remember { mutableStateOf<List<StatusDto>?>(null) }
     var showStatusOptionsDialog by remember { mutableStateOf(false) }
+    var showStatusCameraDialog by remember { mutableStateOf(false) }
     var showCreateTextStatusDialog by remember { mutableStateOf(false) }
     var showCreateImageStatusDialog by remember { mutableStateOf(false) }
     var newTextStatusContent by remember { mutableStateOf("") }
@@ -293,28 +295,7 @@ fun HomeScreen(
     }
 
     fun launchStatusCamera() {
-        try {
-            val file = File(context.cacheDir, "status_cam_${System.currentTimeMillis()}.jpg")
-            tempStatusCameraFile = file
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file
-            )
-            tempStatusCameraUri = uri
-            val hasPermission = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.CAMERA
-            ) == PackageManager.PERMISSION_GRANTED
-
-            if (hasPermission) {
-                statusCameraLauncher.launch(uri)
-            } else {
-                statusCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-            }
-        } catch (e: Exception) {
-            Toast.makeText(context, "Erro ao abrir câmera: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
+        showStatusCameraDialog = true
     }
 
     // Status Audio Picker (Estilo WhatsApp)
@@ -1193,6 +1174,42 @@ fun HomeScreen(
                         }
                     } catch (e: Exception) {}
                 }
+            },
+            onReactToStatus = { statusId, authorId, emoji ->
+                chatViewModel.sendStatusReaction(statusId, authorId, emoji)
+            }
+        )
+    }
+
+    if (showStatusCameraDialog) {
+        CustomCameraDialog(
+            onDismiss = { showStatusCameraDialog = false },
+            onMediaCaptured = { file, mediaType, caption ->
+                showStatusCameraDialog = false
+                scope.launch {
+                    try {
+                        val bytes = withContext(Dispatchers.IO) { file.readBytes() }
+                        val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        val dataUri = "data:image/jpeg;base64,$b64"
+                        val res = apiService.createStatus(
+                            mapOf(
+                                "contentType" to "image",
+                                "content" to dataUri,
+                                "caption" to caption.trim(),
+                                "avatarUrl" to (prefs.userAvatarUrl ?: ""),
+                                "displayName" to (prefs.currentDisplayName ?: prefs.currentUsername ?: "Usuário")
+                            )
+                        )
+                        if (res.isSuccessful) {
+                            Toast.makeText(context, "Foto publicada no Status!", Toast.LENGTH_SHORT).show()
+                            loadStatuses()
+                        } else {
+                            Toast.makeText(context, "Falha ao publicar foto", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Erro ao publicar: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         )
     }
@@ -1274,7 +1291,7 @@ fun HomeScreen(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         FloatingActionButton(
-                            onClick = { showStatusOptionsDialog = true },
+                            onClick = { showStatusCameraDialog = true },
                             containerColor = Color(0xFF25D366),
                             contentColor = Color.White,
                             shape = RoundedCornerShape(16.dp)
@@ -1501,7 +1518,7 @@ fun HomeScreen(
                                     IconButton(onClick = { showCreateTextStatusDialog = true }) {
                                         Icon(Icons.Default.Edit, contentDescription = "Texto", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    IconButton(onClick = { showStatusOptionsDialog = true }) {
+                                    IconButton(onClick = { showStatusCameraDialog = true }) {
                                         Icon(Icons.Default.CameraAlt, contentDescription = "Câmera", tint = MaterialTheme.colorScheme.primary)
                                     }
                                 }
@@ -1689,7 +1706,8 @@ fun FullScreenStatusViewer(
     currentUserId: String?,
     userAvatarUrl: String? = null,
     onDismiss: () -> Unit,
-    onDeleteStatus: (String) -> Unit
+    onDeleteStatus: (String) -> Unit,
+    onReactToStatus: ((statusId: String, authorId: String, emoji: String) -> Unit)? = null
 ) {
     if (statuses.isEmpty()) {
         onDismiss()
@@ -2040,16 +2058,84 @@ fun FullScreenStatusViewer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
+                        .padding(bottom = if (currentStatus.userId != currentUserId) 80.dp else 16.dp)
                         .background(Color.Black.copy(alpha = 0.6f))
-                        .padding(16.dp),
+                        .padding(12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = currentStatus.caption,
                         color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center
                     )
+                }
+            }
+
+            // Quick Status Reaction Bar at bottom (when viewing someone else's status)
+            if (currentStatus.userId != currentUserId) {
+                var reactionSentEmoji by remember(currentStatus.id) { mutableStateOf<String?>(null) }
+
+                LaunchedEffect(reactionSentEmoji) {
+                    if (reactionSentEmoji != null) {
+                        delay(1200)
+                        reactionSentEmoji = null
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 16.dp, vertical = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (reactionSentEmoji != null) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.85f),
+                            border = BorderStroke(1.dp, Color(0xFF25D366)),
+                            modifier = Modifier.padding(bottom = 10.dp)
+                        ) {
+                            Text(
+                                text = "Reação enviada $reactionSentEmoji",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.Black.copy(alpha = 0.65f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+                        shadowElevation = 8.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            val reactions = listOf("❤️", "😂", "😮", "😢", "👏", "🔥")
+                            reactions.forEach { emoji ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .clickable {
+                                            reactionSentEmoji = emoji
+                                            onReactToStatus?.invoke(currentStatus.id, currentStatus.userId, emoji)
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(text = emoji, fontSize = 20.sp)
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

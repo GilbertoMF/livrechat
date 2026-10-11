@@ -65,6 +65,7 @@ export interface Message {
   reply_to_id?: string;
   is_deleted: boolean;
   is_edited: boolean;
+  reactions?: string;
   created_at: string;
   updated_at: string;
 }
@@ -1201,8 +1202,8 @@ class DatabaseService {
     return msg || null;
   }
 
-  public async deleteMessage(messageId: string, senderId: string): Promise<boolean> {
-    const msg = this.memoryStore.messages.find(m => m.id === messageId && m.sender_id === senderId);
+  public async deleteMessage(messageId: string, senderId?: string): Promise<boolean> {
+    const msg = this.memoryStore.messages.find(m => m.id === messageId && (!senderId || m.sender_id === senderId));
     if (msg) {
       msg.is_deleted = true;
       msg.content = 'Mensagem apagada';
@@ -1212,11 +1213,19 @@ class DatabaseService {
 
     if (this.pgPool) {
       try {
-        await this.pgPool.query(`
-          UPDATE messages 
-          SET is_deleted = true, content = 'Mensagem apagada', updated_at = NOW()
-          WHERE id = $1 AND sender_id = $2
-        `, [messageId, senderId]);
+        if (senderId) {
+          await this.pgPool.query(`
+            UPDATE messages 
+            SET is_deleted = true, content = 'Mensagem apagada', updated_at = NOW()
+            WHERE id = $1 AND sender_id = $2
+          `, [messageId, senderId]);
+        } else {
+          await this.pgPool.query(`
+            UPDATE messages 
+            SET is_deleted = true, content = 'Mensagem apagada', updated_at = NOW()
+            WHERE id = $1
+          `, [messageId]);
+        }
         return true;
       } catch (e) {
         console.warn('[Database] Erro PG deleteMessage:', e);
@@ -1224,6 +1233,45 @@ class DatabaseService {
     }
 
     return !!msg;
+  }
+
+  public async addOrToggleReaction(messageId: string, userId: string, emoji: string): Promise<string> {
+    const msg = this.memoryStore.messages.find(m => m.id === messageId);
+    let reactions: { emoji: string; userId: string }[] = [];
+    if (msg?.reactions) {
+      try {
+        reactions = JSON.parse(msg.reactions);
+      } catch (e) {
+        reactions = [];
+      }
+    }
+    const existingIndex = reactions.findIndex(r => r.userId === userId);
+    if (existingIndex >= 0) {
+      if (reactions[existingIndex].emoji === emoji) {
+        reactions.splice(existingIndex, 1);
+      } else {
+        reactions[existingIndex].emoji = emoji;
+      }
+    } else {
+      reactions.push({ emoji, userId });
+    }
+    const reactionsStr = JSON.stringify(reactions);
+    if (msg) {
+      msg.reactions = reactionsStr;
+      this.saveToLocal();
+    }
+
+    if (this.pgPool) {
+      try {
+        await this.pgPool.query(`
+          UPDATE messages SET reactions = $1 WHERE id = $2
+        `, [reactionsStr, messageId]);
+      } catch (e) {
+        console.warn('[Database] Erro PG addOrToggleReaction:', e);
+      }
+    }
+
+    return reactionsStr;
   }
 
   // ==========================================

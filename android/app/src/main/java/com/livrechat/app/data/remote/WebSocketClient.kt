@@ -32,10 +32,12 @@ interface WebSocketEventsListener {
     fun onIceCandidateReceived(fromUserId: String, candidate: JsonObject)
     fun onCallRinging(fromUserId: String)
     fun onCallRejected(fromUserId: String, reason: String)
-    fun onCallEnded(fromUserId: String)
+    fun onCallEnded(fromUserId: String) {}
     fun onMessageDeleted(messageId: String, conversationId: String) {}
     fun onChatCleared(conversationId: String) {}
     fun onStatusUpdated() {}
+    fun onMessageReaction(messageId: String, conversationId: String, userId: String, emoji: String, reactions: String?) {}
+    fun onStatusReaction(statusId: String, fromUserId: String, fromUsername: String, emoji: String) {}
 }
 
 class WebSocketClient(
@@ -217,10 +219,25 @@ class WebSocketClient(
                             val fromUserId = json.get("fromUserId").asStringOrDefault()
                             listener.onCallEnded(fromUserId)
                         }
-                        "chat:deleted" -> {
+                        "chat:delete", "chat:deleted" -> {
                             val messageId = json.get("messageId").asStringOrDefault()
                             val convId = json.get("conversationId").asStringOrDefault()
                             listener.onMessageDeleted(messageId, convId)
+                        }
+                        "chat:reaction" -> {
+                            val messageId = json.get("messageId").asStringOrDefault()
+                            val convId = json.get("conversationId").asStringOrDefault()
+                            val userId = json.get("userId").asStringOrDefault()
+                            val emoji = json.get("emoji").asStringOrDefault()
+                            val reactions = json.get("reactions").asStringOrNull()
+                            listener.onMessageReaction(messageId, convId, userId, emoji, reactions)
+                        }
+                        "status:reaction" -> {
+                            val statusId = json.get("statusId").asStringOrDefault()
+                            val fromUserId = json.get("fromUserId").asStringOrDefault()
+                            val fromUsername = json.get("fromUsername").asStringOrDefault()
+                            val emoji = json.get("emoji").asStringOrDefault()
+                            listener.onStatusReaction(statusId, fromUserId, fromUsername, emoji)
                         }
                         "chat:cleared" -> {
                             val convId = json.get("conversationId").asStringOrDefault()
@@ -339,7 +356,29 @@ class WebSocketClient(
             addProperty("type", "chat:delete")
             addProperty("messageId", messageId)
             addProperty("conversationId", conversationId)
+            addProperty("deleteForEveryone", true)
             targetUserId?.let { addProperty("targetUserId", it) }
+        }
+        return sendPayload(payload)
+    }
+
+    fun sendReaction(messageId: String, conversationId: String, emoji: String, targetUserId: String? = null): Boolean {
+        val payload = JsonObject().apply {
+            addProperty("type", "chat:reaction")
+            addProperty("messageId", messageId)
+            addProperty("conversationId", conversationId)
+            addProperty("emoji", emoji)
+            targetUserId?.let { addProperty("targetUserId", it) }
+        }
+        return sendPayload(payload)
+    }
+
+    fun sendStatusReaction(statusId: String, authorId: String, emoji: String): Boolean {
+        val payload = JsonObject().apply {
+            addProperty("type", "status:reaction")
+            addProperty("statusId", statusId)
+            addProperty("authorId", authorId)
+            addProperty("emoji", emoji)
         }
         return sendPayload(payload)
     }

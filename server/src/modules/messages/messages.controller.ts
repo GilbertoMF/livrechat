@@ -154,6 +154,12 @@ export class MessagesController {
         return res.status(404).json({ error: 'Mensagem não encontrada ou você não tem permissão.' });
       }
 
+      WebSocketManager.getInstance()?.broadcast({
+        type: 'chat:delete',
+        messageId,
+        deleteForEveryone: true
+      });
+
       return res.status(200).json({ success: true });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
