@@ -45,6 +45,9 @@ export class WebSocketManager {
         this.userSockets.get(ws.userId)!.add(ws);
 
         console.log(`[WS] Usuário conectado: ${ws.username} (${ws.userId})`);
+        if (ws.userId) {
+          db.ensureUserExists(ws.userId, ws.username || 'usuario').catch(() => {});
+        }
 
         // Send connection ack
         ws.send(JSON.stringify({
@@ -107,9 +110,16 @@ export class WebSocketManager {
       // CHAT MESSAGES
       // ==========================================
       case 'chat:send': {
-        const { conversationId, content, iv, messageType, replyToId, clientMessageId } = event;
+        const { conversationId, content, iv, messageType, replyToId, clientMessageId, targetUserId } = event;
         const msgId = clientMessageId || uuidv4();
         const now = new Date().toISOString();
+
+        // Ensure user and conversation exists
+        await db.ensureUserExists(senderId, senderWs.username || 'usuario');
+        await db.ensureConversationMember(conversationId, senderId);
+        if (targetUserId) {
+          await db.ensureConversationMember(conversationId, targetUserId);
+        }
 
         const messageRecord: Message = {
           id: msgId,
@@ -138,7 +148,11 @@ export class WebSocketManager {
         }));
 
         // Broadcast to conversation participants
-        const members = await db.getConversationMembers(conversationId);
+        let members = await db.getConversationMembers(conversationId);
+        if (targetUserId && !members.includes(targetUserId)) {
+          members.push(targetUserId);
+        }
+
         for (const memberId of members) {
           if (memberId !== senderId) {
             const delivered = this.sendToUser(memberId, {
@@ -179,8 +193,6 @@ export class WebSocketManager {
           timestamp: new Date().toISOString()
         });
 
-        // Forward receipt to original sender
-        const msg = (await db.getMessages('', 1)).find(m => m.id === messageId) || null;
         // Broadcast to all connected sockets
         this.broadcast({
           type: 'chat:receipt',
@@ -192,8 +204,11 @@ export class WebSocketManager {
       }
 
       case 'chat:typing': {
-        const { conversationId, isTyping } = event;
-        const members = await db.getConversationMembers(conversationId);
+        const { conversationId, isTyping, targetUserId } = event;
+        let members = await db.getConversationMembers(conversationId);
+        if (targetUserId && !members.includes(targetUserId)) {
+          members.push(targetUserId);
+        }
         for (const memberId of members) {
           if (memberId !== senderId) {
             this.sendToUser(memberId, {

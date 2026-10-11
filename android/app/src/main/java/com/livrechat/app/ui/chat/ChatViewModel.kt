@@ -31,6 +31,9 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
     private val _currentConversationId = MutableStateFlow<String?>(null)
     val currentConversationId: StateFlow<String?> = _currentConversationId.asStateFlow()
 
+    private val _currentOtherUserId = MutableStateFlow<String?>(null)
+    val currentOtherUserId: StateFlow<String?> = _currentOtherUserId.asStateFlow()
+
     private val _messagesFlow = MutableStateFlow<Flow<List<MessageEntity>>>(emptyFlow())
     val messagesFlow: StateFlow<Flow<List<MessageEntity>>> = _messagesFlow.asStateFlow()
 
@@ -46,8 +49,9 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         syncConversations()
     }
 
-    fun selectConversation(conversationId: String) {
+    fun selectConversation(conversationId: String, otherUserId: String? = null) {
         _currentConversationId.value = conversationId
+        _currentOtherUserId.value = otherUserId
         connectionManager.setActiveConversation(conversationId)
         _messagesFlow.value = db.messageDao().getMessagesForConversationFlow(conversationId)
 
@@ -66,6 +70,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
 
     fun unselectConversation() {
         _currentConversationId.value = null
+        _currentOtherUserId.value = null
         connectionManager.setActiveConversation(null)
     }
 
@@ -128,10 +133,11 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         }
     }
 
-    fun sendMessage(conversationId: String, text: String, replyToId: String? = null) {
+    fun sendMessage(conversationId: String, text: String, replyToId: String? = null, targetUserId: String? = null) {
         if (text.isBlank()) return
 
         val myId = prefs.currentUserId ?: return
+        val target = targetUserId ?: _currentOtherUserId.value
         val clientMessageId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
 
@@ -159,7 +165,8 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                 iv = null,
                 messageType = "text",
                 replyToId = replyToId,
-                clientMessageId = clientMessageId
+                clientMessageId = clientMessageId,
+                targetUserId = target
             )
 
             if (!wsSent) {
@@ -170,7 +177,8 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             conversationId = conversationId,
                             content = text,
                             clientMessageId = clientMessageId,
-                            replyToId = replyToId
+                            replyToId = replyToId,
+                            targetUserId = target
                         )
                     )
                     if (res.isSuccessful) {
@@ -185,9 +193,10 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         }
     }
 
-    fun sendTyping(isTyping: Boolean) {
+    fun sendTyping(isTyping: Boolean, targetUserId: String? = null) {
         val convId = _currentConversationId.value ?: return
-        connectionManager.getClient().sendTyping(convId, isTyping)
+        val target = targetUserId ?: _currentOtherUserId.value
+        connectionManager.getClient().sendTyping(convId, isTyping, target)
     }
 
     fun markMessageRead(messageId: String) {

@@ -54,9 +54,9 @@ export class MessagesController {
       const limit = parseInt(req.query.limit as string || '50', 10);
       const before = req.query.before as string | undefined;
 
-      const isMember = await db.isUserInConversation(userId, conversationId);
+      let isMember = await db.isUserInConversation(userId, conversationId);
       if (!isMember) {
-        return res.status(403).json({ error: 'Você não tem acesso a esta conversa.' });
+        await db.ensureConversationMember(conversationId, userId);
       }
 
       const messages = await db.getMessages(conversationId, limit, before);
@@ -81,11 +81,11 @@ export class MessagesController {
   public static async sendMessage(req: AuthRequest, res: Response) {
     try {
       const senderId = req.user!.userId;
-      const { conversationId, content, iv, messageType, replyToId, clientMessageId } = req.body;
+      const { conversationId, content, iv, messageType, replyToId, clientMessageId, targetUserId } = req.body;
 
-      const isMember = await db.isUserInConversation(senderId, conversationId);
-      if (!isMember) {
-        return res.status(403).json({ error: 'Você não tem acesso a esta conversa.' });
+      await db.ensureConversationMember(conversationId, senderId);
+      if (targetUserId) {
+        await db.ensureConversationMember(conversationId, targetUserId);
       }
 
       const id = clientMessageId || uuidv4();

@@ -1,0 +1,241 @@
+package com.livrechat.app.data.remote
+
+import android.content.Context
+import android.util.Log
+import com.google.gson.JsonObject
+import com.livrechat.app.LivreChatApp
+import com.livrechat.app.data.local.entity.ConversationEntity
+import com.livrechat.app.data.local.entity.MessageEntity
+import com.livrechat.app.notification.LivreChatNotificationManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+class ConnectionManager(
+    private val context: Context,
+    private val webSocketClient: WebSocketClient
+) : WebSocketEventsListener {
+
+    private val TAG = "ConnectionManager"
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val listeners = mutableSetOf<WebSocketEventsListener>()
+
+    private val _isConnected = MutableStateFlow(false)
+    val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
+
+    private val _activeConversationId = MutableStateFlow<String?>(null)
+    val activeConversationId: StateFlow<String?> = _activeConversationId.asStateFlow()
+
+    // Map of conversationId -> isTyping
+    private val _typingStatus = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val typingStatus: StateFlow<Map<String, Boolean>> = _typingStatus.asStateFlow()
+
+    init {
+        // WebSocketClient constructor will be passed this listener
+    }
+
+    fun setActiveConversation(conversationId: String?) {
+        _activeConversationId.value = conversationId
+    }
+
+    fun registerListener(listener: WebSocketEventsListener) {
+        synchronized(listeners) {
+            listeners.add(listener)
+        }
+    }
+
+    fun unregisterListener(listener: WebSocketEventsListener) {
+        synchronized(listeners) {
+            listeners.remove(listener)
+        }
+    }
+
+    fun connect() {
+        webSocketClient.connect()
+    }
+
+    fun disconnect() {
+        webSocketClient.disconnect()
+    }
+
+    fun getClient(): WebSocketClient = webSocketClient
+
+    override fun onConnected() {
+        _isConnected.value = true
+        synchronized(listeners) {
+            listeners.forEach { it.onConnected() }
+        }
+    }
+
+    override fun onDisconnected() {
+        _isConnected.value = false
+        synchronized(listeners) {
+            listeners.forEach { it.onDisconnected() }
+        }
+    }
+
+    override fun onMessageReceived(message: MessageEntity) {
+        scope.launch {
+            val app = LivreChatApp.instance
+            val db = app.database
+            val isCurrentOpen = _activeConversationId.value == message.conversationId
+
+            var conv = db.conversationDao().getConversationById(message.conversationId)
+            if (conv == null) {
+                val newConv = ConversationEntity(
+                    id = message.conversationId,
+                    otherUserId = message.senderId,
+                    otherUsername = "Contato",
+                    otherDisplayName = "Contato",
+                    otherAvatarUrl = null,
+                    otherPublicKey = null,
+                    lastMessageContent = message.content,
+                    lastMessageTimestamp = message.createdAt,
+                    unreadCount = if (isCurrentOpen) 0 else 1
+                )
+                db.conversationDao().insertOrUpdate(newConv)
+                conv = newConv
+
+                launch {
+                    try {
+                        val userRes = app.apiClient.apiService.getUserProfile(message.senderId)
+                        if (userRes.isSuccessful && userRes.body() != null) {
+                            val userDto = userRes.body()!!
+                            db.conversationDao().insertOrUpdate(
+                                newConv.copy(
+                                    otherUsername = userDto.username,
+                                    otherDisplayName = if (userDto.displayName.isNotBlank()) userDto.displayName else userDto.username,
+                                    otherAvatarUrl = userDto.avatarUrl,
+                                    otherPublicKey = userDto.publicKey
+                                )
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Falha ao obter perfil do remetente", e)
+                    }
+                }
+            } else {
+                db.conversationDao().updateLastMessage(message.conversationId, message.content, message.createdAt)
+                if (!isCurrentOpen) {
+                    db.conversationDao().incrementUnreadCount(message.conversationId)
+                }
+            }
+
+            if (isCurrentOpen) {
+                // Mensagem lida imediatamente
+                val readMsg = message.copy(status = "read")
+                db.messageDao().insertOrUpdate(readMsg)
+                webSocketClient.sendReceipt(message.id, "read")
+                try { app.apiClient.apiService.markMessageRead(message.id) } catch (e: Exception) {}
+            } else {
+                // Mensagem entregue
+                val deliveredMsg = message.copy(status = "delivered")
+                db.messageDao().insertOrUpdate(deliveredMsg)
+                webSocketClient.sendReceipt(message.id, "delivered")
+
+                // Obter nome para notificação
+                val senderTitle = conv.otherDisplayName.ifBlank { conv.otherUsername.ifBlank { "LivreChat" } }
+
+                LivreChatNotificationManager.showMessageNotification(
+                    context = context,
+                    conversationId = message.conversationId,
+                    senderName = senderTitle,
+                    content = message.content
+                )
+            }
+
+            synchronized(listeners) {
+                listeners.forEach { it.onMessageReceived(message) }
+            }
+        }
+    }
+
+    override fun onMessageAck(messageId: String, clientMessageId: String?, status: String) {
+        scope.launch {
+            val db = LivreChatApp.instance.database
+            val targetId = clientMessageId ?: messageId
+            db.messageDao().updateStatus(targetId, status)
+
+            synchronized(listeners) {
+                listeners.forEach { it.onMessageAck(messageId, clientMessageId, status) }
+            }
+        }
+    }
+
+    override fun onMessageReceipt(messageId: String, status: String, userId: String) {
+        scope.launch {
+            val db = LivreChatApp.instance.database
+            db.messageDao().updateStatus(messageId, status)
+
+            synchronized(listeners) {
+                listeners.forEach { it.onMessageReceipt(messageId, status, userId) }
+            }
+        }
+    }
+
+    override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean) {
+        val current = _typingStatus.value.toMutableMap()
+        current[conversationId] = isTyping
+        _typingStatus.value = current
+
+        synchronized(listeners) {
+            listeners.forEach { it.onTyping(conversationId, userId, username, isTyping) }
+        }
+    }
+
+    override fun onIncomingCall(
+        callerId: String,
+        callerUsername: String,
+        callerDisplayName: String,
+        callerAvatarUrl: String?,
+        sdp: String
+    ) {
+        LivreChatNotificationManager.showIncomingCallNotification(
+            context = context,
+            callerId = callerId,
+            callerDisplayName = callerDisplayName,
+            callerUsername = callerUsername
+        )
+
+        synchronized(listeners) {
+            listeners.forEach { it.onIncomingCall(callerId, callerUsername, callerDisplayName, callerAvatarUrl, sdp) }
+        }
+    }
+
+    override fun onCallAnswered(calleeId: String, sdp: String) {
+        LivreChatNotificationManager.cancelCallNotification(context)
+        synchronized(listeners) {
+            listeners.forEach { it.onCallAnswered(calleeId, sdp) }
+        }
+    }
+
+    override fun onIceCandidateReceived(fromUserId: String, candidate: JsonObject) {
+        synchronized(listeners) {
+            listeners.forEach { it.onIceCandidateReceived(fromUserId, candidate) }
+        }
+    }
+
+    override fun onCallRinging(fromUserId: String) {
+        synchronized(listeners) {
+            listeners.forEach { it.onCallRinging(fromUserId) }
+        }
+    }
+
+    override fun onCallRejected(fromUserId: String, reason: String) {
+        LivreChatNotificationManager.cancelCallNotification(context)
+        synchronized(listeners) {
+            listeners.forEach { it.onCallRejected(fromUserId, reason) }
+        }
+    }
+
+    override fun onCallEnded(fromUserId: String) {
+        LivreChatNotificationManager.cancelCallNotification(context)
+        synchronized(listeners) {
+            listeners.forEach { it.onCallEnded(fromUserId) }
+        }
+    }
+}

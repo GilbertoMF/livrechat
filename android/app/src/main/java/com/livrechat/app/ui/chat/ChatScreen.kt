@@ -51,13 +51,13 @@ fun ChatScreen(
     val isTyping by viewModel.isContactTyping.collectAsState()
 
     LaunchedEffect(conversationId) {
-        viewModel.selectConversation(conversationId)
+        viewModel.selectConversation(conversationId, otherUserId)
     }
 
     DisposableEffect(conversationId) {
         onDispose {
             typingDebounceJob?.cancel()
-            viewModel.sendTyping(false)
+            viewModel.sendTyping(false, otherUserId)
             viewModel.unselectConversation()
         }
     }
@@ -121,15 +121,15 @@ fun ChatScreen(
                         onValueChange = {
                             textInput = it
                             if (it.isNotBlank()) {
-                                viewModel.sendTyping(true)
+                                viewModel.sendTyping(true, otherUserId)
                                 typingDebounceJob?.cancel()
                                 typingDebounceJob = scope.launch {
                                     delay(2500)
-                                    viewModel.sendTyping(false)
+                                    viewModel.sendTyping(false, otherUserId)
                                 }
                             } else {
                                 typingDebounceJob?.cancel()
-                                viewModel.sendTyping(false)
+                                viewModel.sendTyping(false, otherUserId)
                             }
                         },
                         placeholder = { Text("Digite uma mensagem...", fontSize = 14.sp) },
@@ -144,9 +144,9 @@ fun ChatScreen(
                         onClick = {
                             if (textInput.isNotBlank()) {
                                 typingDebounceJob?.cancel()
-                                viewModel.sendMessage(conversationId, textInput.trim())
+                                viewModel.sendMessage(conversationId, textInput.trim(), targetUserId = otherUserId)
                                 textInput = ""
-                                viewModel.sendTyping(false)
+                                viewModel.sendTyping(false, otherUserId)
                             }
                         },
                         colors = IconButtonDefaults.iconButtonColors(containerColor = BluePrimary),
