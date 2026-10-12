@@ -128,7 +128,7 @@ fun QRCodeScreen(
                 val res = apiService.getOrCreateConversation(mapOf("targetUserId" to targetUserId))
                 if (res.isSuccessful && res.body() != null) {
                     val conv = res.body()!!
-                    val finalDisplayName = if (conv.otherUser.displayName.isNotBlank()) conv.otherUser.displayName else targetUsername.ifBlank { "Contato" }
+                    val finalDisplayName = if (conv.otherUser?.displayName?.isNotBlank() == true) conv.otherUser?.displayName!! else targetUsername.ifBlank { "Contato" }
 
                     withContext(Dispatchers.IO) {
                         db.conversationDao().insertOrUpdate(
@@ -137,8 +137,8 @@ fun QRCodeScreen(
                                 otherUserId = targetUserId,
                                 otherUsername = targetUsername,
                                 otherDisplayName = finalDisplayName,
-                                otherAvatarUrl = conv.otherUser.avatarUrl,
-                                otherPublicKey = conv.otherUser.publicKey,
+                                otherAvatarUrl = conv.otherUser?.avatarUrl,
+                                otherPublicKey = conv.otherUser?.publicKey,
                                 lastMessageContent = "Iniciou conversa via QR Code",
                                 lastMessageTimestamp = System.currentTimeMillis(),
                                 unreadCount = 0

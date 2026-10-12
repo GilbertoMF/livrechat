@@ -48,7 +48,17 @@ export class WebSocketManager {
         if (!this.userSockets.has(ws.userId)) {
           this.userSockets.set(ws.userId, new Set());
         }
+        const isFirstConnection = this.userSockets.get(ws.userId)!.size === 0;
         this.userSockets.get(ws.userId)!.add(ws);
+
+        if (isFirstConnection && ws.userId) {
+          this.broadcast({
+            type: 'user:status',
+            userId: ws.userId,
+            status: 'online',
+            timestamp: new Date().toISOString()
+          });
+        }
 
         console.log(`[WS] Usuário conectado: ${ws.username} (${ws.userId})`);
         if (ws.userId) {
@@ -117,6 +127,12 @@ export class WebSocketManager {
             set.delete(ws);
             if (set.size === 0) {
               this.userSockets.delete(ws.userId);
+              this.broadcast({
+                type: 'user:status',
+                userId: ws.userId,
+                status: 'offline',
+                timestamp: new Date().toISOString()
+              });
             }
           }
           console.log(`[WS] Usuário desconectado: ${ws.username}`);
@@ -440,9 +456,28 @@ export class WebSocketManager {
         break;
       }
 
+      case 'user:query_status': {
+        const { targetUserId } = event;
+        if (targetUserId) {
+          const isOnline = this.isUserOnline(targetUserId);
+          senderWs.send(JSON.stringify({
+            type: 'user:status',
+            userId: targetUserId,
+            status: isOnline ? 'online' : 'offline',
+            timestamp: new Date().toISOString()
+          }));
+        }
+        break;
+      }
+
       default:
         console.warn(`[WS] Tipo de evento desconhecido: ${event.type}`);
     }
+  }
+
+  public isUserOnline(userId: string): boolean {
+    const sockets = this.userSockets.get(userId);
+    return !!sockets && sockets.size > 0;
   }
 
   public sendToUser(userId: string, payload: any): boolean {

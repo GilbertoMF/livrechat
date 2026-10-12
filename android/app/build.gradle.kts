@@ -106,6 +106,7 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.3.1")
     implementation("androidx.camera:camera-lifecycle:1.3.1")
     implementation("androidx.camera:camera-view:1.3.1")
+    implementation("androidx.camera:camera-video:1.3.1")
 
     // Google Sign-In for Google Drive Backup
     implementation("com.google.android.gms:play-services-auth:21.0.0")

@@ -38,6 +38,7 @@ interface WebSocketEventsListener {
     fun onStatusUpdated() {}
     fun onMessageReaction(messageId: String, conversationId: String, userId: String, emoji: String, reactions: String?) {}
     fun onStatusReaction(statusId: String, fromUserId: String, fromUsername: String, emoji: String) {}
+    fun onUserStatus(userId: String, isOnline: Boolean) {}
 }
 
 class WebSocketClient(
@@ -246,6 +247,13 @@ class WebSocketClient(
                         "status:new", "status:deleted" -> {
                             listener.onStatusUpdated()
                         }
+                        "user:status" -> {
+                            val uid = json.get("userId").asStringOrNull()
+                            val status = json.get("status").asStringOrDefault()
+                            if (uid != null) {
+                                listener.onUserStatus(uid, status == "online")
+                            }
+                        }
                     }
                 } catch (t: Throwable) {
                     Log.e(TAG, "Erro ao despachar evento WebSocket na main thread", t)
@@ -388,6 +396,14 @@ class WebSocketClient(
             addProperty("type", "chat:clear")
             addProperty("conversationId", conversationId)
             targetUserId?.let { addProperty("targetUserId", it) }
+        }
+        return sendPayload(payload)
+    }
+
+    fun queryUserStatus(targetUserId: String): Boolean {
+        val payload = JsonObject().apply {
+            addProperty("type", "user:query_status")
+            addProperty("targetUserId", targetUserId)
         }
         return sendPayload(payload)
     }

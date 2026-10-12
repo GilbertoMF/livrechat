@@ -306,7 +306,14 @@ fun SettingsScreen(
                         Box(
                             modifier = Modifier
                                 .size(100.dp)
-                                .clickable { launchCamera() },
+                                .clickable {
+                                    if (currentAvatarBitmap != null) {
+                                        bitmapToAdjust = currentAvatarBitmap
+                                        showPhotoAdjustDialog = true
+                                    } else {
+                                        launchCamera()
+                                    }
+                                },
                             contentAlignment = Alignment.BottomEnd
                         ) {
                             UserAvatarView(
@@ -327,7 +334,7 @@ fun SettingsScreen(
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         Icons.Default.CameraAlt,
-                                        contentDescription = "Tirar Foto com a Câmera",
+                                        contentDescription = "Câmera",
                                         tint = Color.White,
                                         modifier = Modifier.size(18.dp)
                                     )
@@ -344,30 +351,34 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Button(
-                            onClick = { launchCamera() },
-                            shape = RoundedCornerShape(20.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                        ) {
-                            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Tirar Foto", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
+                        if (currentAvatarBitmap != null) {
+                            Button(
+                                onClick = {
+                                    bitmapToAdjust = currentAvatarBitmap
+                                    showPhotoAdjustDialog = true
+                                },
+                                shape = RoundedCornerShape(20.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.Crop, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Ajustar Foto", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
 
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        OutlinedButton(
-                            onClick = { galleryLauncher.launch("image/*") },
-                            shape = RoundedCornerShape(20.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Galeria", fontSize = 12.sp)
-                        }
-
-                        if (currentAvatarBitmap != null || newAvatarUrlInput.isNotBlank()) {
                             Spacer(modifier = Modifier.width(8.dp))
+
+                            OutlinedButton(
+                                onClick = { galleryLauncher.launch("image/*") },
+                                shape = RoundedCornerShape(20.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Galeria", fontSize = 12.sp)
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
                             IconButton(
                                 onClick = {
                                     currentAvatarBitmap = null
@@ -378,6 +389,28 @@ fun SettingsScreen(
                                 }
                             ) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remover Foto", tint = DangerRed, modifier = Modifier.size(20.dp))
+                            }
+                        } else {
+                            Button(
+                                onClick = { launchCamera() },
+                                shape = RoundedCornerShape(20.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Câmera", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            OutlinedButton(
+                                onClick = { galleryLauncher.launch("image/*") },
+                                shape = RoundedCornerShape(20.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Galeria", fontSize = 12.sp)
                             }
                         }
                     }

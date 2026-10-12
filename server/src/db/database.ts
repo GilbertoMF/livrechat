@@ -42,6 +42,10 @@ export interface Contact {
 
 export interface Conversation {
   id: string;
+  is_group?: boolean;
+  title?: string;
+  avatar_url?: string;
+  created_by?: string;
   created_at: string;
   updated_at: string;
 }
@@ -229,6 +233,10 @@ class DatabaseService {
           const sql = fs.readFileSync(schemaPath, 'utf-8');
           await client.query(sql);
           await client.query('ALTER TABLE messages ALTER COLUMN iv TYPE VARCHAR(255);').catch(() => {});
+          await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS is_group BOOLEAN DEFAULT FALSE;').catch(() => {});
+          await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS title VARCHAR(100);').catch(() => {});
+          await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS avatar_url TEXT;').catch(() => {});
+          await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS created_by VARCHAR(36);').catch(() => {});
           console.log(`[Database] PostgreSQL (${CONFIG.DATABASE_URL.includes('neon.tech') ? 'Neon.tech' : 'Cloud'}) conectado e tabelas migradas com sucesso.`);
         } else {
           console.log('[Database] PostgreSQL conectado.');
@@ -580,6 +588,28 @@ class DatabaseService {
     return existing || contact;
   }
 
+  public async updateContactNickname(userId: string, contactUserId: string, nickname: string): Promise<boolean> {
+    const contact = this.memoryStore.contacts.find(
+      c => c.user_id === userId && c.contact_user_id === contactUserId
+    );
+    if (contact) {
+      contact.nickname = nickname;
+      this.saveToLocal();
+    }
+    if (this.pgPool) {
+      try {
+        await this.pgPool.query(
+          'UPDATE contacts SET nickname = $1 WHERE user_id = $2 AND contact_user_id = $3',
+          [nickname, userId, contactUserId]
+        );
+        return true;
+      } catch (e) {
+        console.warn('[Database] Erro PG updateContactNickname:', e);
+      }
+    }
+    return true;
+  }
+
   public async removeContact(userId: string, contactUserId: string): Promise<boolean> {
     this.memoryStore.contacts = this.memoryStore.contacts.filter(
       c => !(c.user_id === userId && c.contact_user_id === contactUserId)
@@ -845,6 +875,58 @@ class DatabaseService {
     return newId;
   }
 
+  public async createGroupConversation(
+    title: string,
+    creatorId: string,
+    memberIds: string[],
+    avatarUrl?: string
+  ): Promise<Conversation> {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    const conv: Conversation = {
+      id,
+      is_group: true,
+      title,
+      avatar_url: avatarUrl || '',
+      created_by: creatorId,
+      created_at: now,
+      updated_at: now
+    };
+    this.memoryStore.conversations.push(conv);
+
+    const allMemberIds = Array.from(new Set([creatorId, ...memberIds]));
+    for (const mId of allMemberIds) {
+      this.memoryStore.conversation_members.push({
+        conversation_id: id,
+        user_id: mId,
+        is_pinned: false,
+        is_archived: false,
+        is_muted: false
+      });
+    }
+    this.saveToLocal();
+
+    if (this.pgPool) {
+      try {
+        await this.ensureUserExists(creatorId);
+        await this.pgPool.query(
+          'INSERT INTO conversations (id, is_group, title, avatar_url, created_by, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [id, true, title, avatarUrl || null, creatorId, now, now]
+        );
+        for (const mId of allMemberIds) {
+          await this.ensureUserExists(mId);
+          await this.pgPool.query(
+            'INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [id, mId]
+          );
+        }
+      } catch (e) {
+        console.warn('[Database] Erro PG createGroupConversation:', e);
+      }
+    }
+    return conv;
+  }
+
   public async getConversationsForUser(userId: string) {
     if (this.pgPool) {
       try {
@@ -852,6 +934,10 @@ class DatabaseService {
         const res = await this.pgPool.query(`
           SELECT 
             cm.conversation_id,
+            c.is_group,
+            c.title AS group_title,
+            c.avatar_url AS group_avatar_url,
+            c.created_by,
             cm.is_pinned,
             cm.is_archived,
             cm.is_muted,
@@ -863,7 +949,7 @@ class DatabaseService {
             p.public_key AS other_public_key
           FROM conversation_members cm
           JOIN conversations c ON c.id = cm.conversation_id
-          LEFT JOIN conversation_members other_m ON other_m.conversation_id = cm.conversation_id AND other_m.user_id != $1
+          LEFT JOIN conversation_members other_m ON other_m.conversation_id = cm.conversation_id AND other_m.user_id != $1 AND (c.is_group IS FALSE OR c.is_group IS NULL)
           LEFT JOIN users u ON u.id = other_m.user_id
           LEFT JOIN user_profiles p ON p.user_id = other_m.user_id
           WHERE cm.user_id = $1
@@ -910,12 +996,22 @@ class DatabaseService {
               )
           `, [convId, userId]);
 
+          const isGroup = !!row.is_group;
           list.push({
             conversationId: convId,
             isPinned: !!row.is_pinned,
             isArchived: !!row.is_archived,
             isMuted: !!row.is_muted,
-            otherUser: {
+            isGroup,
+            title: isGroup ? row.group_title : undefined,
+            avatarUrl: isGroup ? row.group_avatar_url : undefined,
+            otherUser: isGroup ? {
+              id: convId,
+              username: row.group_title || 'Grupo',
+              displayName: row.group_title || 'Grupo',
+              avatarUrl: row.group_avatar_url || null,
+              publicKey: null
+            } : {
               id: row.other_user_id || 'unknown',
               username: row.other_username || 'desconhecido',
               displayName: row.other_display_name || row.other_username || 'Desconhecido',
@@ -942,14 +1038,6 @@ class DatabaseService {
       const conv = this.memoryStore.conversations.find(c => c.id === mem.conversation_id);
       if (!conv) continue;
 
-      const otherMem = this.memoryStore.conversation_members.find(
-        m => m.conversation_id === mem.conversation_id && m.user_id !== userId
-      );
-      if (!otherMem) continue;
-
-      const otherUser = this.memoryStore.users.find(u => u.id === otherMem.user_id);
-      const otherProfile = this.memoryStore.profiles.find(p => p.user_id === otherMem.user_id);
-
       const convMessages = this.memoryStore.messages
         .filter(m => m.conversation_id === mem.conversation_id && !m.is_deleted)
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -962,11 +1050,43 @@ class DatabaseService {
         return !receipt;
       }).length;
 
+      if (conv.is_group) {
+        results.push({
+          conversationId: mem.conversation_id,
+          isPinned: mem.is_pinned,
+          isArchived: mem.is_archived,
+          isMuted: mem.is_muted,
+          isGroup: true,
+          title: conv.title,
+          avatarUrl: conv.avatar_url,
+          otherUser: {
+            id: conv.id,
+            username: conv.title || 'Grupo',
+            displayName: conv.title || 'Grupo',
+            avatarUrl: conv.avatar_url || null,
+            publicKey: null
+          },
+          lastMessage,
+          unreadCount,
+          updatedAt: conv.updated_at
+        });
+        continue;
+      }
+
+      const otherMem = this.memoryStore.conversation_members.find(
+        m => m.conversation_id === mem.conversation_id && m.user_id !== userId
+      );
+      if (!otherMem) continue;
+
+      const otherUser = this.memoryStore.users.find(u => u.id === otherMem.user_id);
+      const otherProfile = this.memoryStore.profiles.find(p => p.user_id === otherMem.user_id);
+
       results.push({
         conversationId: mem.conversation_id,
         isPinned: mem.is_pinned,
         isArchived: mem.is_archived,
         isMuted: mem.is_muted,
+        isGroup: false,
         otherUser: {
           id: otherMem.user_id,
           username: otherUser ? otherUser.username : 'desconhecido',

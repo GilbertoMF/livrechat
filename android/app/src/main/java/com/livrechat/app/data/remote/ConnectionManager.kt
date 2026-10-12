@@ -36,6 +36,13 @@ class ConnectionManager(
     private val _typingStatus = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val typingStatus: StateFlow<Map<String, Boolean>> = _typingStatus.asStateFlow()
 
+    // Map of userId -> isOnline
+    private val _onlineUsers = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val onlineUsers: StateFlow<Map<String, Boolean>> = _onlineUsers.asStateFlow()
+
+    fun isUserOnline(userId: String): Boolean = _onlineUsers.value[userId] ?: false
+    fun queryUserStatus(userId: String) = webSocketClient.queryUserStatus(userId)
+
     init {
         // WebSocketClient constructor will be passed this listener
     }
@@ -197,6 +204,22 @@ class ConnectionManager(
                 )
             }
 
+            // Clear typing state immediately when message arrives from sender
+            typingTimeoutJobs[processedMessage.conversationId]?.cancel()
+            val updatedTyping = _typingStatus.value.toMutableMap()
+            if (updatedTyping[processedMessage.conversationId] == true) {
+                updatedTyping[processedMessage.conversationId] = false
+                _typingStatus.value = updatedTyping
+                synchronized(listeners) {
+                    listeners.forEach { it.onTyping(processedMessage.conversationId, processedMessage.senderId, "", false) }
+                }
+            }
+
+            // Sender is actively online
+            val onlMap = _onlineUsers.value.toMutableMap()
+            onlMap[processedMessage.senderId] = true
+            _onlineUsers.value = onlMap
+
             synchronized(listeners) {
                 listeners.forEach { it.onMessageReceived(processedMessage) }
             }
@@ -236,8 +259,12 @@ class ConnectionManager(
         _typingStatus.value = current
 
         if (isTyping) {
+            val onlMap = _onlineUsers.value.toMutableMap()
+            onlMap[userId] = true
+            _onlineUsers.value = onlMap
+
             typingTimeoutJobs[conversationId] = scope.launch {
-                kotlinx.coroutines.delay(3500)
+                kotlinx.coroutines.delay(2000)
                 val updated = _typingStatus.value.toMutableMap()
                 updated[conversationId] = false
                 _typingStatus.value = updated
@@ -249,6 +276,15 @@ class ConnectionManager(
 
         synchronized(listeners) {
             listeners.forEach { it.onTyping(conversationId, userId, username, isTyping) }
+        }
+    }
+
+    override fun onUserStatus(userId: String, isOnline: Boolean) {
+        val map = _onlineUsers.value.toMutableMap()
+        map[userId] = isOnline
+        _onlineUsers.value = map
+        synchronized(listeners) {
+            listeners.forEach { it.onUserStatus(userId, isOnline) }
         }
     }
 

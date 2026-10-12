@@ -121,5 +121,21 @@ interface ApiService {
 
     @DELETE("api/status/{statusId}")
     suspend fun deleteStatus(@Path("statusId") statusId: String): Response<BaseResponse>
+
+    @PUT("api/users/contacts/{contactUserId}")
+    suspend fun updateContact(
+        @Path("contactUserId") contactUserId: String,
+        @Body body: Map<String, String>
+    ): Response<BaseResponse>
+
+    @POST("api/messages/groups")
+    suspend fun createGroup(
+        @Body body: Map<String, Any>
+    ): Response<ConversationDto>
+
+    @GET("api/messages/conversations/{conversationId}/members")
+    suspend fun getGroupMembers(
+        @Path("conversationId") conversationId: String
+    ): Response<List<UserDto>>
 }
 

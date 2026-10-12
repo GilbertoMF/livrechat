@@ -64,6 +64,12 @@ fun SearchContactScreen(
     var newContactUsername by remember { mutableStateOf("") }
     var isAddingContact by remember { mutableStateOf(false) }
     var contactToDelete by remember { mutableStateOf<ContactUiModel?>(null) }
+    var contactToEdit by remember { mutableStateOf<ContactUiModel?>(null) }
+    var editNicknameText by remember { mutableStateOf("") }
+    var showCreateGroupDialog by remember { mutableStateOf(false) }
+    var newGroupTitle by remember { mutableStateOf("") }
+    var selectedGroupMembers by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var isCreatingGroup by remember { mutableStateOf(false) }
 
     fun loadContacts() {
         scope.launch {
@@ -278,6 +284,200 @@ fun SearchContactScreen(
         )
     }
 
+    // DIALOG: Editar Contato
+    if (contactToEdit != null) {
+        val target = contactToEdit!!
+        AlertDialog(
+            onDismissRequest = { contactToEdit = null },
+            title = { Text("Editar Nome do Contato", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Defina como ${target.username} será exibido:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = editNicknameText,
+                        onValueChange = { editNicknameText = it },
+                        label = { Text("Nome / Apelido") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val newNick = editNicknameText.trim()
+                        if (newNick.isNotBlank()) {
+                            val toEdit = target
+                            contactToEdit = null
+                            scope.launch {
+                                try {
+                                    apiService.updateContact(toEdit.userId, mapOf("nickname" to newNick))
+                                    withContext(Dispatchers.IO) {
+                                        val conv = db.conversationDao().getConversationByUserId(toEdit.userId)
+                                        if (conv != null) {
+                                            db.conversationDao().insertOrUpdate(conv.copy(otherDisplayName = newNick))
+                                        }
+                                    }
+                                    loadContacts()
+                                    Toast.makeText(context, "Contato atualizado com sucesso", Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Erro ao atualizar contato", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text("Salvar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { contactToEdit = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // DIALOG: Criar Novo Grupo
+    if (showCreateGroupDialog) {
+        val nonSelfContacts = contactsList.filter { !it.isSelf }
+        AlertDialog(
+            onDismissRequest = { showCreateGroupDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.GroupAdd, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Novo Grupo", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = newGroupTitle,
+                        onValueChange = { newGroupTitle = it },
+                        label = { Text("Nome do Grupo") },
+                        placeholder = { Text("Ex: Família, Trabalho...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Participantes selecionados (${selectedGroupMembers.size}):",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    if (nonSelfContacts.isEmpty()) {
+                        Text(
+                            text = "Nenhum contato adicionado ainda. Adicione contatos para criar grupos.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 220.dp)
+                        ) {
+                            items(nonSelfContacts, key = { it.userId }) { c ->
+                                val isSelected = selectedGroupMembers.contains(c.userId)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedGroupMembers = if (isSelected) {
+                                                selectedGroupMembers - c.userId
+                                            } else {
+                                                selectedGroupMembers + c.userId
+                                            }
+                                        }
+                                        .padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = isSelected,
+                                        onCheckedChange = { checked ->
+                                            selectedGroupMembers = if (checked) {
+                                                selectedGroupMembers + c.userId
+                                            } else {
+                                                selectedGroupMembers - c.userId
+                                            }
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Column {
+                                        Text(c.displayName, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                        Text("@${c.username}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = newGroupTitle.isNotBlank() && !isCreatingGroup,
+                    onClick = {
+                        val title = newGroupTitle.trim()
+                        isCreatingGroup = true
+                        scope.launch {
+                            try {
+                                val res = apiService.createGroup(
+                                    mapOf(
+                                        "title" to title,
+                                        "memberIds" to selectedGroupMembers.toList()
+                                    )
+                                )
+                                if (res.isSuccessful && res.body() != null) {
+                                    val dto = res.body()!!
+                                    withContext(Dispatchers.IO) {
+                                        db.conversationDao().insertOrUpdate(
+                                            ConversationEntity(
+                                                id = dto.conversationId,
+                                                otherUserId = dto.conversationId,
+                                                otherUsername = dto.title ?: title,
+                                                otherDisplayName = dto.title ?: title,
+                                                isGroup = true,
+                                                groupTitle = dto.title ?: title,
+                                                groupAvatar = dto.avatarUrl,
+                                                lastMessageTimestamp = System.currentTimeMillis()
+                                            )
+                                        )
+                                    }
+                                    showCreateGroupDialog = false
+                                    Toast.makeText(context, "Grupo criado com sucesso!", Toast.LENGTH_SHORT).show()
+                                    onNavigateToChat(dto.conversationId, dto.title ?: title, dto.title ?: title)
+                                } else {
+                                    Toast.makeText(context, "Erro ao criar grupo", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Falha de conexão ao criar grupo", Toast.LENGTH_SHORT).show()
+                            } finally {
+                                isCreatingGroup = false
+                            }
+                        }
+                    }
+                ) {
+                    if (isCreatingGroup) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Text("Criar Grupo")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateGroupDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             if (isSearchActive) {
@@ -384,7 +584,9 @@ fun SearchContactScreen(
                         icon = Icons.Default.GroupAdd,
                         title = "Novo grupo",
                         onClick = {
-                            Toast.makeText(context, "Criação de grupos em desenvolvimento", Toast.LENGTH_SHORT).show()
+                            newGroupTitle = ""
+                            selectedGroupMembers = emptySet()
+                            showCreateGroupDialog = true
                         }
                     )
                 }
@@ -467,6 +669,12 @@ fun SearchContactScreen(
                             avatarUrl = contact.avatarUrl
                         )
                     },
+                    onEditClick = if (!contact.isSelf) {
+                        {
+                            contactToEdit = contact
+                            editNicknameText = contact.displayName
+                        }
+                    } else null,
                     onDeleteClick = if (!contact.isSelf) { { contactToDelete = contact } } else null
                 )
             }
@@ -546,6 +754,7 @@ fun ActionContactTile(
 fun ContactRowItem(
     contact: ContactUiModel,
     onClick: () -> Unit,
+    onEditClick: (() -> Unit)? = null,
     onDeleteClick: (() -> Unit)? = null
 ) {
     Row(
@@ -593,6 +802,17 @@ fun ContactRowItem(
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+
+        if (!contact.isSelf && onEditClick != null) {
+            IconButton(onClick = onEditClick) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Editar contato",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
 
         if (!contact.isSelf && onDeleteClick != null) {

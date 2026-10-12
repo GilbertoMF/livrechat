@@ -57,6 +57,9 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         _currentConversationId.value = conversationId
         _currentOtherUserId.value = otherUserId
         connectionManager.setActiveConversation(conversationId)
+        if (otherUserId != null) {
+            connectionManager.queryUserStatus(otherUserId)
+        }
         _messagesFlow.value = db.messageDao().getMessagesForConversationFlow(conversationId)
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -103,19 +106,23 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                         } else {
                             dto.unreadCount
                         }
+                        val otherU = dto.otherUser
                         ConversationEntity(
                             id = dto.conversationId,
-                            otherUserId = dto.otherUser.id,
-                            otherUsername = dto.otherUser.username,
-                            otherDisplayName = dto.otherUser.displayName,
-                            otherAvatarUrl = dto.otherUser.avatarUrl,
-                            otherPublicKey = dto.otherUser.publicKey,
+                            otherUserId = otherU?.id ?: dto.conversationId,
+                            otherUsername = otherU?.username ?: (dto.title ?: "Grupo"),
+                            otherDisplayName = otherU?.displayName ?: (dto.title ?: "Grupo"),
+                            otherAvatarUrl = otherU?.avatarUrl ?: dto.avatarUrl,
+                            otherPublicKey = otherU?.publicKey,
                             lastMessageContent = dto.lastMessage?.content ?: localExisting?.lastMessageContent,
                             lastMessageTimestamp = localExisting?.lastMessageTimestamp ?: System.currentTimeMillis(),
                             unreadCount = calculatedUnread,
                             isPinned = dto.isPinned,
                             isArchived = dto.isArchived,
-                            isMuted = dto.isMuted
+                            isMuted = dto.isMuted,
+                            isGroup = dto.isGroup,
+                            groupTitle = dto.title,
+                            groupAvatar = dto.avatarUrl
                         )
                     }
                     db.conversationDao().insertAll(entities)

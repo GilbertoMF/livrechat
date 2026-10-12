@@ -243,4 +243,69 @@ export class MessagesController {
       return res.status(500).json({ error: e.message });
     }
   }
+
+  public static async createGroup(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const { title, memberIds, avatarUrl } = req.body;
+
+      if (!title || !title.trim()) {
+        return res.status(400).json({ error: 'Nome do grupo é obrigatório.' });
+      }
+
+      const conv = await db.createGroupConversation(
+        title.trim(),
+        userId,
+        Array.isArray(memberIds) ? memberIds : [],
+        avatarUrl
+      );
+
+      // Notify members via WS
+      const wsManager = WebSocketManager.getInstance();
+      if (wsManager) {
+        const allMembers = Array.from(new Set([userId, ...(Array.isArray(memberIds) ? memberIds : [])]));
+        for (const mId of allMembers) {
+          wsManager.sendToUser(mId, {
+            type: 'group:created',
+            conversation: conv
+          });
+        }
+      }
+
+      return res.status(201).json({
+        conversationId: conv.id,
+        isGroup: true,
+        title: conv.title,
+        avatarUrl: conv.avatar_url || null,
+        createdBy: conv.created_by,
+        createdAt: conv.created_at,
+        updatedAt: conv.updated_at
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  public static async getConversationMembers(req: AuthRequest, res: Response) {
+    try {
+      const { conversationId } = req.params;
+      const memberIds = await db.getConversationMembers(conversationId);
+      const members = [];
+      for (const mId of memberIds) {
+        const u = await db.findUserById(mId);
+        const p = await db.getProfile(mId);
+        if (u) {
+          members.push({
+            id: u.id,
+            username: u.username,
+            displayName: p?.display_name || u.username,
+            avatarUrl: p?.avatar_url || null
+          });
+        }
+      }
+      return res.status(200).json(members);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
 }

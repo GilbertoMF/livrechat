@@ -131,11 +131,11 @@ fun PhotoAdjustDialog(
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    // Source Image Layer
+                    // Source Image Layer (Full image loaded without pre-clipping)
                     androidx.compose.foundation.Image(
                         bitmap = sourceBitmap.asImageBitmap(),
                         contentDescription = "Foto",
-                        contentScale = ContentScale.Crop,
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxSize()
                             .graphicsLayer {
@@ -266,13 +266,13 @@ fun cropAdjustedBitmap(
     // Rotate
     matrix.postRotate(rotation)
 
-    // Base scale to fill the viewport
+    // Base scale to fit the entire uncropped image inside viewport
     val rot = ((rotation % 360f) + 360f) % 360f
     val isSwapped = rot == 90f || rot == 270f
     val effectiveW = if (isSwapped) source.height else source.width
     val effectiveH = if (isSwapped) source.width else source.height
 
-    val baseScale = maxOf(viewportSizePx / effectiveW, viewportSizePx / effectiveH)
+    val baseScale = minOf(viewportSizePx / effectiveW, viewportSizePx / effectiveH)
     val totalScale = baseScale * scale
     matrix.postScale(totalScale, totalScale)
 

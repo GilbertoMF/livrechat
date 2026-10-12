@@ -68,7 +68,10 @@ data class ConversationDto(
     val isPinned: Boolean = false,
     val isArchived: Boolean = false,
     val isMuted: Boolean = false,
-    val otherUser: UserDto,
+    val isGroup: Boolean = false,
+    val title: String? = null,
+    val avatarUrl: String? = null,
+    val otherUser: UserDto? = null,
     val lastMessage: MessageDto? = null,
     val unreadCount: Int = 0,
     val updatedAt: String? = null

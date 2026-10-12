@@ -57,6 +57,7 @@ app.get('/api/users/search', authenticateToken, UsersController.searchUsers);
 // Contacts
 app.get('/api/users/contacts', authenticateToken, UsersController.getContacts);
 app.post('/api/users/contacts', authenticateToken, UsersController.addContact);
+app.put('/api/users/contacts/:contactUserId', authenticateToken, UsersController.updateContact);
 app.delete('/api/users/contacts/:contactUserId', authenticateToken, UsersController.removeContact);
 
 // Blocking & Reports
@@ -74,6 +75,8 @@ app.put('/api/users/preferences', authenticateToken, UsersController.updatePrefe
 // ==========================================
 app.get('/api/messages/conversations', authenticateToken, MessagesController.getConversations);
 app.post('/api/messages/conversations/direct', authenticateToken, MessagesController.getOrCreateConversation);
+app.post('/api/messages/groups', authenticateToken, MessagesController.createGroup);
+app.get('/api/messages/conversations/:conversationId/members', authenticateToken, MessagesController.getConversationMembers);
 app.get('/api/messages/:conversationId', authenticateToken, MessagesController.getMessages);
 app.post('/api/messages', authenticateToken, MessagesController.sendMessage);
 app.put('/api/messages/:messageId', authenticateToken, MessagesController.editMessage);

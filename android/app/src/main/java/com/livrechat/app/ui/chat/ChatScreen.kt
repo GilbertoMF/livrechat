@@ -171,6 +171,17 @@ fun ChatScreen(
         }
     }
 
+    val app = remember { com.livrechat.app.LivreChatApp.instance }
+    val prefs = remember { app.preferencesManager }
+    val onlineUsers by app.connectionManager.onlineUsers.collectAsState()
+    val isContactOnline = onlineUsers[otherUserId] == true
+
+    LaunchedEffect(otherUserId) {
+        if (otherUserId.isNotBlank()) {
+            app.connectionManager.queryUserStatus(otherUserId)
+        }
+    }
+
     LaunchedEffect(messages.size) {
         if (messages.isEmpty()) return@LaunchedEffect
 
@@ -191,6 +202,12 @@ fun ChatScreen(
                 showScrollToBottomButton = false
                 unreadBelowCount = 0
             } else {
+                if (prefs.conversationSounds && lastMsg != null) {
+                    try {
+                        val toneGen = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 65)
+                        toneGen.startTone(android.media.ToneGenerator.TONE_PROP_BEEP2, 120)
+                    } catch (e: Exception) {}
+                }
                 if (isNearBottom) {
                     listState.animateScrollToItem(messages.size - 1)
                     showScrollToBottomButton = false
@@ -203,8 +220,6 @@ fun ChatScreen(
         }
     }
 
-    val app = remember { com.livrechat.app.LivreChatApp.instance }
-    val prefs = remember { app.preferencesManager }
     val currentConv by remember(conversationId) {
         app.database.conversationDao().getConversationByIdFlow(conversationId)
     }.collectAsState(initial = null)
@@ -512,6 +527,10 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = {
+                    val isGroup = currentConv?.isGroup == true
+                    val headerTitle = if (isGroup) (currentConv?.groupTitle ?: "Grupo") else otherDisplayName
+                    val headerAvatar = if (isGroup) currentConv?.groupAvatar else currentConv?.otherAvatarUrl
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -519,24 +538,29 @@ fun ChatScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         UserAvatarView(
-                            avatarUrl = currentConv?.otherAvatarUrl,
-                            displayName = otherDisplayName,
+                            avatarUrl = headerAvatar,
+                            displayName = headerTitle,
                             size = 40.dp,
                             fontSize = 17.sp
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = otherDisplayName,
+                                text = headerTitle,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = if (isTyping) "digitando..." else "Online",
+                                text = if (isGroup) "Grupo"
+                                       else if (isTyping) "digitando..."
+                                       else if (isContactOnline) "Online"
+                                       else "Visto por último recentemente",
                                 fontSize = 12.sp,
-                                color = if (isTyping) BlueAccent else Color(0xFF4CAF50),
+                                color = if (isTyping) BlueAccent
+                                        else if (isContactOnline && !isGroup) Color(0xFF4CAF50)
+                                        else Color.Gray,
                                 fontWeight = if (isTyping) FontWeight.Bold else FontWeight.Normal
                             )
                         }
@@ -805,13 +829,13 @@ fun ChatScreen(
                                 textInput = it
                                 if (it.isNotBlank()) {
                                     val now = System.currentTimeMillis()
-                                    if (now - lastTypingSentTime > 2000L) {
+                                    if (now - lastTypingSentTime > 1500L) {
                                         lastTypingSentTime = now
                                         viewModel.sendTyping(true, otherUserId)
                                     }
                                     typingDebounceJob?.cancel()
                                     typingDebounceJob = scope.launch {
-                                        delay(3000)
+                                        delay(1500)
                                         viewModel.sendTyping(false, otherUserId)
                                         lastTypingSentTime = 0L
                                     }
@@ -980,9 +1004,14 @@ fun ChatScreen(
                         message = message,
                         audioPlayerHelper = audioPlayerHelper,
                         onLongPress = { messageActionTarget = it },
-                        onSwipeToReply = { replyingToMessage = it },
+                        onSwipeToReply = {
+                            replyingToMessage = it
+                            inputFocusRequester.requestFocus()
+                            keyboardController?.show()
+                        },
                         onReactionClick = { viewModel.toggleReaction(it.id, "❤️") },
-                        onImageClick = { viewingImageBase64 = it }
+                        onImageClick = { viewingImageBase64 = it },
+                        isGroup = currentConv?.isGroup == true
                     )
                 }
             }
@@ -1122,17 +1151,20 @@ fun ChatScreen(
                     try {
                         val bytes = file.readBytes()
                         val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                        val dataUri = "data:image/jpeg;base64,$b64"
+                        val isVideo = mediaType == "video"
+                        val dataUri = if (isVideo) "data:video/mp4;base64,$b64" else "data:image/jpeg;base64,$b64"
                         viewModel.sendMediaMessage(
                             conversationId = conversationId,
                             content = file.absolutePath,
                             networkPayload = dataUri,
-                            messageType = "image",
+                            messageType = if (isVideo) "video" else "image",
+                            fileName = if (isVideo) file.name else null,
+                            fileSize = file.length(),
                             caption = caption.ifBlank { null },
                             targetUserId = otherUserId
                         )
                     } catch (e: Exception) {
-                        Log.e("ChatScreen", "Erro ao enviar foto da câmera", e)
+                        Log.e("ChatScreen", "Erro ao enviar mídia da câmera", e)
                     }
                 }
             }
@@ -1199,7 +1231,8 @@ fun MessageBubble(
     onLongPress: (MessageEntity) -> Unit,
     onSwipeToReply: (MessageEntity) -> Unit,
     onReactionClick: (MessageEntity) -> Unit,
-    onImageClick: (String) -> Unit
+    onImageClick: (String) -> Unit,
+    isGroup: Boolean = false
 ) {
     val isOutgoing = message.isOutgoing
     val alignment = if (isOutgoing) Alignment.End else Alignment.Start
@@ -1219,7 +1252,7 @@ fun MessageBubble(
             .pointerInput(message.id) {
                 detectHorizontalDragGestures(
                     onDragEnd = {
-                        if (dragOffset > 55f) {
+                        if (dragOffset >= 115f) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onSwipeToReply(message)
                         }
@@ -1228,7 +1261,7 @@ fun MessageBubble(
                     onDragCancel = { dragOffset = 0f },
                     onHorizontalDrag = { _, dragAmount ->
                         if (dragAmount > 0 || dragOffset > 0) {
-                            dragOffset = (dragOffset + dragAmount * 0.6f).coerceIn(0f, 100f)
+                            dragOffset = (dragOffset + dragAmount * 0.7f).coerceIn(0f, 130f)
                         }
                     }
                 )
@@ -1242,7 +1275,7 @@ fun MessageBubble(
                     .align(Alignment.CenterStart)
                     .offset(x = (animatedOffset * 0.35f - 18f).dp)
                     .clip(CircleShape)
-                    .background(BluePrimary.copy(alpha = (animatedOffset / 55f).coerceIn(0.2f, 1f))),
+                    .background(BluePrimary.copy(alpha = (animatedOffset / 115f).coerceIn(0.2f, 1f))),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -1305,6 +1338,17 @@ fun MessageBubble(
                         )
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        // Sender identifier in group conversation if incoming
+                        if (isGroup && !isOutgoing) {
+                            Text(
+                                text = message.senderId,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = BluePrimary,
+                                modifier = Modifier.padding(bottom = 2.dp)
+                            )
+                        }
+
                         // Render quoted reply banner inside bubble if replying
                         if (!message.replyToContent.isNullOrBlank() || message.replyToId != null) {
                             Surface(

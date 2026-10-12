@@ -1225,24 +1225,14 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("LivreChat", fontWeight = FontWeight.Bold, fontSize = 21.sp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Surface(
-                                shape = CircleShape,
-                                color = if (isConnected) SuccessGreen else DangerRed,
-                                modifier = Modifier.size(9.dp)
-                            ) {}
-                        }
-                        prefs.currentUsername?.let { uname ->
-                            Text(
-                                text = if (uname.length == 8 && uname.all { it.isDigit() }) "ID Virtual: $uname" else "@$uname",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("LivreChat", fontWeight = FontWeight.Bold, fontSize = 21.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = if (isConnected) SuccessGreen else DangerRed,
+                            modifier = Modifier.size(9.dp)
+                        ) {}
                     }
                 },
                 actions = {
@@ -2241,10 +2231,13 @@ fun ConversationItem(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val itemTitle = if (conversation.isGroup) (conversation.groupTitle ?: conversation.otherDisplayName) else conversation.otherDisplayName
+        val itemAvatar = if (conversation.isGroup) conversation.groupAvatar else conversation.otherAvatarUrl
+
         // Avatar
         UserAvatarView(
-            avatarUrl = conversation.otherAvatarUrl,
-            displayName = conversation.otherDisplayName,
+            avatarUrl = itemAvatar,
+            displayName = itemTitle,
             size = 52.dp,
             fontSize = 20.sp
         )
@@ -2261,8 +2254,17 @@ fun ConversationItem(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
+                    if (conversation.isGroup) {
+                        Icon(
+                            imageVector = Icons.Default.Groups,
+                            contentDescription = "Grupo",
+                            tint = BluePrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
                     Text(
-                        text = conversation.otherDisplayName,
+                        text = itemTitle,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 16.sp,
                         maxLines = 1,

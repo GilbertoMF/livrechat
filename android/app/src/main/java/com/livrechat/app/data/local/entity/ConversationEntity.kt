@@ -16,5 +16,8 @@ data class ConversationEntity(
     val unreadCount: Int = 0,
     val isPinned: Boolean = false,
     val isArchived: Boolean = false,
-    val isMuted: Boolean = false
+    val isMuted: Boolean = false,
+    val isGroup: Boolean = false,
+    val groupTitle: String? = null,
+    val groupAvatar: String? = null
 )

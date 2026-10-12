@@ -167,6 +167,18 @@ export class UsersController {
     }
   }
 
+  public static async updateContact(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const { contactUserId } = req.params;
+      const { nickname } = req.body;
+      await db.updateContactNickname(userId, contactUserId, nickname || '');
+      return res.status(200).json({ success: true, nickname });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   public static async blockUser(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.userId;

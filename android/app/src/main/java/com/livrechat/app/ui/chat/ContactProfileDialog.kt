@@ -70,6 +70,8 @@ fun ContactProfileDialog(
     var showSecurityDialog by remember { mutableStateOf(false) }
     var showBlockConfirmDialog by remember { mutableStateOf(false) }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
+    var showEditNicknameDialog by remember { mutableStateOf(false) }
+    var editNicknameInput by remember { mutableStateOf("") }
 
     // Carrega perfil enriquecido do contato
     LaunchedEffect(otherUserId) {
@@ -156,13 +158,33 @@ fun ContactProfileDialog(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Nome de Exibição
-                        Text(
-                            text = displayTitle,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        // Nome de Exibição com Botão de Editar
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = displayTitle,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            IconButton(
+                                onClick = {
+                                    editNicknameInput = displayTitle
+                                    showEditNicknameDialog = true
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = "Editar nome",
+                                    tint = BluePrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(4.dp))
 
@@ -629,6 +651,57 @@ fun ContactProfileDialog(
             },
             dismissButton = {
                 TextButton(onClick = { showBlockConfirmDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Editar Nome do Contato
+    if (showEditNicknameDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditNicknameDialog = false },
+            title = { Text("Editar Nome do Contato", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Defina como este contato será exibido para você:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = editNicknameInput,
+                        onValueChange = { editNicknameInput = it },
+                        label = { Text("Nome / Apelido") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val newName = editNicknameInput.trim()
+                    if (newName.isNotBlank()) {
+                        showEditNicknameDialog = false
+                        scope.launch {
+                            try {
+                                app.apiClient.apiService.updateContact(otherUserId, mapOf("nickname" to newName))
+                                withContext(Dispatchers.IO) {
+                                    val conv = app.database.conversationDao().getConversationById(conversationId)
+                                    if (conv != null) {
+                                        app.database.conversationDao().insertOrUpdate(conv.copy(otherDisplayName = newName))
+                                    }
+                                }
+                                userProfile = userProfile?.copy(displayName = newName)
+                                Toast.makeText(context, "Nome atualizado", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Erro ao atualizar", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }) {
+                    Text("Salvar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditNicknameDialog = false }) {
                     Text("Cancelar")
                 }
             }
