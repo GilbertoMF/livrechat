@@ -26,15 +26,22 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import coil.compose.AsyncImage
 import com.livrechat.app.data.local.model.ReactionUtils
 import com.livrechat.app.ui.camera.CustomCameraDialog
 import com.livrechat.app.ui.chat.EmojiStickerBottomSheet
+import com.livrechat.app.ui.chat.EmojiStickerPanel
 import com.livrechat.app.ui.chat.MessageActionMenuDialog
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -211,6 +218,8 @@ fun ChatScreen(
     var replyingToMessage by remember { mutableStateOf<MessageEntity?>(null) }
     var showCameraDialog by remember { mutableStateOf(false) }
     var showEmojiStickerSheet by remember { mutableStateOf(false) }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val inputFocusRequester = remember { FocusRequester() }
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var viewingImageBase64 by remember { mutableStateOf<String?>(null) }
 
@@ -812,12 +821,21 @@ fun ChatScreen(
                                     lastTypingSentTime = 0L
                                 }
                             },
-                            placeholder = { Text("Digite uma mensagem...", fontSize = 14.sp) },
+                            placeholder = { Text("Mensagem", fontSize = 15.sp) },
                             leadingIcon = {
-                                IconButton(onClick = { showEmojiStickerSheet = true }) {
+                                IconButton(onClick = {
+                                    if (showEmojiStickerSheet) {
+                                        showEmojiStickerSheet = false
+                                        inputFocusRequester.requestFocus()
+                                        keyboardController?.show()
+                                    } else {
+                                        keyboardController?.hide()
+                                        showEmojiStickerSheet = true
+                                    }
+                                }) {
                                     Icon(
-                                        imageVector = Icons.Default.SentimentSatisfied,
-                                        contentDescription = "Emojis e Figurinhas",
+                                        imageVector = if (showEmojiStickerSheet) Icons.Default.Keyboard else Icons.Default.SentimentSatisfied,
+                                        contentDescription = if (showEmojiStickerSheet) "Teclado" else "Emojis e Figurinhas",
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -847,6 +865,12 @@ fun ChatScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(end = 8.dp)
+                                .focusRequester(inputFocusRequester)
+                                .onFocusChanged { focusState ->
+                                    if (focusState.isFocused && showEmojiStickerSheet) {
+                                        showEmojiStickerSheet = false
+                                    }
+                                }
                         )
 
                         if (textInput.isNotBlank()) {
@@ -912,6 +936,27 @@ fun ChatScreen(
                                 )
                             }
                         }
+                    }
+
+                    AnimatedVisibility(
+                        visible = showEmojiStickerSheet,
+                        enter = expandVertically(),
+                        exit = shrinkVertically()
+                    ) {
+                        EmojiStickerPanel(
+                            onDismiss = { showEmojiStickerSheet = false },
+                            onEmojiSelected = { emoji ->
+                                textInput += emoji
+                            },
+                            onSendSticker = { stickerContent ->
+                                viewModel.sendSticker(conversationId, stickerContent, targetUserId = otherUserId)
+                            },
+                            onBackspace = {
+                                if (textInput.isNotEmpty()) {
+                                    textInput = textInput.dropLast(1)
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -1094,17 +1139,6 @@ fun ChatScreen(
         )
     }
 
-    if (showEmojiStickerSheet) {
-        EmojiStickerBottomSheet(
-            onDismiss = { showEmojiStickerSheet = false },
-            onEmojiSelected = { emoji ->
-                textInput += emoji
-            },
-            onSendSticker = { stickerContent ->
-                viewModel.sendSticker(conversationId, stickerContent, targetUserId = otherUserId)
-            }
-        )
-    }
 
     if (messageActionTarget != null) {
         val target = messageActionTarget!!
