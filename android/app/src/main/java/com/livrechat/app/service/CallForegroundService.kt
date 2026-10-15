@@ -7,18 +7,45 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.livrechat.app.MainActivity
 
 class CallForegroundService : Service() {
+
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        try {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LivreChat:CallForegroundCpu")?.apply {
+                setReferenceCounted(false)
+                acquire(2 * 60 * 60 * 1000L) // 2 hours max
+            }
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            wifiLock = wifiManager?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "LivreChat:CallForegroundWifi")?.apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (e: Exception) {}
+    }
+
+    override fun onDestroy() {
+        try {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        } catch (e: Exception) {}
+        try {
+            if (wifiLock?.isHeld == true) wifiLock?.release()
+        } catch (e: Exception) {}
+        super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

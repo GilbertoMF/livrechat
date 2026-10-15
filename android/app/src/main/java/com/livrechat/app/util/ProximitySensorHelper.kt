@@ -20,6 +20,16 @@ class ProximitySensorHelper(private val context: Context) : SensorEventListener 
     var isNearEar: Boolean = false
         private set
 
+    var isScreenOffEnabled: Boolean = true
+        set(value) {
+            field = value
+            if (!value) {
+                releaseWakeLock()
+            } else if (isNearEar) {
+                acquireWakeLock()
+            }
+        }
+
     init {
         try {
             if (powerManager != null && powerManager.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) {
@@ -56,7 +66,7 @@ class ProximitySensorHelper(private val context: Context) : SensorEventListener 
         val near = distance < maxRange.coerceAtMost(5f)
         if (near != isNearEar) {
             isNearEar = near
-            if (near) {
+            if (near && isScreenOffEnabled) {
                 acquireWakeLock()
             } else {
                 releaseWakeLock()
@@ -80,7 +90,7 @@ class ProximitySensorHelper(private val context: Context) : SensorEventListener 
     private fun releaseWakeLock() {
         try {
             if (wakeLock?.isHeld == true) {
-                wakeLock?.release(PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY)
+                wakeLock?.release()
             }
         } catch (e: Exception) {
             try { wakeLock?.release() } catch (ex: Exception) {}

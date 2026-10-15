@@ -1,8 +1,10 @@
 package com.livrechat.app.webrtc
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.MediaRecorder
 import android.os.Build
 import android.util.Log
 import com.google.gson.JsonObject
@@ -20,6 +22,7 @@ import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpReceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
+import org.webrtc.audio.JavaAudioDeviceModule
 
 enum class CallState {
     IDLE,
@@ -48,6 +51,8 @@ class WebRTCManager(
     private var peerConnection: PeerConnection? = null
     private var localAudioSource: AudioSource? = null
     private var localAudioTrack: AudioTrack? = null
+    private var remoteAudioTrack: AudioTrack? = null
+    private var javaAudioDeviceModule: JavaAudioDeviceModule? = null
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val proximityHelper = ProximitySensorHelper(context)
@@ -61,9 +66,9 @@ class WebRTCManager(
     init {
         initWebRTC()
         proximityHelper.onProximityChanged = { isNear ->
-            if (!isSpeakerOn) {
-                updateAudioRouting()
-            }
+            // In earpiece mode, proximity sensor solely toggles screen-off wake lock.
+            // We intentionally do not invoke updateAudioRouting() mid-call to prevent
+            // Android audio HAL reinitializations that degrade microphone gain.
         }
     }
 
@@ -74,8 +79,22 @@ class WebRTCManager(
                 .createInitializationOptions()
             PeerConnectionFactory.initialize(options)
 
+            val adm = JavaAudioDeviceModule.builder(context)
+                .setUseHardwareAcousticEchoCanceler(JavaAudioDeviceModule.isBuiltInAcousticEchoCancelerSupported())
+                .setUseHardwareNoiseSuppressor(JavaAudioDeviceModule.isBuiltInNoiseSuppressorSupported())
+                .setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                .createAudioDeviceModule()
+            javaAudioDeviceModule = adm
+
             val eglBase = EglBase.create()
             peerConnectionFactory = PeerConnectionFactory.builder()
+                .setAudioDeviceModule(adm)
                 .setVideoDecoderFactory(DefaultVideoDecoderFactory(eglBase.eglBaseContext))
                 .setVideoEncoderFactory(DefaultVideoEncoderFactory(eglBase.eglBaseContext, true, true))
                 .createPeerConnectionFactory()
@@ -130,6 +149,7 @@ class WebRTCManager(
                 Log.w(TAG, "Aviso ao descartar peerConnection: ${e.message}")
             }
             peerConnection = null
+            remoteAudioTrack = null
         } catch (e: Exception) {
             Log.e(TAG, "Erro geral ao limpar chamada atual", e)
         }
@@ -137,11 +157,22 @@ class WebRTCManager(
 
     private fun createAudioTrack() {
         try {
+            val useHwAec = JavaAudioDeviceModule.isBuiltInAcousticEchoCancelerSupported()
+            val useHwNs = JavaAudioDeviceModule.isBuiltInNoiseSuppressorSupported()
+
             val audioConstraints = MediaConstraints().apply {
-                mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
+                // If hardware AEC is present, disable WebRTC software AEC to prevent double cancellation
+                mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", if (useHwAec) "false" else "true"))
+                mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation2", if (useHwAec) "false" else "true"))
+                mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", if (useHwNs) "false" else "true"))
+                mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression2", if (useHwNs) "false" else "true"))
+
+                // Enable Auto Gain Control and High Pass Filter for vocal clarity
                 mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
+                mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl2", "true"))
                 mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
-                mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
+                mandatory.add(MediaConstraints.KeyValuePair("googTypingNoiseDetection", "false"))
+                mandatory.add(MediaConstraints.KeyValuePair("googAudioMirroring", "false"))
             }
 
             localAudioSource = peerConnectionFactory?.createAudioSource(audioConstraints)
@@ -231,6 +262,18 @@ class WebRTCManager(
             override fun onRenegotiationNeeded() {}
             override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {
                 Log.d(TAG, "Track remoto recebido com sucesso")
+                try {
+                    val track = receiver?.track() as? AudioTrack
+                    if (track != null) {
+                        track.setEnabled(true)
+                        val targetVolume = if (isSpeakerOn) 2.5 else 3.5
+                        track.setVolume(targetVolume)
+                        remoteAudioTrack = track
+                        Log.d(TAG, "Volume do track remoto configurado para: $targetVolume")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Falha ao ajustar volume do track remoto: ${e.message}")
+                }
             }
         })
 
@@ -350,13 +393,27 @@ class WebRTCManager(
 
     fun toggleSpeaker(): Boolean {
         isSpeakerOn = !isSpeakerOn
+        proximityHelper.isScreenOffEnabled = !isSpeakerOn
         updateAudioRouting()
+        try {
+            val targetVolume = if (isSpeakerOn) 2.5 else 3.5
+            remoteAudioTrack?.setVolume(targetVolume)
+        } catch (e: Exception) {}
         return isSpeakerOn
     }
 
     private fun updateAudioRouting() {
         try {
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+
+            try {
+                val maxVoiceVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
+                val curVoiceVol = audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
+                if (curVoiceVol < (maxVoiceVol * 0.85).toInt()) {
+                    audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, (maxVoiceVol * 0.9).toInt(), 0)
+                }
+            } catch (e: Exception) {}
+
             if (isSpeakerOn) {
                 audioManager.isSpeakerphoneOn = true
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -388,6 +445,7 @@ class WebRTCManager(
     }
 
     private fun enableVoIPAudioMode() {
+        proximityHelper.isScreenOffEnabled = !isSpeakerOn
         updateAudioRouting()
         proximityHelper.startListening()
     }
@@ -401,6 +459,8 @@ class WebRTCManager(
             audioManager.mode = AudioManager.MODE_NORMAL
             audioManager.isSpeakerphoneOn = false
         } catch (e: Exception) {}
+        isSpeakerOn = false
+        remoteAudioTrack = null
     }
 
     fun endCall() {
