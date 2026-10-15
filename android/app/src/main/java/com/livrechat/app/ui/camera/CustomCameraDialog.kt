@@ -48,6 +48,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.livrechat.app.ui.theme.BluePrimary
+import com.livrechat.app.ui.common.PhotoAdjustDialog
+import android.media.ExifInterface
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -95,6 +97,7 @@ fun CustomCameraDialog(
 
     var capturedFile by remember { mutableStateOf<File?>(null) }
     var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var showAdjustDialog by remember { mutableStateOf(false) }
     var captionText by remember { mutableStateOf("") }
     var isCapturing by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
@@ -191,25 +194,43 @@ fun CustomCameraDialog(
         bindCamera()
     }
 
-    // Gallery Picker launcher
+    // Gallery Picker launcher with EXIF correction
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 try {
-                    val input = context.contentResolver.openInputStream(uri) ?: return@launch
-                    val bmp = BitmapFactory.decodeStream(input)
-                    input.close()
-                    if (bmp != null) {
-                        val file = File(context.cacheDir, "cam_gallery_${System.currentTimeMillis()}.jpg")
-                        val out = FileOutputStream(file)
-                        bmp.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                    val tempFile = File(context.cacheDir, "cam_gallery_${System.currentTimeMillis()}.jpg")
+                    context.contentResolver.openInputStream(uri)?.use { inStream ->
+                        FileOutputStream(tempFile).use { outStream ->
+                            inStream.copyTo(outStream)
+                        }
+                    }
+                    val exif = ExifInterface(tempFile.absolutePath)
+                    val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+                    val rotationDegrees = when (orientation) {
+                        ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                        ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                        ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                        else -> 0f
+                    }
+                    val raw = BitmapFactory.decodeFile(tempFile.absolutePath)
+                    if (raw != null) {
+                        val oriented = if (rotationDegrees != 0f) {
+                            val matrix = Matrix().apply { postRotate(rotationDegrees) }
+                            Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+                        } else {
+                            raw
+                        }
+                        val out = FileOutputStream(tempFile)
+                        oriented.compress(Bitmap.CompressFormat.JPEG, 92, out)
                         out.flush()
                         out.close()
+
                         launch(Dispatchers.Main) {
-                            capturedFile = file
-                            capturedBitmap = bmp
+                            capturedFile = tempFile
+                            capturedBitmap = oriented
                         }
                     }
                 } catch (e: Exception) {
@@ -248,7 +269,7 @@ fun CustomCameraDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 20.dp),
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -269,7 +290,34 @@ fun CustomCameraDialog(
                             fontSize = 18.sp
                         )
 
-                        Spacer(modifier = Modifier.size(48.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = {
+                                    val curr = capturedBitmap ?: return@IconButton
+                                    val matrix = Matrix().apply { postRotate(90f) }
+                                    val rotated = Bitmap.createBitmap(curr, 0, 0, curr.width, curr.height, matrix, true)
+                                    capturedBitmap = rotated
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        val f = capturedFile ?: File(context.cacheDir, "cam_${System.currentTimeMillis()}.jpg")
+                                        val out = FileOutputStream(f)
+                                        rotated.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                                        out.flush()
+                                        out.close()
+                                        capturedFile = f
+                                    }
+                                }
+                            ) {
+                                Icon(Icons.Default.RotateRight, contentDescription = "Girar 90°", tint = Color.White)
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    showAdjustDialog = true
+                                }
+                            ) {
+                                Icon(Icons.Default.Crop, contentDescription = "Ajustar / Recortar", tint = Color.White)
+                            }
+                        }
                     }
 
                     // Image Display
@@ -278,12 +326,13 @@ fun CustomCameraDialog(
                             .weight(1f)
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp)
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center
                     ) {
                         Image(
                             bitmap = capturedBitmap!!.asImageBitmap(),
                             contentDescription = "Foto capturada",
-                            contentScale = ContentScale.Crop,
+                            contentScale = ContentScale.Fit,
                             modifier = Modifier.fillMaxSize()
                         )
                     }
@@ -533,26 +582,51 @@ fun CustomCameraDialog(
                                         val photoFile = File(context.cacheDir, "cam_${System.currentTimeMillis()}.jpg")
                                         val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
-                                        cap.takePicture(
+                                         cap.takePicture(
                                             outputOptions,
                                             cameraExecutor,
                                             object : ImageCapture.OnImageSavedCallback {
                                                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                                                    coroutineScope.launch(Dispatchers.Main) {
-                                                        isCapturing = false
+                                                    coroutineScope.launch(Dispatchers.IO) {
                                                         try {
+                                                            val exif = ExifInterface(photoFile.absolutePath)
+                                                            val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+                                                            val rotationDegrees = when (orientation) {
+                                                                ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                                                                ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                                                                ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                                                                else -> 0f
+                                                            }
                                                             val raw = BitmapFactory.decodeFile(photoFile.absolutePath)
                                                             if (raw != null) {
                                                                 val matrix = Matrix()
-                                                                if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
-                                                                    matrix.postScale(-1f, 1f, raw.width / 2f, raw.height / 2f)
+                                                                if (rotationDegrees != 0f) {
+                                                                    matrix.postRotate(rotationDegrees)
                                                                 }
-                                                                val oriented = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
-                                                                capturedBitmap = oriented
-                                                                capturedFile = photoFile
+                                                                if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
+                                                                    matrix.postScale(-1f, 1f)
+                                                                }
+                                                                val oriented = if (rotationDegrees != 0f || lensFacing == CameraSelector.LENS_FACING_FRONT) {
+                                                                    Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+                                                                } else {
+                                                                    raw
+                                                                }
+                                                                val out = FileOutputStream(photoFile)
+                                                                oriented.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                                                                out.flush()
+                                                                out.close()
+
+                                                                launch(Dispatchers.Main) {
+                                                                    isCapturing = false
+                                                                    capturedBitmap = oriented
+                                                                    capturedFile = photoFile
+                                                                }
+                                                            } else {
+                                                                launch(Dispatchers.Main) { isCapturing = false }
                                                             }
                                                         } catch (e: Exception) {
-                                                            Log.e("CustomCamera", "Erro ao carregar foto", e)
+                                                            Log.e("CustomCamera", "Erro ao processar foto", e)
+                                                            launch(Dispatchers.Main) { isCapturing = false }
                                                         }
                                                     }
                                                 }
@@ -624,6 +698,25 @@ fun CustomCameraDialog(
                         }
                     }
                 }
+            }
+
+            if (showAdjustDialog && capturedBitmap != null) {
+                PhotoAdjustDialog(
+                    sourceBitmap = capturedBitmap!!,
+                    onDismiss = { showAdjustDialog = false },
+                    onCropFinished = { adjusted ->
+                        capturedBitmap = adjusted
+                        showAdjustDialog = false
+                        coroutineScope.launch(Dispatchers.IO) {
+                            val f = capturedFile ?: File(context.cacheDir, "cam_${System.currentTimeMillis()}.jpg")
+                            val out = FileOutputStream(f)
+                            adjusted.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                            out.flush()
+                            out.close()
+                            capturedFile = f
+                        }
+                    }
+                )
             }
         }
     }

@@ -540,7 +540,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                 val convId = if (myId < authorId) "conv_${myId}_${authorId}" else "conv_${authorId}_${myId}"
                 sendMessage(
                     conversationId = convId,
-                    text = "Reagiu ao seu status: $emoji",
+                    text = "Reagiu ao seu Flash: $emoji",
                     targetUserId = authorId
                 )
             }

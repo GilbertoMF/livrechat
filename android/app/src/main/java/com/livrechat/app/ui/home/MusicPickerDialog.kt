@@ -231,7 +231,7 @@ fun MusicPickerDialog(
                                 color = Color.White
                             )
                             Text(
-                                text = "Escolha qualquer trilha para seu status",
+                                text = "Escolha qualquer trilha para seu Flash",
                                 fontSize = 11.sp,
                                 color = Color.White.copy(alpha = 0.65f)
                             )
@@ -592,7 +592,7 @@ fun MusicPickerDialog(
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                                                 Spacer(modifier = Modifier.width(8.dp))
-                                                Text("Usar esta música no Status", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White)
+                                                Text("Usar esta música no Flash", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White)
                                             }
                                         }
                                     }

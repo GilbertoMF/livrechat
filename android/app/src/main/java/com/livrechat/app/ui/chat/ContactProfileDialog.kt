@@ -284,7 +284,7 @@ fun ContactProfileDialog(
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = "Status no LivreChat",
+                                        text = "Bio / Recado",
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

@@ -16,10 +16,14 @@ import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
 import android.media.MediaPlayer
+import android.widget.VideoView
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -421,7 +425,7 @@ fun HomeScreen(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Adicionar ao Status", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text("Adicionar ao Flash", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             Text("Compartilhe momentos que expiram em 24h", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -687,7 +691,7 @@ fun HomeScreen(
                             ) {
                                 if (newTextStatusContent.isEmpty()) {
                                     Text(
-                                        text = "Digite seu status...",
+                                        text = "Digite seu Flash...",
                                         color = Color.White.copy(alpha = 0.55f),
                                         fontSize = 32.sp,
                                         fontWeight = FontWeight.Bold,
@@ -768,10 +772,10 @@ fun HomeScreen(
                                             if (res.isSuccessful) {
                                                 showCreateTextStatusDialog = false
                                                 newTextStatusContent = ""
-                                                Toast.makeText(context, "Status publicado!", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "Flash publicado!", Toast.LENGTH_SHORT).show()
                                                 loadStatuses()
                                             } else {
-                                                Toast.makeText(context, "Falha ao publicar status", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "Falha ao publicar Flash", Toast.LENGTH_SHORT).show()
                                             }
                                         } catch (e: Exception) {
                                             Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
@@ -789,7 +793,7 @@ fun HomeScreen(
                             if (isPostingStatus) {
                                 CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.5.dp)
                             } else {
-                                Icon(Icons.Default.Send, contentDescription = "Publicar Status", modifier = Modifier.size(26.dp))
+                                Icon(Icons.Default.Send, contentDescription = "Publicar Flash", modifier = Modifier.size(26.dp))
                             }
                         }
                     }
@@ -798,23 +802,41 @@ fun HomeScreen(
         }
     }
 
-    // DIALOG: Preview e Legenda de Foto do Status
+    // DIALOG: Preview e Legenda de Foto do Flash
     if (showCreateImageStatusDialog) {
         AlertDialog(
             onDismissRequest = { if (!isPostingStatus) showCreateImageStatusDialog = false },
-            title = { Text("Compartilhar Foto no Status", fontWeight = FontWeight.Bold) },
+            title = { Text("Compartilhar Foto no Flash", fontWeight = FontWeight.Bold) },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.size(200.dp)
                     ) {
-                        AsyncImage(
-                            model = newImageStatusBase64,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
+                        val previewBitmap = remember(newImageStatusBase64) {
+                            try {
+                                val clean = if (newImageStatusBase64.contains(",")) newImageStatusBase64.substringAfter(",") else newImageStatusBase64
+                                val bytes = Base64.decode(clean, Base64.DEFAULT)
+                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                        if (previewBitmap != null) {
+                            Image(
+                                bitmap = previewBitmap.asImageBitmap(),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            AsyncImage(
+                                model = newImageStatusBase64,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -848,10 +870,10 @@ fun HomeScreen(
                                     showCreateImageStatusDialog = false
                                     newImageStatusBase64 = ""
                                     newImageStatusCaption = ""
-                                    Toast.makeText(context, "Foto publicada no Status!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Foto publicada no Flash!", Toast.LENGTH_SHORT).show()
                                     loadStatuses()
                                 } else {
-                                    Toast.makeText(context, "Falha ao publicar foto", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Falha ao publicar Flash", Toast.LENGTH_SHORT).show()
                                 }
                             } catch (e: Exception) {
                                 Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
@@ -944,7 +966,7 @@ fun HomeScreen(
                             Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White)
                         }
                         Text(
-                            "Status com Música",
+                            "Flash com Música",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp
@@ -1008,7 +1030,7 @@ fun HomeScreen(
                                     previewPlayer = null
                                     scope.launch {
                                         isPostingStatus = true
-                                        val displayTitle = newMusicStatusTitle.ifBlank { "Música de Status" }
+                                        val displayTitle = newMusicStatusTitle.ifBlank { "Música do Flash" }
                                         val combinedCaption = buildString {
                                             append("🎵 ")
                                             append(displayTitle)
@@ -1039,10 +1061,10 @@ fun HomeScreen(
                                             )
                                             if (res.isSuccessful) {
                                                 showCreateMusicStatusDialog = false
-                                                Toast.makeText(context, "Música publicada no Status!", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "Música publicada no Flash!", Toast.LENGTH_SHORT).show()
                                                 loadStatuses()
                                             } else {
-                                                Toast.makeText(context, "Falha ao publicar status", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "Falha ao publicar Flash", Toast.LENGTH_SHORT).show()
                                             }
                                         } catch (e: Exception) {
                                             Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -1141,7 +1163,7 @@ fun HomeScreen(
 
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                "Música no Status",
+                                "Música no Flash",
                                 color = Color.White.copy(alpha = 0.6f),
                                 fontSize = 12.sp
                             )
@@ -1225,7 +1247,7 @@ fun HomeScreen(
                             if (activeStatusViewerList.isNullOrEmpty()) {
                                 activeStatusViewerList = null
                             }
-                            Toast.makeText(context, "Status excluído", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Flash excluído", Toast.LENGTH_SHORT).show()
                         }
                     } catch (e: Exception) {}
                 }
@@ -1243,9 +1265,33 @@ fun HomeScreen(
                 showStatusCameraDialog = false
                 scope.launch {
                     try {
-                        val bytes = withContext(Dispatchers.IO) { file.readBytes() }
-                        val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                         val isVideo = mediaType == "video"
+                        val bytes = withContext(Dispatchers.IO) {
+                            if (isVideo) {
+                                file.readBytes()
+                            } else {
+                                val original = BitmapFactory.decodeFile(file.absolutePath)
+                                if (original != null) {
+                                    val maxDim = 1280
+                                    val width = original.width
+                                    val height = original.height
+                                    val scaledBitmap = if (width > maxDim || height > maxDim) {
+                                        val ratio = if (width > height) maxDim.toFloat() / width else maxDim.toFloat() / height
+                                        val targetW = (width * ratio).toInt().coerceAtLeast(1)
+                                        val targetH = (height * ratio).toInt().coerceAtLeast(1)
+                                        Bitmap.createScaledBitmap(original, targetW, targetH, true)
+                                    } else {
+                                        original
+                                    }
+                                    val stream = ByteArrayOutputStream()
+                                    scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 80, stream)
+                                    stream.toByteArray()
+                                } else {
+                                    file.readBytes()
+                                }
+                            }
+                        }
+                        val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                         val dataUri = if (isVideo) "data:video/mp4;base64,$b64" else "data:image/jpeg;base64,$b64"
                         val res = apiService.createStatus(
                             mapOf(
@@ -1257,10 +1303,10 @@ fun HomeScreen(
                             )
                         )
                         if (res.isSuccessful) {
-                            Toast.makeText(context, if (isVideo) "Vídeo publicado no Status!" else "Foto publicada no Status!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, if (isVideo) "Vídeo publicado no Flash!" else "Foto publicada no Flash!", Toast.LENGTH_SHORT).show()
                             loadStatuses()
                         } else {
-                            Toast.makeText(context, "Falha ao publicar status", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Falha ao publicar Flash", Toast.LENGTH_SHORT).show()
                         }
                     } catch (e: Exception) {
                         Toast.makeText(context, "Erro ao publicar: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -1294,7 +1340,7 @@ fun HomeScreen(
                 actions = {
                     if (selectedTab == 1) {
                         IconButton(onClick = { loadStatuses() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Atualizar Status")
+                            Icon(Icons.Default.Refresh, contentDescription = "Atualizar Flash")
                         }
                     } else if (selectedTab == 2 && callHistory.isNotEmpty()) {
                         IconButton(onClick = { showClearCallHistoryDialog = true }) {
@@ -1333,7 +1379,7 @@ fun HomeScreen(
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             shape = CircleShape
                         ) {
-                            Icon(Icons.Default.Edit, contentDescription = "Status de Texto", modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Edit, contentDescription = "Flash de Texto", modifier = Modifier.size(20.dp))
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         FloatingActionButton(
@@ -1342,7 +1388,7 @@ fun HomeScreen(
                             contentColor = Color.White,
                             shape = RoundedCornerShape(16.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.CameraAlt, contentDescription = "Novo Status")
+                            Icon(imageVector = Icons.Default.CameraAlt, contentDescription = "Novo Flash")
                         }
                     }
                 }
@@ -1477,7 +1523,7 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Status",
+                                text = "Flash",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 22.sp
                             )
@@ -1487,7 +1533,7 @@ fun HomeScreen(
                         }
                     }
 
-                    // "Meu status" Card
+                    // "Meu Flash" Card
                     item {
                         Card(
                             shape = RoundedCornerShape(16.dp),
@@ -1540,7 +1586,7 @@ fun HomeScreen(
                                         Box(contentAlignment = Alignment.Center) {
                                             Icon(
                                                 imageVector = Icons.Default.Add,
-                                                contentDescription = "Adicionar status",
+                                                contentDescription = "Adicionar Flash",
                                                 tint = Color.White,
                                                 modifier = Modifier.size(15.dp)
                                             )
@@ -1551,10 +1597,10 @@ fun HomeScreen(
                                 Spacer(modifier = Modifier.width(16.dp))
 
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Meu status", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Text("Meu Flash", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = if (myStatuses.isNotEmpty()) "${myStatuses.size} atualização(ões) ativa(s)" else "Toque para adicionar atualização",
+                                        text = if (myStatuses.isNotEmpty()) "${myStatuses.size} Flash(s) ativo(s)" else "Toque para adicionar um Flash",
                                         fontSize = 13.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1574,7 +1620,7 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(14.dp))
                     }
 
-                    // "Atualizações recentes"
+                    // "Flashs recentes"
                     val grouped = contactsStatuses.groupBy { it.userId }
                     item {
                         Row(
@@ -1585,7 +1631,7 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Status Flash recentes",
+                                text = "Flashs recentes",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1622,14 +1668,14 @@ fun HomeScreen(
                                     )
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Text(
-                                        "Nenhuma atualização recente",
+                                        "Nenhum Flash recente",
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         fontSize = 15.sp
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        "Os status postados pelos seus contatos aparecerão aqui e ficam visíveis por 24h.",
+                                        "Os Flashs compartilhados pelos seus contatos aparecerão aqui e expiram em 24h.",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontSize = 13.sp,
                                         textAlign = TextAlign.Center
@@ -1641,7 +1687,7 @@ fun HomeScreen(
                                     ) {
                                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Verificar atualizações", fontSize = 12.sp)
+                                        Text("Verificar Flashs", fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -1896,12 +1942,77 @@ fun FullScreenStatusViewer(
                         )
                     }
                     "image" -> {
-                        AsyncImage(
-                            model = currentStatus.content,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit
-                        )
+                        val imageContent = currentStatus.content
+                        val decodedBitmap = remember(imageContent) {
+                            if (imageContent.startsWith("data:image/") || (!imageContent.startsWith("http://") && !imageContent.startsWith("https://") && imageContent.length > 100)) {
+                                try {
+                                    val cleanB64 = if (imageContent.contains(",")) imageContent.substringAfter(",") else imageContent
+                                    val decodedBytes = Base64.decode(cleanB64, Base64.DEFAULT)
+                                    BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+                                } catch (e: Exception) {
+                                    null
+                                }
+                            } else {
+                                null
+                            }
+                        }
+
+                        if (decodedBitmap != null) {
+                            Image(
+                                bitmap = decodedBitmap.asImageBitmap(),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit
+                            )
+                        } else {
+                            AsyncImage(
+                                model = imageContent,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit
+                            )
+                        }
+                    }
+                    "video" -> {
+                        val videoContent = currentStatus.content
+                        val videoUri = remember(videoContent) {
+                            if (videoContent.startsWith("data:video/")) {
+                                try {
+                                    val cleanB64 = videoContent.substringAfter(",")
+                                    val decodedBytes = Base64.decode(cleanB64, Base64.DEFAULT)
+                                    val tempFile = File(context.cacheDir, "status_vid_${currentStatus.id}.mp4")
+                                    if (!tempFile.exists() || tempFile.length() == 0L) {
+                                        tempFile.writeBytes(decodedBytes)
+                                    }
+                                    Uri.fromFile(tempFile)
+                                } catch (e: Exception) {
+                                    null
+                                }
+                            } else if (videoContent.startsWith("http://") || videoContent.startsWith("https://")) {
+                                Uri.parse(videoContent)
+                            } else {
+                                null
+                            }
+                        }
+
+                        if (videoUri != null) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    VideoView(ctx).apply {
+                                        setVideoURI(videoUri)
+                                        setOnPreparedListener { mp ->
+                                            mp.isLooping = true
+                                            start()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                Text("Vídeo indisponível", color = Color.White)
+                            }
+                        }
                     }
                     "audio" -> {
                         val rawCaption = currentStatus.caption.orEmpty()
@@ -1918,7 +2029,7 @@ fun FullScreenStatusViewer(
                                 rest = rest.substringBefore(" -- ").trim()
                             }
                             val cleanTitleArtist = rest.removePrefix("🎵 ").trim()
-                            val title = if (cleanTitleArtist.contains(" • ")) cleanTitleArtist.substringBefore(" • ").trim() else cleanTitleArtist.ifBlank { "Música de Status" }
+                            val title = if (cleanTitleArtist.contains(" • ")) cleanTitleArtist.substringBefore(" • ").trim() else cleanTitleArtist.ifBlank { "Música do Flash" }
                             val artist = if (cleanTitleArtist.contains(" • ")) cleanTitleArtist.substringAfter(" • ").trim() else ""
                             listOf(title, artist, art, userC)
                         }
@@ -2012,7 +2123,7 @@ fun FullScreenStatusViewer(
                                         color = Color(0xFF25D366).copy(alpha = 0.2f)
                                     ) {
                                         Text(
-                                            text = if (musicArtist.isNotBlank()) "Música de Cantor" else "Áudio de Status",
+                                            text = if (musicArtist.isNotBlank()) "Música de Cantor" else "Áudio do Flash",
                                             color = Color(0xFF25D366),
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold,
@@ -2098,8 +2209,8 @@ fun FullScreenStatusViewer(
                 }
             }
 
-            // Image Caption at bottom
-            if (currentStatus.contentType == "image" && !currentStatus.caption.isNullOrBlank()) {
+            // Image/Video Caption at bottom
+            if ((currentStatus.contentType == "image" || currentStatus.contentType == "video") && !currentStatus.caption.isNullOrBlank()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2259,7 +2370,7 @@ fun FullScreenStatusViewer(
 
                     if (currentStatus.userId == currentUserId) {
                         IconButton(onClick = { onDeleteStatus(currentStatus.id) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Apagar Status", tint = DangerRed)
+                            Icon(Icons.Default.Delete, contentDescription = "Apagar Flash", tint = DangerRed)
                         }
                     }
                 }

@@ -364,11 +364,9 @@ fun SettingsScreen(
                                     if (currentAvatarBitmap != null) {
                                         bitmapToAdjust = currentAvatarBitmap
                                         showPhotoAdjustDialog = true
-                                    } else {
-                                        launchCamera()
                                     }
                                 },
-                            contentAlignment = Alignment.BottomEnd
+                            contentAlignment = Alignment.Center
                         ) {
                             UserAvatarView(
                                 avatarBitmap = currentAvatarBitmap,
@@ -377,23 +375,6 @@ fun SettingsScreen(
                                 size = 100.dp,
                                 fontSize = 36.sp
                             )
-
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clickable { launchCamera() }
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.CameraAlt,
-                                        contentDescription = "Câmera",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
                         }
                     }
 
@@ -406,20 +387,32 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (currentAvatarBitmap != null) {
-                            Button(
+                            FilledTonalButton(
                                 onClick = {
                                     bitmapToAdjust = currentAvatarBitmap
                                     showPhotoAdjustDialog = true
                                 },
                                 shape = RoundedCornerShape(20.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                             ) {
                                 Icon(Icons.Default.Crop, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Ajustar Foto", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Ajustar", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             }
 
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            OutlinedButton(
+                                onClick = { launchCamera() },
+                                shape = RoundedCornerShape(20.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Câmera", fontSize = 12.sp)
+                            }
+
+                            Spacer(modifier = Modifier.width(6.dp))
 
                             OutlinedButton(
                                 onClick = { galleryLauncher.launch("image/*") },
@@ -431,7 +424,7 @@ fun SettingsScreen(
                                 Text("Galeria", fontSize = 12.sp)
                             }
 
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
 
                             IconButton(
                                 onClick = {
@@ -442,7 +435,8 @@ fun SettingsScreen(
                                     if (f.exists()) f.delete()
                                     val userF = File(context.filesDir, "avatar_${userId}.jpg")
                                     if (userF.exists()) userF.delete()
-                                }
+                                },
+                                modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remover Foto", tint = DangerRed, modifier = Modifier.size(20.dp))
                             }
@@ -487,7 +481,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = newBioInput,
                         onValueChange = { newBioInput = it },
-                        label = { Text("Recado / Status") },
+                        label = { Text("Bio / Recado") },
                         placeholder = { Text("Ex: Disponível no LivreChat...") },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
