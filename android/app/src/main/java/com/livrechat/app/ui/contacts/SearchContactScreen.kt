@@ -459,7 +459,7 @@ fun SearchContactScreen(
                                     }
                                     showCreateGroupDialog = false
                                     Toast.makeText(context, "Grupo criado com sucesso!", Toast.LENGTH_SHORT).show()
-                                    onNavigateToChat(dto.conversationId, dto.title ?: title, dto.title ?: title)
+                                    onNavigateToChat(dto.conversationId, dto.conversationId, dto.title ?: title)
                                 } else {
                                     val err = res.errorBody()?.string() ?: "Erro ao criar grupo"
                                     Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
