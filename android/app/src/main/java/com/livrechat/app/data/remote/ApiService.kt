@@ -153,5 +153,18 @@ interface ApiService {
         @Path("conversationId") conversationId: String,
         @Path("memberId") memberId: String
     ): Response<BaseResponse>
+
+    @PUT("api/messages/groups/{conversationId}/admins/{userId}")
+    suspend fun setGroupMemberAdmin(
+        @Path("conversationId") conversationId: String,
+        @Path("userId") userId: String,
+        @Body body: Map<String, Boolean>
+    ): Response<BaseResponse>
+
+    @PUT("api/messages/groups/{conversationId}/permissions")
+    suspend fun updateGroupPermissions(
+        @Path("conversationId") conversationId: String,
+        @Body body: Map<String, Boolean>
+    ): Response<BaseResponse>
 }
 

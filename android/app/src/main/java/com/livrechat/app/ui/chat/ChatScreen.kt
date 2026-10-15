@@ -73,6 +73,7 @@ import com.livrechat.app.media.AudioRecorderHelper
 import com.livrechat.app.ui.theme.BlueAccent
 import com.livrechat.app.ui.theme.DangerRed
 import com.livrechat.app.ui.common.UserAvatarView
+import com.livrechat.app.sync.ContactSyncHelper
 import androidx.compose.ui.text.style.TextOverflow
 import com.livrechat.app.ui.theme.OfflineGray
 import com.livrechat.app.util.MediaFileManager
@@ -369,8 +370,15 @@ fun ChatScreen(
     val savedContacts by app.database.contactDao().getAllContactsFlow().collectAsState(initial = emptyList())
     var groupMembers by remember(conversationId) { mutableStateOf<List<GroupMemberDto>>(emptyList()) }
     val resolvedUserNames = remember { mutableStateMapOf<String, String>() }
+    val resolvedSenderAvatars = remember { mutableStateMapOf<String, String?>() }
+    var viewingMemberUserId by remember { mutableStateOf<String?>(null) }
+
+    val isCurrentUserAdmin = remember(groupMembers, prefs.currentUserId) {
+        groupMembers.any { it.id == prefs.currentUserId && it.isAdmin }
+    }
 
     LaunchedEffect(conversationId, currentConv?.isGroup) {
+        ContactSyncHelper.autoSyncIfPermitted(context)
         if (currentConv?.isGroup == true) {
             scope.launch(Dispatchers.IO) {
                 try {
@@ -393,41 +401,84 @@ fun ChatScreen(
             if (senderId == prefs.currentUserId) {
                 "Você"
             } else {
-                // 1. Saved contacts in address book / Room
-                val contactMatch = savedContacts.firstOrNull { it.contactUserId == senderId }
-                val contactName = contactMatch?.displayName?.takeIf { it.isNotBlank() }
-                    ?: prefs.getContactCustomName(senderId)
-
-                if (!contactName.isNullOrBlank()) {
-                    contactName
+                // 1. Check custom name set by user in preferences
+                val customName = prefs.getContactCustomName(senderId)
+                if (!customName.isNullOrBlank()) {
+                    customName
                 } else {
-                    // 2. Group members list
-                    val memberMatch = groupMembers.firstOrNull { it.id == senderId }
-                    if (memberMatch != null) {
-                        when {
-                            memberMatch.displayName.isNotBlank() -> memberMatch.displayName
-                            memberMatch.username.isNotBlank() -> "@${memberMatch.username}"
-                            else -> "Membro"
-                        }
+                    // 2. Find in group members or saved contacts to get candidate username / phone
+                    val memberMatch = groupMembers.firstOrNull { it.id == senderId || it.username == senderId }
+                    val contactMatch = savedContacts.firstOrNull { it.contactUserId == senderId || it.id == senderId || it.username == senderId }
+
+                    val rawPhoneOrUser = memberMatch?.username ?: contactMatch?.username ?: senderId
+
+                    // 3. Look up in Android Contacts by phone/number (WhatsApp style)
+                    val phoneBookName = ContactSyncHelper.getContactNameByPhoneOrUsername(context, rawPhoneOrUser)
+
+                    if (!phoneBookName.isNullOrBlank()) {
+                        phoneBookName
+                    } else if (!contactMatch?.displayName.isNullOrBlank()) {
+                        contactMatch!!.displayName
+                    } else if (memberMatch != null && memberMatch.displayName.isNotBlank()) {
+                        memberMatch.displayName
+                    } else if (memberMatch != null && memberMatch.username.isNotBlank()) {
+                        memberMatch.username
                     } else if (resolvedUserNames.containsKey(senderId)) {
-                        // 3. Cached remote fetch
                         resolvedUserNames[senderId] ?: "Membro"
                     } else {
-                        // 4. Background fetch for unknown sender
+                        // Background fetch for unknown sender
                         scope.launch(Dispatchers.IO) {
                             try {
                                 val profileRes = app.apiClient.apiService.getUserProfile(senderId)
                                 if (profileRes.isSuccessful && profileRes.body() != null) {
                                     val u = profileRes.body()!!
-                                    val resolved = u.displayName.ifBlank { "@${u.username}" }
+                                    val resolved = u.displayName.ifBlank { u.username }
                                     withContext(Dispatchers.Main) {
                                         resolvedUserNames[senderId] = resolved
                                     }
                                 }
                             } catch (e: Exception) {}
                         }
-                        "Membro"
+                        rawPhoneOrUser.takeIf { it.isNotBlank() } ?: "Membro"
                     }
+                }
+            }
+        }
+    }
+
+    val resolveSenderAvatar: (String) -> String? = remember(savedContacts, groupMembers, resolvedSenderAvatars) {
+        { senderId ->
+            if (senderId == prefs.currentUserId) {
+                prefs.userAvatarUrl
+            } else {
+                val memberMatch = groupMembers.firstOrNull { it.id == senderId || it.username == senderId }
+                val contactMatch = savedContacts.firstOrNull { it.contactUserId == senderId || it.id == senderId || it.username == senderId }
+                val rawPhoneOrUser = memberMatch?.username ?: contactMatch?.username ?: senderId
+
+                // 1. Phonebook photo
+                val phoneBookPhoto = ContactSyncHelper.getContactPhotoByPhoneOrUsername(context, rawPhoneOrUser)
+                if (!phoneBookPhoto.isNullOrBlank()) {
+                    phoneBookPhoto
+                } else if (!contactMatch?.avatarUrl.isNullOrBlank()) {
+                    contactMatch!!.avatarUrl
+                } else if (!memberMatch?.avatarUrl.isNullOrBlank()) {
+                    memberMatch!!.avatarUrl
+                } else if (resolvedSenderAvatars.containsKey(senderId)) {
+                    resolvedSenderAvatars[senderId]
+                } else {
+                    // Background fetch
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            val profileRes = app.apiClient.apiService.getUserProfile(senderId)
+                            if (profileRes.isSuccessful && profileRes.body() != null) {
+                                val u = profileRes.body()!!
+                                withContext(Dispatchers.Main) {
+                                    resolvedSenderAvatars[senderId] = u.avatarUrl
+                                }
+                            }
+                        } catch (e: Exception) {}
+                    }
+                    null
                 }
             }
         }
@@ -947,6 +998,49 @@ fun ChatScreen(
         )
     }
 
+    if (viewingMemberUserId != null) {
+        val targetId = viewingMemberUserId!!
+        val memberMatch = groupMembers.firstOrNull { it.id == targetId || it.username == targetId }
+        val contactMatch = savedContacts.firstOrNull { it.contactUserId == targetId || it.id == targetId }
+        val resolvedName = resolveSenderName(targetId)
+        val resolvedAvatar = resolveSenderAvatar(targetId)
+        val username = memberMatch?.username ?: contactMatch?.username ?: ""
+
+        ContactProfileDialog(
+            conversationId = "",
+            otherUserId = targetId,
+            otherDisplayName = resolvedName,
+            otherUsername = username,
+            otherAvatarUrl = resolvedAvatar,
+            messages = emptyList(),
+            isLocked = false,
+            isGroup = false,
+            groupTitle = null,
+            groupAvatar = null,
+            onDismiss = { viewingMemberUserId = null },
+            onLeaveGroup = {},
+            onStartCall = {
+                viewingMemberUserId = null
+                onStartCall(
+                    targetId,
+                    resolvedName,
+                    username,
+                    resolvedAvatar
+                )
+            },
+            onToggleLock = {},
+            onClearChat = {},
+            onBlockContact = {
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        app.apiClient.apiService.blockUser(mapOf("blockedUserId" to targetId, "targetUserId" to targetId))
+                    } catch (e: Exception) {}
+                }
+            },
+            onViewMedia = { viewingImageBase64 = it }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -1178,6 +1272,35 @@ fun ChatScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "Você bloqueou este contato. Toque para desbloquear.",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            } else if (currentConv?.isGroup == true && currentConv?.adminOnlyMessage == true && !isCurrentUserAdmin) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shadowElevation = 4.dp,
+                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 18.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Apenas os administradores podem enviar mensagens.",
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Medium
@@ -1732,7 +1855,13 @@ fun ChatScreen(
                         onImageClick = { viewingImageBase64 = it },
                         onVideoClick = { viewingVideoMessage = it },
                         isGroup = currentConv?.isGroup == true,
-                        senderDisplayName = if (currentConv?.isGroup == true) resolveSenderName(message.senderId) else ""
+                        senderDisplayName = if (currentConv?.isGroup == true) resolveSenderName(message.senderId) else "",
+                        senderAvatarUrl = if (currentConv?.isGroup == true) resolveSenderAvatar(message.senderId) else null,
+                        onSenderClick = { senderId ->
+                            if (senderId != prefs.currentUserId) {
+                                viewingMemberUserId = senderId
+                            }
+                        }
                     )
                 }
             }
@@ -2054,7 +2183,9 @@ fun MessageBubble(
     onImageClick: (String) -> Unit,
     onVideoClick: (MessageEntity) -> Unit,
     isGroup: Boolean = false,
-    senderDisplayName: String = ""
+    senderDisplayName: String = "",
+    senderAvatarUrl: String? = null,
+    onSenderClick: ((String) -> Unit)? = null
 ) {
     val isOutgoing = message.isOutgoing
     val alignment = if (isOutgoing) Alignment.End else Alignment.Start
@@ -2109,26 +2240,53 @@ fun MessageBubble(
             }
         }
 
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .offset(x = animatedOffset.dp),
-            horizontalAlignment = alignment
+            horizontalArrangement = if (isOutgoing) Arrangement.End else Arrangement.Start,
+            verticalAlignment = Alignment.Bottom
         ) {
-            if (message.messageType == "sticker") {
-                // Sticker without speech bubble container
-                Column(
+            if (isGroup && !isOutgoing) {
+                UserAvatarView(
+                    avatarUrl = senderAvatarUrl,
+                    displayName = senderDisplayName.ifBlank { "M" },
+                    size = 30.dp,
+                    fontSize = 12.sp,
                     modifier = Modifier
-                        .combinedClickable(
-                            onClick = {},
-                            onLongClick = { onLongPress(message) }
+                        .padding(end = 6.dp, bottom = 4.dp)
+                        .clickable { onSenderClick?.invoke(message.senderId) }
+                )
+            }
+
+            Column(
+                horizontalAlignment = alignment
+            ) {
+                if (message.messageType == "sticker") {
+                    // Sticker without speech bubble container
+                    Column(
+                        modifier = Modifier
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = { onLongPress(message) }
+                            )
+                    ) {
+                        if (isGroup && !isOutgoing) {
+                            Text(
+                                text = senderDisplayName.ifBlank { "Membro" },
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = getSenderColor(message.senderId),
+                                modifier = Modifier
+                                    .clickable { onSenderClick?.invoke(message.senderId) }
+                                    .padding(start = 4.dp, bottom = 2.dp)
+                            )
+                        }
+                        StickerMessageBubbleContent(
+                            message = message,
+                            isOutgoing = isOutgoing
                         )
-                ) {
-                    StickerMessageBubbleContent(
-                        message = message,
-                        isOutgoing = isOutgoing
-                    )
-                    Row(
+                        Row(
                         modifier = Modifier.align(Alignment.End).padding(end = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -2192,10 +2350,12 @@ fun MessageBubble(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 color = getSenderColor(message.senderId),
-                                modifier = Modifier.padding(
-                                    start = if (isMediaMsg) 6.dp else 0.dp,
-                                    bottom = 3.dp
-                                )
+                                modifier = Modifier
+                                    .clickable { onSenderClick?.invoke(message.senderId) }
+                                    .padding(
+                                        start = if (isMediaMsg) 6.dp else 0.dp,
+                                        bottom = 3.dp
+                                    )
                             )
                         }
 
@@ -2356,6 +2516,7 @@ fun MessageBubble(
             }
         }
     }
+}
 }
 
 @Composable

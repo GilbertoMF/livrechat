@@ -183,6 +183,7 @@ fun HomeScreen(
     }
 
     LaunchedEffect(Unit) {
+        com.livrechat.app.sync.ContactSyncHelper.autoSyncIfPermitted(context)
         if (selectedTab == 1) {
             loadStatuses()
         } else {

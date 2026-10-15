@@ -8,11 +8,13 @@ import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
 import android.provider.ContactsContract.CommonDataKinds.Phone
 import android.provider.ContactsContract.CommonDataKinds.StructuredName
 import android.provider.ContactsContract.Data
+import android.provider.ContactsContract.PhoneLookup
 import android.provider.ContactsContract.RawContacts
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -21,8 +23,11 @@ import com.livrechat.app.data.local.entity.ContactEntity
 import com.livrechat.app.data.remote.model.DeviceContactPayload
 import com.livrechat.app.data.remote.model.MatchedContactDto
 import com.livrechat.app.data.remote.model.SyncContactsRequest
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 object ContactSyncHelper {
     private const val TAG = "ContactSyncHelper"
@@ -281,6 +286,102 @@ object ContactSyncHelper {
             context.startActivity(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Não foi possível abrir o app de contatos do celular: ${e.message}")
+        }
+    }
+
+    private val phoneNameToContactCache = ConcurrentHashMap<String, String>()
+    private val phonePhotoToContactCache = ConcurrentHashMap<String, String>()
+    private var lastAutoSyncTimestamp = 0L
+
+    fun getContactNameByPhoneOrUsername(context: Context, raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val cleanNumber = raw.replace(Regex("[^0-9]"), "")
+        if (cleanNumber.length < 4) return null
+
+        phoneNameToContactCache[cleanNumber]?.let { return it }
+
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            return null
+        }
+
+        try {
+            val uri = Uri.withAppendedPath(PhoneLookup.CONTENT_FILTER_URI, Uri.encode(cleanNumber))
+            context.contentResolver.query(
+                uri,
+                arrayOf(PhoneLookup.DISPLAY_NAME, PhoneLookup.PHOTO_URI),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIdx = cursor.getColumnIndex(PhoneLookup.DISPLAY_NAME)
+                    val photoIdx = cursor.getColumnIndex(PhoneLookup.PHOTO_URI)
+                    val name = if (nameIdx >= 0) cursor.getString(nameIdx) else null
+                    val photo = if (photoIdx >= 0) cursor.getString(photoIdx) else null
+
+                    if (!name.isNullOrBlank()) {
+                        phoneNameToContactCache[cleanNumber] = name
+                    }
+                    if (!photo.isNullOrBlank()) {
+                        phonePhotoToContactCache[cleanNumber] = photo
+                    }
+                    return name
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Erro ao buscar nome de contato por número ($cleanNumber): ${e.message}")
+        }
+        return null
+    }
+
+    fun getContactPhotoByPhoneOrUsername(context: Context, raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val cleanNumber = raw.replace(Regex("[^0-9]"), "")
+        if (cleanNumber.length < 4) return null
+
+        phonePhotoToContactCache[cleanNumber]?.let { return it }
+
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            return null
+        }
+
+        try {
+            val uri = Uri.withAppendedPath(PhoneLookup.CONTENT_FILTER_URI, Uri.encode(cleanNumber))
+            context.contentResolver.query(
+                uri,
+                arrayOf(PhoneLookup.PHOTO_URI, PhoneLookup.PHOTO_THUMBNAIL_URI),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val photoIdx = cursor.getColumnIndex(PhoneLookup.PHOTO_URI)
+                    val thumbIdx = cursor.getColumnIndex(PhoneLookup.PHOTO_THUMBNAIL_URI)
+                    val photo = if (photoIdx >= 0) cursor.getString(photoIdx) else null
+                    val thumb = if (thumbIdx >= 0) cursor.getString(thumbIdx) else null
+                    val finalPhoto = photo ?: thumb
+                    if (!finalPhoto.isNullOrBlank()) {
+                        phonePhotoToContactCache[cleanNumber] = finalPhoto
+                        return finalPhoto
+                    }
+                }
+            }
+        } catch (e: Exception) {}
+        return null
+    }
+
+    fun autoSyncIfPermitted(context: Context) {
+        val now = System.currentTimeMillis()
+        if (now - lastAutoSyncTimestamp < 45000L) return
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return
+
+        lastAutoSyncTimestamp = now
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                syncDeviceContacts(context)
+            } catch (e: Exception) {
+                Log.w(TAG, "Erro no autoSync de contatos: ${e.message}")
+            }
         }
     }
 }

@@ -158,6 +158,22 @@ export class WebSocketManager {
         const msgId = clientMessageId || uuidv4();
         const now = new Date().toISOString();
 
+        if (conversationId) {
+          const conv = await db.getConversationById(conversationId);
+          if (conv?.is_group && conv?.admin_only_message) {
+            const isSenderAdmin = await db.isUserGroupAdmin(conversationId, senderId);
+            if (!isSenderAdmin) {
+              senderWs.send(JSON.stringify({
+                type: 'chat:error',
+                conversationId,
+                clientMessageId,
+                message: 'Apenas os administradores podem enviar mensagens neste grupo.'
+              }));
+              return;
+            }
+          }
+        }
+
         // 1. Instant acknowledgment to sender (0ms latency - 1 tick)
         senderWs.send(JSON.stringify({
           type: 'chat:ack',

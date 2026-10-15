@@ -49,6 +49,9 @@ export interface Conversation {
   created_by?: string;
   created_at: string;
   updated_at: string;
+  admin_only_message?: boolean;
+  admin_only_edit_info?: boolean;
+  admin_only_add_members?: boolean;
 }
 
 export interface ConversationMember {
@@ -58,6 +61,7 @@ export interface ConversationMember {
   is_archived: boolean;
   is_muted: boolean;
   last_read_at?: string;
+  is_admin?: boolean;
 }
 
 export interface Message {
@@ -257,6 +261,10 @@ class DatabaseService {
           await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS title VARCHAR(100);').catch(() => {});
           await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS avatar_url TEXT;').catch(() => {});
           await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS created_by VARCHAR(36);').catch(() => {});
+          await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS admin_only_message BOOLEAN DEFAULT FALSE;').catch(() => {});
+          await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS admin_only_edit_info BOOLEAN DEFAULT FALSE;').catch(() => {});
+          await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS admin_only_add_members BOOLEAN DEFAULT FALSE;').catch(() => {});
+          await client.query('ALTER TABLE conversation_members ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;').catch(() => {});
           await client.query('ALTER TABLE statuses ADD COLUMN IF NOT EXISTS reactions JSONB DEFAULT \'[]\'::jsonb;').catch(() => {});
           await client.query('ALTER TABLE statuses ADD COLUMN IF NOT EXISTS views JSONB DEFAULT \'[]\'::jsonb;').catch(() => {});
           await client.query('ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS phone_number VARCHAR(50);').catch(() => {});
@@ -1119,6 +1127,9 @@ class DatabaseService {
             c.title AS group_title,
             c.avatar_url AS group_avatar_url,
             c.created_by,
+            c.admin_only_message,
+            c.admin_only_edit_info,
+            c.admin_only_add_members,
             cm.is_pinned,
             cm.is_archived,
             cm.is_muted,
@@ -1186,6 +1197,9 @@ class DatabaseService {
             isGroup,
             title: isGroup ? row.group_title : undefined,
             avatarUrl: isGroup ? row.group_avatar_url : undefined,
+            adminOnlyMessage: isGroup ? !!row.admin_only_message : false,
+            adminOnlyEditInfo: isGroup ? !!row.admin_only_edit_info : false,
+            adminOnlyAddMembers: isGroup ? !!row.admin_only_add_members : false,
             otherUser: isGroup ? {
               id: convId,
               username: row.group_title || 'Grupo',
@@ -1240,6 +1254,9 @@ class DatabaseService {
           isGroup: true,
           title: conv.title,
           avatarUrl: conv.avatar_url,
+          adminOnlyMessage: !!conv.admin_only_message,
+          adminOnlyEditInfo: !!conv.admin_only_edit_info,
+          adminOnlyAddMembers: !!conv.admin_only_add_members,
           otherUser: {
             id: conv.id,
             username: conv.title || 'Grupo',
@@ -1380,6 +1397,126 @@ class DatabaseService {
       }
     }
     return true;
+  }
+
+  public async isUserGroupAdmin(conversationId: string, userId: string): Promise<boolean> {
+    const conv = await this.getConversationById(conversationId);
+    if (!conv) return false;
+    if (conv.created_by === userId) return true;
+
+    if (this.pgPool) {
+      try {
+        const res = await this.pgPool.query(
+          'SELECT is_admin FROM conversation_members WHERE conversation_id = $1 AND user_id = $2',
+          [conversationId, userId]
+        );
+        if (res.rows.length > 0 && res.rows[0].is_admin) return true;
+      } catch (e) {
+        console.warn('[Database] Erro PG isUserGroupAdmin:', e);
+      }
+    }
+    const mem = this.memoryStore.conversation_members.find(
+      m => m.conversation_id === conversationId && m.user_id === userId
+    );
+    return mem?.is_admin === true;
+  }
+
+  public async setGroupMemberAdmin(conversationId: string, userId: string, isAdmin: boolean): Promise<boolean> {
+    const mem = this.memoryStore.conversation_members.find(
+      m => m.conversation_id === conversationId && m.user_id === userId
+    );
+    if (mem) {
+      mem.is_admin = isAdmin;
+      this.saveToLocal();
+    }
+
+    if (this.pgPool) {
+      try {
+        await this.pgPool.query(
+          'UPDATE conversation_members SET is_admin = $1 WHERE conversation_id = $2 AND user_id = $3',
+          [isAdmin, conversationId, userId]
+        );
+      } catch (e) {
+        console.warn('[Database] Erro PG setGroupMemberAdmin:', e);
+      }
+    }
+    return true;
+  }
+
+  public async updateGroupPermissions(
+    conversationId: string,
+    permissions: { adminOnlyMessage?: boolean; adminOnlyEditInfo?: boolean; adminOnlyAddMembers?: boolean }
+  ): Promise<Conversation | null> {
+    let conv = this.memoryStore.conversations.find(c => c.id === conversationId);
+    const now = new Date().toISOString();
+    if (conv) {
+      if (permissions.adminOnlyMessage !== undefined) conv.admin_only_message = permissions.adminOnlyMessage;
+      if (permissions.adminOnlyEditInfo !== undefined) conv.admin_only_edit_info = permissions.adminOnlyEditInfo;
+      if (permissions.adminOnlyAddMembers !== undefined) conv.admin_only_add_members = permissions.adminOnlyAddMembers;
+      conv.updated_at = now;
+      this.saveToLocal();
+    }
+
+    if (this.pgPool) {
+      try {
+        const fields: string[] = [];
+        const params: any[] = [conversationId];
+        let idx = 2;
+        if (permissions.adminOnlyMessage !== undefined) {
+          fields.push(`admin_only_message = $${idx++}`);
+          params.push(permissions.adminOnlyMessage);
+        }
+        if (permissions.adminOnlyEditInfo !== undefined) {
+          fields.push(`admin_only_edit_info = $${idx++}`);
+          params.push(permissions.adminOnlyEditInfo);
+        }
+        if (permissions.adminOnlyAddMembers !== undefined) {
+          fields.push(`admin_only_add_members = $${idx++}`);
+          params.push(permissions.adminOnlyAddMembers);
+        }
+        fields.push(`updated_at = $${idx++}`);
+        params.push(now);
+
+        if (fields.length > 1) {
+          await this.pgPool.query(
+            `UPDATE conversations SET ${fields.join(', ')} WHERE id = $1`,
+            params
+          );
+        }
+      } catch (e) {
+        console.warn('[Database] Erro PG updateGroupPermissions:', e);
+      }
+    }
+    return await this.getConversationById(conversationId);
+  }
+
+  public async getConversationMemberDetails(conversationId: string): Promise<Array<{ userId: string; isAdmin: boolean }>> {
+    const conv = await this.getConversationById(conversationId);
+    const creatorId = conv?.created_by;
+
+    if (this.pgPool) {
+      try {
+        const res = await this.pgPool.query(
+          'SELECT user_id, is_admin FROM conversation_members WHERE conversation_id = $1',
+          [conversationId]
+        );
+        if (res.rows.length > 0) {
+          return res.rows.map(r => ({
+            userId: r.user_id,
+            isAdmin: r.user_id === creatorId || r.is_admin === true
+          }));
+        }
+      } catch (e) {
+        console.warn('[Database] Erro PG getConversationMemberDetails:', e);
+      }
+    }
+
+    return this.memoryStore.conversation_members
+      .filter(m => m.conversation_id === conversationId)
+      .map(m => ({
+        userId: m.user_id,
+        isAdmin: m.user_id === creatorId || m.is_admin === true
+      }));
   }
 
   // ==========================================

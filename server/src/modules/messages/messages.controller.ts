@@ -112,6 +112,14 @@ export class MessagesController {
       const senderId = req.user!.userId;
       const { conversationId, content, iv, messageType, replyToId, clientMessageId, targetUserId } = req.body;
 
+      const conv = await db.getConversationById(conversationId);
+      if (conv?.is_group && conv?.admin_only_message) {
+        const isSenderAdmin = await db.isUserGroupAdmin(conversationId, senderId);
+        if (!isSenderAdmin) {
+          return res.status(403).json({ error: 'Apenas administradores podem enviar mensagens neste grupo.' });
+        }
+      }
+
       await db.ensureConversationMember(conversationId, senderId);
       if (targetUserId) {
         await db.ensureConversationMember(conversationId, targetUserId);
@@ -345,6 +353,19 @@ export class MessagesController {
     try {
       const { conversationId } = req.params;
       const { title, avatarUrl } = req.body;
+      const callerId = req.user!.userId;
+
+      const conv = await db.getConversationById(conversationId);
+      if (!conv) {
+        return res.status(404).json({ error: 'Grupo não encontrado.' });
+      }
+
+      if (conv.admin_only_edit_info) {
+        const isCallerAdmin = await db.isUserGroupAdmin(conversationId, callerId);
+        if (!isCallerAdmin) {
+          return res.status(403).json({ error: 'Apenas administradores podem alterar os dados do grupo.' });
+        }
+      }
 
       const updated = await db.updateGroupConversation(conversationId, title, avatarUrl);
       if (!updated) {
@@ -374,12 +395,11 @@ export class MessagesController {
   public static async getConversationMembers(req: AuthRequest, res: Response) {
     try {
       const { conversationId } = req.params;
-      const memberIds = await db.getConversationMembers(conversationId);
-      const conv = await db.getConversationById(conversationId);
+      const memberDetails = await db.getConversationMemberDetails(conversationId);
       const members = [];
-      for (const mId of memberIds) {
-        const u = await db.findUserById(mId);
-        const p = await db.getProfile(mId);
+      for (const md of memberDetails) {
+        const u = await db.findUserById(md.userId);
+        const p = await db.getProfile(md.userId);
         if (u) {
           members.push({
             id: u.id,
@@ -387,7 +407,7 @@ export class MessagesController {
             displayName: p?.display_name || u.username,
             avatarUrl: p?.avatar_url || null,
             bio: p?.bio || null,
-            isAdmin: conv ? conv.created_by === u.id : false
+            isAdmin: md.isAdmin
           });
         }
       }
@@ -397,12 +417,93 @@ export class MessagesController {
     }
   }
 
+  public static async setGroupMemberAdmin(req: AuthRequest, res: Response) {
+    try {
+      const { conversationId, userId } = req.params;
+      const { isAdmin } = req.body;
+      const callerId = req.user!.userId;
+
+      const isCallerAdmin = await db.isUserGroupAdmin(conversationId, callerId);
+      if (!isCallerAdmin) {
+        return res.status(403).json({ error: 'Apenas administradores podem alterar permissões de membros.' });
+      }
+
+      await db.setGroupMemberAdmin(conversationId, userId, !!isAdmin);
+
+      const wsManager = WebSocketManager.getInstance();
+      if (wsManager) {
+        const members = await db.getConversationMembers(conversationId);
+        for (const mId of members) {
+          wsManager.sendToUser(mId, {
+            type: 'group:admins_updated',
+            conversationId,
+            targetUserId: userId,
+            isAdmin: !!isAdmin
+          });
+        }
+      }
+
+      return res.status(200).json({ success: true, conversationId, userId, isAdmin: !!isAdmin });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  public static async updateGroupPermissions(req: AuthRequest, res: Response) {
+    try {
+      const { conversationId } = req.params;
+      const { adminOnlyMessage, adminOnlyEditInfo, adminOnlyAddMembers } = req.body;
+      const callerId = req.user!.userId;
+
+      const isCallerAdmin = await db.isUserGroupAdmin(conversationId, callerId);
+      if (!isCallerAdmin) {
+        return res.status(403).json({ error: 'Apenas administradores podem alterar configurações do grupo.' });
+      }
+
+      const updated = await db.updateGroupPermissions(conversationId, {
+        adminOnlyMessage,
+        adminOnlyEditInfo,
+        adminOnlyAddMembers
+      });
+
+      const wsManager = WebSocketManager.getInstance();
+      if (wsManager) {
+        const members = await db.getConversationMembers(conversationId);
+        for (const mId of members) {
+          wsManager.sendToUser(mId, {
+            type: 'group:permissions_updated',
+            conversationId,
+            permissions: {
+              adminOnlyMessage: updated?.admin_only_message,
+              adminOnlyEditInfo: updated?.admin_only_edit_info,
+              adminOnlyAddMembers: updated?.admin_only_add_members
+            }
+          });
+        }
+      }
+
+      return res.status(200).json({ success: true, conversation: updated });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   public static async addConversationMembers(req: AuthRequest, res: Response) {
     try {
       const { conversationId } = req.params;
       const { memberIds } = req.body;
+      const callerId = req.user!.userId;
+
       if (!Array.isArray(memberIds) || memberIds.length === 0) {
         return res.status(400).json({ error: 'Nenhum membro informado.' });
+      }
+
+      const conv = await db.getConversationById(conversationId);
+      if (conv?.admin_only_add_members) {
+        const isCallerAdmin = await db.isUserGroupAdmin(conversationId, callerId);
+        if (!isCallerAdmin) {
+          return res.status(403).json({ error: 'Apenas administradores podem adicionar participantes a este grupo.' });
+        }
       }
 
       const updatedMemberIds = await db.addConversationMembers(conversationId, memberIds);
@@ -428,6 +529,14 @@ export class MessagesController {
   public static async removeConversationMember(req: AuthRequest, res: Response) {
     try {
       const { conversationId, memberId } = req.params;
+      const callerId = req.user!.userId;
+
+      if (memberId !== callerId) {
+        const isCallerAdmin = await db.isUserGroupAdmin(conversationId, callerId);
+        if (!isCallerAdmin) {
+          return res.status(403).json({ error: 'Apenas administradores podem remover participantes do grupo.' });
+        }
+      }
 
       await db.removeConversationMember(conversationId, memberId);
 

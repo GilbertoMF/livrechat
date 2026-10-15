@@ -19,5 +19,8 @@ data class ConversationEntity(
     val isMuted: Boolean = false,
     val isGroup: Boolean = false,
     val groupTitle: String? = null,
-    val groupAvatar: String? = null
+    val groupAvatar: String? = null,
+    val adminOnlyMessage: Boolean = false,
+    val adminOnlyEditInfo: Boolean = false,
+    val adminOnlyAddMembers: Boolean = false
 )
