@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.livrechat.app.LivreChatApp
+import com.livrechat.app.data.local.entity.ContactEntity
 import com.livrechat.app.data.local.entity.ConversationEntity
 import com.livrechat.app.data.remote.model.AddContactRequest
 import com.livrechat.app.data.remote.model.CreateGroupRequest
@@ -63,7 +64,9 @@ fun SearchContactScreen(
 
     var isSearchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var contactsList by remember { mutableStateOf<List<ContactUiModel>>(emptyList()) }
+    val savedContacts by db.contactDao().getAllContactsFlow().collectAsState(initial = emptyList())
+    val conversations by db.conversationDao().getAllConversationsFlow().collectAsState(initial = emptyList())
+    var serverContacts by remember { mutableStateOf<List<ContactUiModel>>(emptyList()) }
     var remoteSearchResults by remember { mutableStateOf<List<UserDto>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -91,49 +94,116 @@ fun SearchContactScreen(
                     } catch (syncEx: Exception) {}
                 }
 
-                val currentUserId = prefs.currentUserId
-                val list = mutableListOf<ContactUiModel>()
-
-                // 1. Add current user as "(Você) - Mensagens para mim"
-                if (currentUserId != null) {
-                    val myUsername = prefs.currentUsername ?: "eu"
-                    val myName = prefs.currentDisplayName ?: "Você"
-                    list.add(
-                        ContactUiModel(
-                            userId = currentUserId,
-                            displayName = myName,
-                            username = myUsername,
-                            avatarUrl = null,
-                            bio = "Mensagens para mim",
-                            isSelf = true
-                        )
-                    )
-                }
-
-                // 2. Fetch server contacts
+                // Fetch server contacts and persist to local Room DB
                 val contactsRes = try { apiService.getContacts() } catch (e: Exception) { null }
                 if (contactsRes?.isSuccessful == true && contactsRes.body() != null) {
-                    contactsRes.body()!!.forEach { c ->
-                        if (c.contactUserId != currentUserId && list.none { it.userId == c.contactUserId }) {
-                            list.add(
-                                ContactUiModel(
-                                    userId = c.contactUserId,
-                                    displayName = c.displayName,
+                    val remoteList = contactsRes.body()!!
+                    withContext(Dispatchers.IO) {
+                        remoteList.forEach { c ->
+                            db.contactDao().insertContact(
+                                ContactEntity(
+                                    id = c.id.ifBlank { c.contactUserId },
+                                    contactUserId = c.contactUserId,
                                     username = c.username,
+                                    displayName = c.displayName,
                                     avatarUrl = c.avatarUrl,
-                                    bio = c.bio.ifBlank { "Disponível" }
+                                    publicKey = null,
+                                    bio = c.bio
                                 )
                             )
                         }
                     }
+                    serverContacts = remoteList.map { c ->
+                        ContactUiModel(
+                            userId = c.contactUserId,
+                            displayName = c.displayName,
+                            username = c.username,
+                            avatarUrl = c.avatarUrl,
+                            bio = c.bio.ifBlank { "Disponível" }
+                        )
+                    }
                 }
-
-                contactsList = list
             } catch (e: Exception) {
                 // Silently ignore or show cached
             } finally {
                 isLoading = false
             }
+        }
+    }
+
+    val currentUserId = prefs.currentUserId
+    val myUsername = prefs.currentUsername ?: ""
+    val myDisplayName = prefs.currentDisplayName ?: "Você"
+
+    val contactsList = remember(savedContacts, conversations, serverContacts, currentUserId, myUsername, myDisplayName) {
+        val map = mutableMapOf<String, ContactUiModel>()
+
+        // 1. Current user (self)
+        if (!currentUserId.isNullOrBlank()) {
+            map[currentUserId] = ContactUiModel(
+                userId = currentUserId,
+                displayName = myDisplayName,
+                username = myUsername.ifBlank { "eu" },
+                avatarUrl = null,
+                bio = "Mensagens para mim",
+                isSelf = true
+            )
+        }
+
+        // 2. Saved contacts in Room DB (from contact sync or user additions)
+        savedContacts.forEach { c ->
+            val isSelf = c.contactUserId == currentUserId ||
+                    (myUsername.isNotBlank() && c.username.equals(myUsername, ignoreCase = true)) ||
+                    (myDisplayName.isNotBlank() && c.displayName.equals(myDisplayName, ignoreCase = true))
+            if (c.contactUserId.isNotBlank() && !isSelf) {
+                map[c.contactUserId] = ContactUiModel(
+                    userId = c.contactUserId,
+                    displayName = c.displayName.ifBlank { c.username },
+                    username = c.username,
+                    avatarUrl = c.avatarUrl,
+                    bio = c.bio.ifBlank { "Disponível" },
+                    isSelf = false
+                )
+            }
+        }
+
+        // 3. Active 1-on-1 conversations in Room DB
+        conversations.forEach { conv ->
+            val isSelf = conv.otherUserId == currentUserId ||
+                    (myUsername.isNotBlank() && conv.otherUsername.equals(myUsername, ignoreCase = true)) ||
+                    (myDisplayName.isNotBlank() && conv.otherDisplayName.equals(myDisplayName, ignoreCase = true))
+            if (!conv.isGroup && conv.otherUserId.isNotBlank() && !isSelf) {
+                if (!map.containsKey(conv.otherUserId)) {
+                    map[conv.otherUserId] = ContactUiModel(
+                        userId = conv.otherUserId,
+                        displayName = conv.otherDisplayName.ifBlank { conv.otherUsername },
+                        username = conv.otherUsername,
+                        avatarUrl = conv.otherAvatarUrl,
+                        bio = "Disponível",
+                        isSelf = false
+                    )
+                }
+            }
+        }
+
+        // 4. Server contacts
+        serverContacts.forEach { sc ->
+            val isSelf = sc.userId == currentUserId ||
+                    (myUsername.isNotBlank() && sc.username.equals(myUsername, ignoreCase = true)) ||
+                    (myDisplayName.isNotBlank() && sc.displayName.equals(myDisplayName, ignoreCase = true))
+            if (sc.userId.isNotBlank() && !isSelf) {
+                if (!map.containsKey(sc.userId)) {
+                    map[sc.userId] = sc
+                }
+            }
+        }
+
+        val self = if (!currentUserId.isNullOrBlank()) map[currentUserId] else null
+        val others = map.values.filter { !it.isSelf }.sortedBy { it.displayName.lowercase() }
+        if (self != null) {
+            listOf(self) + others
+        } else {
+            others
         }
     }
 
@@ -188,6 +258,15 @@ fun SearchContactScreen(
 
     fun startChatWithUser(targetUserId: String, targetDisplayName: String, targetUsername: String = "", avatarUrl: String? = null) {
         scope.launch {
+            // Check if conversation already exists in local Room database for 0ms transition
+            val existing = withContext(Dispatchers.IO) {
+                db.conversationDao().getConversationByUserId(targetUserId)
+            }
+            if (existing != null) {
+                onNavigateToChat(existing.id, targetUserId, targetDisplayName.ifBlank { existing.otherDisplayName })
+                return@launch
+            }
+
             isLoading = true
             try {
                 val res = apiService.getOrCreateConversation(mapOf("targetUserId" to targetUserId))
@@ -332,7 +411,7 @@ fun SearchContactScreen(
                                         db.messageDao().clearConversationMessages(conv.id)
                                     }
                                 }
-                                contactsList = contactsList.filter { it.userId != toDel.userId }
+                                serverContacts = serverContacts.filter { it.userId != toDel.userId }
                                 Toast.makeText(context, "Contato excluído com sucesso", Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
                                 Toast.makeText(context, "Erro ao excluir contato", Toast.LENGTH_SHORT).show()
@@ -385,8 +464,12 @@ fun SearchContactScreen(
                                         if (conv != null) {
                                             db.conversationDao().insertOrUpdate(conv.copy(otherDisplayName = newNick))
                                         }
+                                        val saved = db.contactDao().getContactByUserId(toEdit.userId)
+                                        if (saved != null) {
+                                            db.contactDao().insertContact(saved.copy(displayName = newNick))
+                                        }
                                     }
-                                    loadContacts()
+                                    serverContacts = serverContacts.map { if (it.userId == toEdit.userId) it.copy(displayName = newNick) else it }
                                     Toast.makeText(context, "Contato atualizado com sucesso", Toast.LENGTH_SHORT).show()
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Erro ao atualizar contato", Toast.LENGTH_SHORT).show()
@@ -596,10 +679,11 @@ fun SearchContactScreen(
             } else {
                 TopAppBar(
                     title = {
+                        val otherCount = filteredContacts.count { !it.isSelf }
                         Column {
                             Text("Contatos", fontWeight = FontWeight.SemiBold, fontSize = 19.sp)
                             Text(
-                                "${filteredContacts.size} contatos",
+                                "$otherCount contato${if (otherCount != 1) "s" else ""}",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -699,7 +783,7 @@ fun SearchContactScreen(
                                     icon = Icons.Default.PersonAddAlt1,
                                     iconTint = Color(0xFF8E24AA),
                                     title = "Adicionar",
-                                    subtitle = "Por Username / ID",
+                                    subtitle = "Por ID ou @",
                                     onClick = { showAddContactDialog = true }
                                 )
                             }
@@ -715,7 +799,7 @@ fun SearchContactScreen(
                                     icon = Icons.Default.QrCodeScanner,
                                     iconTint = Color(0xFF00897B),
                                     title = "Ler QR Code",
-                                    subtitle = "Conectar rápido",
+                                    subtitle = "Escanear",
                                     onClick = onNavigateToQRCode
                                 )
                                 val selfContact = contactsList.firstOrNull { it.isSelf }
@@ -744,7 +828,7 @@ fun SearchContactScreen(
                                     icon = Icons.Default.Sync,
                                     iconTint = Color(0xFF2E7D32),
                                     title = "Sincronizar",
-                                    subtitle = if (isSyncingPhoneContacts) "Puxando contatos..." else "Agenda do Celular",
+                                    subtitle = if (isSyncingPhoneContacts) "Puxando..." else "Agenda celular",
                                     onClick = { syncPhoneContacts() }
                                 )
                                 LivreActionCard(
@@ -752,7 +836,7 @@ fun SearchContactScreen(
                                     icon = Icons.Default.ContactPhone,
                                     iconTint = Color(0xFF1565C0),
                                     title = "Nova Agenda",
-                                    subtitle = "Salvar no Celular",
+                                    subtitle = "Salvar celular",
                                     onClick = { ContactSyncHelper.openAddContactInPhoneBook(context) }
                                 )
                             }
@@ -780,7 +864,7 @@ fun SearchContactScreen(
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                         ) {
                             Text(
-                                text = "$otherCount salvo(s)",
+                                text = "$otherCount salvo${if (otherCount != 1) "s" else ""}",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
@@ -900,28 +984,40 @@ fun LivreActionCard(
     onClick: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 2.dp,
+        shadowElevation = 1.dp,
         modifier = modifier.clickable(onClick = onClick)
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = iconTint.copy(alpha = 0.14f),
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(36.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
                 }
             }
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
-                Text(text = title, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
-                Text(text = subtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.5.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+                Text(
+                    text = subtitle,
+                    fontSize = 10.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
             }
         }
     }
