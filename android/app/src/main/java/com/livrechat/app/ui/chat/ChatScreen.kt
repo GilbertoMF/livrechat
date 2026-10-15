@@ -51,6 +51,7 @@ import androidx.core.view.ViewCompat
 import com.livrechat.app.util.TimeUtils
 import coil.compose.AsyncImage
 import com.livrechat.app.data.local.model.ReactionUtils
+import com.livrechat.app.data.remote.model.GroupMemberDto
 import com.livrechat.app.ui.camera.CustomCameraDialog
 import com.livrechat.app.ui.chat.EmojiStickerBottomSheet
 import com.livrechat.app.ui.chat.EmojiStickerPanel
@@ -365,6 +366,72 @@ fun ChatScreen(
     val currentConv by remember(conversationId) {
         app.database.conversationDao().getConversationByIdFlow(conversationId)
     }.collectAsState(initial = null)
+    val savedContacts by app.database.contactDao().getAllContactsFlow().collectAsState(initial = emptyList())
+    var groupMembers by remember(conversationId) { mutableStateOf<List<GroupMemberDto>>(emptyList()) }
+    val resolvedUserNames = remember { mutableStateMapOf<String, String>() }
+
+    LaunchedEffect(conversationId, currentConv?.isGroup) {
+        if (currentConv?.isGroup == true) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val res = app.apiClient.apiService.getGroupMembers(conversationId)
+                    if (res.isSuccessful && res.body() != null) {
+                        val members = res.body()!!
+                        withContext(Dispatchers.Main) {
+                            groupMembers = members
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("ChatScreen", "Erro ao carregar membros do grupo: ${e.message}")
+                }
+            }
+        }
+    }
+
+    val resolveSenderName: (String) -> String = remember(savedContacts, groupMembers, resolvedUserNames) {
+        { senderId ->
+            if (senderId == prefs.currentUserId) {
+                "Você"
+            } else {
+                // 1. Saved contacts in address book / Room
+                val contactMatch = savedContacts.firstOrNull { it.contactUserId == senderId }
+                val contactName = contactMatch?.displayName?.takeIf { it.isNotBlank() }
+                    ?: prefs.getContactCustomName(senderId)
+
+                if (!contactName.isNullOrBlank()) {
+                    contactName
+                } else {
+                    // 2. Group members list
+                    val memberMatch = groupMembers.firstOrNull { it.id == senderId }
+                    if (memberMatch != null) {
+                        when {
+                            memberMatch.displayName.isNotBlank() -> memberMatch.displayName
+                            memberMatch.username.isNotBlank() -> "@${memberMatch.username}"
+                            else -> "Membro"
+                        }
+                    } else if (resolvedUserNames.containsKey(senderId)) {
+                        // 3. Cached remote fetch
+                        resolvedUserNames[senderId] ?: "Membro"
+                    } else {
+                        // 4. Background fetch for unknown sender
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                val profileRes = app.apiClient.apiService.getUserProfile(senderId)
+                                if (profileRes.isSuccessful && profileRes.body() != null) {
+                                    val u = profileRes.body()!!
+                                    val resolved = u.displayName.ifBlank { "@${u.username}" }
+                                    withContext(Dispatchers.Main) {
+                                        resolvedUserNames[senderId] = resolved
+                                    }
+                                }
+                            } catch (e: Exception) {}
+                        }
+                        "Membro"
+                    }
+                }
+            }
+        }
+    }
     var isConvLocked by remember { mutableStateOf(prefs.isConversationLocked(conversationId)) }
     var showMenu by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
@@ -1147,7 +1214,7 @@ fun ChatScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = if (replyingToMessage!!.isOutgoing) "Você" else otherDisplayName,
+                                        text = if (replyingToMessage!!.isOutgoing) "Você" else if (currentConv?.isGroup == true) resolveSenderName(replyingToMessage!!.senderId) else otherDisplayName,
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp
@@ -1664,7 +1731,8 @@ fun ChatScreen(
                         onReactionClick = { viewModel.toggleReaction(it.id, "❤️") },
                         onImageClick = { viewingImageBase64 = it },
                         onVideoClick = { viewingVideoMessage = it },
-                        isGroup = currentConv?.isGroup == true
+                        isGroup = currentConv?.isGroup == true,
+                        senderDisplayName = if (currentConv?.isGroup == true) resolveSenderName(message.senderId) else ""
                     )
                 }
             }
@@ -1985,7 +2053,8 @@ fun MessageBubble(
     onReactionClick: (MessageEntity) -> Unit,
     onImageClick: (String) -> Unit,
     onVideoClick: (MessageEntity) -> Unit,
-    isGroup: Boolean = false
+    isGroup: Boolean = false,
+    senderDisplayName: String = ""
 ) {
     val isOutgoing = message.isOutgoing
     val alignment = if (isOutgoing) Alignment.End else Alignment.Start
@@ -2119,10 +2188,10 @@ fun MessageBubble(
                         // Sender identifier in group conversation if incoming
                         if (isGroup && !isOutgoing) {
                             Text(
-                                text = message.senderId,
+                                text = senderDisplayName.ifBlank { "Membro" },
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = getSenderColor(message.senderId),
                                 modifier = Modifier.padding(
                                     start = if (isMediaMsg) 6.dp else 0.dp,
                                     bottom = 3.dp
@@ -3318,4 +3387,21 @@ fun formatChatLastSeen(ts: Long?): String {
         val dateStr = com.livrechat.app.util.TimeUtils.formatDateTimeWithWord(ts)
         "Visto por último em $dateStr"
     }
+}
+
+fun getSenderColor(senderId: String): Color {
+    val colors = listOf(
+        Color(0xFF25D366), // WhatsApp Green
+        Color(0xFF00A884), // Teal
+        Color(0xFF34B7F1), // Sky Blue
+        Color(0xFFE91E63), // Pink
+        Color(0xFF9C27B0), // Purple
+        Color(0xFFFF9800), // Orange
+        Color(0xFFFF5722), // Deep Orange
+        Color(0xFF00BCD4), // Light Blue
+        Color(0xFF4CAF50), // Green
+        Color(0xFFFFB300)  // Amber
+    )
+    val hash = Math.abs(senderId.hashCode())
+    return colors[hash % colors.size]
 }

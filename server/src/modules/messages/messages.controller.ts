@@ -87,8 +87,14 @@ export class MessagesController {
           const hasRead = receipts.some(r => r.status === 'read');
           const hasDelivered = receipts.some(r => r.status === 'delivered');
           const status = hasRead ? 'read' : (hasDelivered ? 'delivered' : 'sent');
+          const senderProfile = await db.getProfile(m.sender_id);
+          const senderUser = await db.findUserById(m.sender_id);
+          const senderName = senderProfile?.display_name || senderUser?.username || '';
           return {
             ...m,
+            sender_name: senderName,
+            sender_username: senderUser?.username || '',
+            sender_avatar_url: senderProfile?.avatar_url || null,
             status,
             receipts
           };
@@ -139,6 +145,16 @@ export class MessagesController {
         timestamp: now
       });
 
+      const senderProfile = await db.getProfile(senderId);
+      const senderUser = await db.findUserById(senderId);
+      const senderName = senderProfile?.display_name || senderUser?.username || '';
+      const payloadMessage = {
+        ...saved,
+        sender_name: senderName,
+        sender_username: senderUser?.username || '',
+        sender_avatar_url: senderProfile?.avatar_url || null
+      };
+
       // Forward to online recipients via WebSocket
       const wsManager = WebSocketManager.getInstance();
       if (wsManager) {
@@ -150,13 +166,13 @@ export class MessagesController {
           if (memberId !== senderId) {
             wsManager.sendToUser(memberId, {
               type: 'chat:message',
-              message: saved
+              message: payloadMessage
             });
           }
         }
       }
 
-      return res.status(201).json(saved);
+      return res.status(201).json(payloadMessage);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }

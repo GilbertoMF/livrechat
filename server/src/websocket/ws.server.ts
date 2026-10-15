@@ -189,6 +189,15 @@ export class WebSocketManager {
           }
           members = Array.from(new Set(members));
 
+          const senderProfile = await db.getProfile(senderId);
+          const senderUser = await db.findUserById(senderId);
+          const payloadWithSender = {
+            ...messageRecord,
+            sender_name: senderProfile?.display_name || senderUser?.username || '',
+            sender_username: senderUser?.username || '',
+            sender_avatar_url: senderProfile?.avatar_url || null
+          };
+
           for (const memberId of members) {
             if (memberId !== senderId) {
               const blocked = await db.isBlocked(senderId, memberId);
@@ -198,7 +207,7 @@ export class WebSocketManager {
 
               const delivered = this.sendToUser(memberId, {
                 type: 'chat:message',
-                message: messageRecord
+                message: payloadWithSender
               });
 
               // If recipient is currently online, mark delivered (2 ticks)
