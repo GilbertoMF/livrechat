@@ -121,6 +121,23 @@ export class MessagesController {
         timestamp: now
       });
 
+      // Forward to online recipients via WebSocket
+      const wsManager = WebSocketManager.getInstance();
+      if (wsManager) {
+        let members = await db.getConversationMembers(conversationId);
+        if (targetUserId && !members.includes(targetUserId)) {
+          members.push(targetUserId);
+        }
+        for (const memberId of members) {
+          if (memberId !== senderId) {
+            wsManager.sendToUser(memberId, {
+              type: 'chat:message',
+              message: saved
+            });
+          }
+        }
+      }
+
       return res.status(201).json(saved);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -149,6 +166,9 @@ export class MessagesController {
       const userId = req.user!.userId;
       const { messageId } = req.params;
 
+      const existingMsg = await db.getMessageById(messageId);
+      const conversationId = existingMsg?.conversation_id || '';
+
       const success = await db.deleteMessage(messageId, userId);
       if (!success) {
         return res.status(404).json({ error: 'Mensagem não encontrada ou você não tem permissão.' });
@@ -157,6 +177,7 @@ export class MessagesController {
       WebSocketManager.getInstance()?.broadcast({
         type: 'chat:delete',
         messageId,
+        conversationId,
         deleteForEveryone: true
       });
 

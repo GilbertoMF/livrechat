@@ -219,81 +219,6 @@ fun HomeScreen(
         }
     }
 
-    var tempStatusCameraFile by remember { mutableStateOf<File?>(null) }
-    var tempStatusCameraUri by remember { mutableStateOf<Uri?>(null) }
-
-    val statusCameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success && tempStatusCameraFile != null && tempStatusCameraFile!!.exists()) {
-            val fileToProcess = tempStatusCameraFile!!
-            scope.launch(Dispatchers.IO) {
-                try {
-                    var bitmap = BitmapFactory.decodeFile(fileToProcess.absolutePath)
-                    if (bitmap != null) {
-                        try {
-                            val exif = ExifInterface(fileToProcess.absolutePath)
-                            val orientation = exif.getAttributeInt(
-                                ExifInterface.TAG_ORIENTATION,
-                                ExifInterface.ORIENTATION_NORMAL
-                            )
-                            val matrix = Matrix()
-                            when (orientation) {
-                                ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
-                                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
-                                ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
-                            }
-                            if (orientation != ExifInterface.ORIENTATION_NORMAL && orientation != ExifInterface.ORIENTATION_UNDEFINED) {
-                                bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-                            }
-                        } catch (e: Exception) {}
-
-                        val maxDim = 1080
-                        val width = bitmap.width
-                        val height = bitmap.height
-                        val scale = if (width > height) maxDim.toFloat() / width else maxDim.toFloat() / height
-                        val scaledBitmap = if (scale < 1f) {
-                            Bitmap.createScaledBitmap(
-                                bitmap,
-                                (width * scale).toInt().coerceAtLeast(1),
-                                (height * scale).toInt().coerceAtLeast(1),
-                                true
-                            )
-                        } else {
-                            bitmap
-                        }
-                        val baos = ByteArrayOutputStream()
-                        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 75, baos)
-                        val bytes = baos.toByteArray()
-                        val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                        val dataUri = "data:image/jpeg;base64,$base64"
-                        withContext(Dispatchers.Main) {
-                            newImageStatusBase64 = dataUri
-                            newImageStatusCaption = ""
-                            showCreateImageStatusDialog = true
-                        }
-                    }
-                } catch (e: Exception) {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Erro ao processar foto da câmera", Toast.LENGTH_SHORT).show()
-                    }
-                } finally {
-                    fileToProcess.delete()
-                }
-            }
-        }
-    }
-
-    val statusCameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            tempStatusCameraUri?.let { statusCameraLauncher.launch(it) }
-        } else {
-            Toast.makeText(context, "Permissão de câmera é necessária para tirar foto", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     fun launchStatusCamera() {
         showStatusCameraDialog = true
     }
@@ -1190,10 +1115,11 @@ fun HomeScreen(
                     try {
                         val bytes = withContext(Dispatchers.IO) { file.readBytes() }
                         val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                        val dataUri = "data:image/jpeg;base64,$b64"
+                        val isVideo = mediaType == "video"
+                        val dataUri = if (isVideo) "data:video/mp4;base64,$b64" else "data:image/jpeg;base64,$b64"
                         val res = apiService.createStatus(
                             mapOf(
-                                "contentType" to "image",
+                                "contentType" to if (isVideo) "video" else "image",
                                 "content" to dataUri,
                                 "caption" to caption.trim(),
                                 "avatarUrl" to (prefs.userAvatarUrl ?: ""),
@@ -1201,10 +1127,10 @@ fun HomeScreen(
                             )
                         )
                         if (res.isSuccessful) {
-                            Toast.makeText(context, "Foto publicada no Status!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, if (isVideo) "Vídeo publicado no Status!" else "Foto publicada no Status!", Toast.LENGTH_SHORT).show()
                             loadStatuses()
                         } else {
-                            Toast.makeText(context, "Falha ao publicar foto", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Falha ao publicar status", Toast.LENGTH_SHORT).show()
                         }
                     } catch (e: Exception) {
                         Toast.makeText(context, "Erro ao publicar: ${e.message}", Toast.LENGTH_SHORT).show()

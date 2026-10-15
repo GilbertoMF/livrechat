@@ -182,7 +182,10 @@ export class UsersController {
   public static async blockUser(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.userId;
-      const { blockedUserId } = req.body;
+      const blockedUserId = req.body.blockedUserId || req.body.targetUserId;
+      if (!blockedUserId) {
+        return res.status(400).json({ error: 'ID do usuário a ser bloqueado é obrigatório.' });
+      }
       const result = await db.blockUser(userId, blockedUserId);
       return res.status(200).json(result);
     } catch (e: any) {

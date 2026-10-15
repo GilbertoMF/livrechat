@@ -128,7 +128,7 @@ fun QRCodeScreen(
                 val res = apiService.getOrCreateConversation(mapOf("targetUserId" to targetUserId))
                 if (res.isSuccessful && res.body() != null) {
                     val conv = res.body()!!
-                    val finalDisplayName = if (conv.otherUser?.displayName?.isNotBlank() == true) conv.otherUser?.displayName!! else targetUsername.ifBlank { "Contato" }
+                    val finalDisplayName = conv.otherUser?.displayName?.takeIf { it.isNotBlank() } ?: targetUsername.ifBlank { "Contato" }
 
                     withContext(Dispatchers.IO) {
                         db.conversationDao().insertOrUpdate(
@@ -364,7 +364,6 @@ fun QRCodeScreen(
 fun CameraQrScannerView(
     onCodeScanned: (String) -> Unit
 ) {
-    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 

@@ -238,32 +238,6 @@ fun ChatScreen(
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var viewingImageBase64 by remember { mutableStateOf<String?>(null) }
 
-    val takePhotoLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bmp: Bitmap? ->
-        if (bmp != null) {
-            scope.launch(Dispatchers.IO) {
-                try {
-                    val baos = ByteArrayOutputStream()
-                    bmp.compress(Bitmap.CompressFormat.JPEG, 85, baos)
-                    val bytes = baos.toByteArray()
-                    val localFile = MediaFileManager.saveBytesToLocalFile(context, bytes, "cam_${System.currentTimeMillis()}.jpg")
-                    val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                    val dataUri = "data:image/jpeg;base64,$b64"
-                    viewModel.sendMediaMessage(
-                        conversationId = conversationId,
-                        content = localFile.absolutePath,
-                        networkPayload = dataUri,
-                        messageType = "image",
-                        targetUserId = otherUserId
-                    )
-                } catch (e: Exception) {
-                    Log.e("ChatScreen", "Erro ao processar foto da câmera", e)
-                }
-            }
-        }
-    }
-
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -515,7 +489,7 @@ fun ChatScreen(
             onBlockContact = {
                 scope.launch(Dispatchers.IO) {
                     try {
-                        app.apiClient.apiService.blockUser(mapOf("targetUserId" to otherUserId))
+                        app.apiClient.apiService.blockUser(mapOf("blockedUserId" to otherUserId, "targetUserId" to otherUserId))
                     } catch (e: Exception) {}
                 }
             },

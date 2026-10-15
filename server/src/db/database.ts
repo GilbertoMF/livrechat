@@ -1237,6 +1237,33 @@ class DatabaseService {
     return filtered.slice(0, limit).reverse();
   }
 
+  public async getMessageById(messageId: string): Promise<Message | null> {
+    if (this.pgPool) {
+      try {
+        const res = await this.pgPool.query('SELECT * FROM messages WHERE id = $1', [messageId]);
+        if (res.rows.length > 0) {
+          const m = res.rows[0];
+          return {
+            id: m.id,
+            conversation_id: m.conversation_id,
+            sender_id: m.sender_id,
+            content: m.content,
+            iv: m.iv || undefined,
+            message_type: m.message_type,
+            reply_to_id: m.reply_to_id || undefined,
+            is_deleted: m.is_deleted,
+            is_edited: m.is_edited,
+            created_at: m.created_at?.toISOString?.() || m.created_at,
+            updated_at: m.updated_at?.toISOString?.() || m.updated_at
+          };
+        }
+      } catch (e) {
+        console.warn('[Database] Erro PG getMessageById:', e);
+      }
+    }
+    return this.memoryStore.messages.find(m => m.id === messageId) || null;
+  }
+
   public async getPendingMessagesForUser(userId: string): Promise<Message[]> {
     if (this.pgPool) {
       try {
