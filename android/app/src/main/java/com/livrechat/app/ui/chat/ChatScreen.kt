@@ -70,7 +70,6 @@ import com.livrechat.app.data.local.entity.MessageEntity
 import com.livrechat.app.media.AudioPlayerHelper
 import com.livrechat.app.media.AudioRecorderHelper
 import com.livrechat.app.ui.theme.BlueAccent
-import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
 import com.livrechat.app.ui.common.UserAvatarView
 import androidx.compose.ui.text.style.TextOverflow
@@ -600,7 +599,7 @@ fun ChatScreen(
             onDismissRequest = { showCryptoInfoDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Security, contentDescription = null, tint = BluePrimary)
+                    Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Criptografia de Ponta a Ponta", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
@@ -643,7 +642,7 @@ fun ChatScreen(
                         }
                     }
                 }) {
-                    Text("Desbloquear", color = BluePrimary, fontWeight = FontWeight.Bold)
+                    Text("Desbloquear", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -672,7 +671,7 @@ fun ChatScreen(
             onDismissRequest = { showWallpaperDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Palette, contentDescription = null, tint = BluePrimary, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     Text("Papel de Parede", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
@@ -692,7 +691,7 @@ fun ChatScreen(
                             wallpaperPickerLauncher.launch("image/*")
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BluePrimary)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
@@ -719,7 +718,7 @@ fun ChatScreen(
                                     .background(c)
                                     .border(
                                         width = if (isSelected) 3.dp else 1.dp,
-                                        color = if (isSelected) BluePrimary else Color.White.copy(alpha = 0.5f),
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
                                         shape = CircleShape
                                     )
                                     .clickable {
@@ -973,7 +972,7 @@ fun ChatScreen(
                             Icon(
                                 imageVector = Icons.Default.PersonAdd,
                                 contentDescription = "Adicionar pessoas",
-                                tint = BluePrimary
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     } else {
@@ -992,7 +991,7 @@ fun ChatScreen(
                             Icon(
                                 imageVector = Icons.Default.Phone,
                                 contentDescription = "Chamada de Voz WebRTC",
-                                tint = BluePrimary
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -1015,7 +1014,7 @@ fun ChatScreen(
                                     Icon(
                                         imageVector = if (isGroup) Icons.Default.Group else Icons.Default.Person,
                                         contentDescription = null,
-                                        tint = BluePrimary
+                                        tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
                             )
@@ -1027,7 +1026,7 @@ fun ChatScreen(
                                         showContactProfile = true
                                     },
                                     leadingIcon = {
-                                        Icon(Icons.Default.PersonAdd, contentDescription = null, tint = BluePrimary)
+                                        Icon(Icons.Default.PersonAdd, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                     }
                                 )
                             }
@@ -1038,7 +1037,7 @@ fun ChatScreen(
                                     showWallpaperDialog = true
                                 },
                                 leadingIcon = {
-                                    Icon(Icons.Default.Palette, contentDescription = null, tint = BluePrimary)
+                                    Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                 }
                             )
                             DropdownMenuItem(
@@ -1078,7 +1077,7 @@ fun ChatScreen(
                                     showCryptoInfoDialog = true
                                 },
                                 leadingIcon = {
-                                    Icon(Icons.Default.Shield, contentDescription = null, tint = BluePrimary)
+                                    Icon(Icons.Default.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                 }
                             )
                         }
@@ -1143,13 +1142,13 @@ fun ChatScreen(
                                     modifier = Modifier
                                         .width(4.dp)
                                         .height(36.dp)
-                                        .background(BluePrimary, RoundedCornerShape(2.dp))
+                                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = if (replyingToMessage!!.isOutgoing) "Você" else otherDisplayName,
-                                        color = BluePrimary,
+                                        color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp
                                     )
@@ -1275,7 +1274,7 @@ fun ChatScreen(
                                     }
                                 }
                             },
-                            colors = IconButtonDefaults.iconButtonColors(containerColor = BluePrimary),
+                            colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.primary),
                             modifier = Modifier.size(46.dp)
                         ) {
                             Icon(
@@ -1291,7 +1290,7 @@ fun ChatScreen(
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant,
-                            border = BorderStroke(1.dp, BluePrimary.copy(alpha = 0.4f)),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
                             shadowElevation = 4.dp,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1323,7 +1322,7 @@ fun ChatScreen(
                                     Text(
                                         text = "Toque em Colar para enviar na conversa",
                                         fontSize = 11.sp,
-                                        color = BluePrimary
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                                 Button(
@@ -1335,7 +1334,7 @@ fun ChatScreen(
                                         }
                                     },
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = BluePrimary),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                     modifier = Modifier.height(32.dp)
                                 ) {
                                     Text("Colar", fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -1519,7 +1518,7 @@ fun ChatScreen(
                                         lastTypingSentTime = 0L
                                     }
                                 },
-                                colors = IconButtonDefaults.iconButtonColors(containerColor = BluePrimary),
+                                colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.primary),
                                 modifier = Modifier.size(46.dp)
                             ) {
                                 Icon(
@@ -1555,7 +1554,7 @@ fun ChatScreen(
                                         Toast.makeText(context, "Permissão de microfone necessária ou erro ao gravar", Toast.LENGTH_SHORT).show()
                                     }
                                 },
-                                colors = IconButtonDefaults.iconButtonColors(containerColor = BluePrimary),
+                                colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.primary),
                                 modifier = Modifier.size(46.dp)
                             ) {
                                 Icon(
@@ -1688,7 +1687,7 @@ fun ChatScreen(
                         }
                     },
                     containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = BluePrimary,
+                    contentColor = MaterialTheme.colorScheme.primary,
                     shape = CircleShape,
                     elevation = FloatingActionButtonDefaults.elevation(6.dp)
                 ) {
@@ -1700,7 +1699,7 @@ fun ChatScreen(
                         )
                         if (unreadBelowCount > 0) {
                             Badge(
-                                containerColor = BluePrimary,
+                                containerColor = MaterialTheme.colorScheme.primary,
                                 contentColor = Color.White,
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
@@ -2029,7 +2028,7 @@ fun MessageBubble(
                     .align(Alignment.CenterStart)
                     .offset(x = (animatedOffset * 0.35f - 18f).dp)
                     .clip(CircleShape)
-                    .background(BluePrimary.copy(alpha = (animatedOffset / 115f).coerceIn(0.2f, 1f))),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = (animatedOffset / 115f).coerceIn(0.2f, 1f))),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -2108,7 +2107,7 @@ fun MessageBubble(
                         bottomStart = if (isOutgoing) 16.dp else 4.dp,
                         bottomEnd = if (isOutgoing) 4.dp else 16.dp
                     ),
-                    color = if (isOutgoing) BluePrimary else MaterialTheme.colorScheme.surfaceVariant,
+                    color = if (isOutgoing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier
                         .widthIn(max = 295.dp)
                         .combinedClickable(
@@ -2123,7 +2122,7 @@ fun MessageBubble(
                                 text = message.senderId,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
-                                color = BluePrimary,
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(
                                     start = if (isMediaMsg) 6.dp else 0.dp,
                                     bottom = 3.dp
@@ -2152,7 +2151,7 @@ fun MessageBubble(
                                         modifier = Modifier
                                             .width(3.dp)
                                             .height(28.dp)
-                                            .background(if (isOutgoing) Color.White else BluePrimary, RoundedCornerShape(2.dp))
+                                            .background(if (isOutgoing) Color.White else MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Column {
@@ -2160,7 +2159,7 @@ fun MessageBubble(
                                             text = "Resposta",
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp,
-                                            color = if (isOutgoing) Color.White.copy(alpha = 0.9f) else BluePrimary
+                                            color = if (isOutgoing) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.primary
                                         )
                                         Text(
                                             text = message.replyToContent ?: "Mensagem respondida",
@@ -2375,7 +2374,7 @@ fun AudioWaveformVisualizer(
         barHeights.forEachIndexed { index, heightDp ->
             val barRatio = index.toFloat() / barHeights.size.toFloat()
             val isPlayed = progress > barRatio
-            val activeColor = if (isOutgoing) Color.White else BluePrimary
+            val activeColor = if (isOutgoing) Color.White else MaterialTheme.colorScheme.primary
             val inactiveColor = if (isOutgoing) Color.White.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
 
             Box(
@@ -2424,14 +2423,14 @@ fun AudioMessageBubbleContent(
                 audioPlayerHelper.playAudio(message.id, message.content)
             },
             colors = IconButtonDefaults.iconButtonColors(
-                containerColor = if (isOutgoing) Color.White.copy(alpha = 0.25f) else BluePrimary.copy(alpha = 0.15f)
+                containerColor = if (isOutgoing) Color.White.copy(alpha = 0.25f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
             ),
             modifier = Modifier.size(38.dp)
         ) {
             Icon(
                 imageVector = if (isThisPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                 contentDescription = if (isThisPlaying) "Pausar" else "Reproduzir",
-                tint = if (isOutgoing) Color.White else BluePrimary,
+                tint = if (isOutgoing) Color.White else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -2458,7 +2457,7 @@ fun AudioMessageBubbleContent(
                     Icon(
                         imageVector = Icons.Default.Mic,
                         contentDescription = null,
-                        tint = if (isOutgoing) Color.White.copy(alpha = 0.7f) else BluePrimary,
+                        tint = if (isOutgoing) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(11.dp)
                     )
                     Spacer(modifier = Modifier.width(3.dp))
@@ -2603,7 +2602,7 @@ fun ImageMessageBubbleContent(
                 ) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
-                        color = if (isOutgoing) Color.White else BluePrimary
+                        color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -2825,7 +2824,7 @@ fun FileMessageBubbleContent(
         ) {
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = if (ext == "PDF") Color(0xFFF44336) else if (ext in listOf("ZIP", "RAR")) Color(0xFFFF9800) else BluePrimary,
+                color = if (ext == "PDF") Color(0xFFF44336) else if (ext in listOf("ZIP", "RAR")) Color(0xFFFF9800) else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(40.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {

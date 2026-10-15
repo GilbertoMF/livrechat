@@ -49,7 +49,6 @@ import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeWriter
 import com.livrechat.app.LivreChatApp
 import com.livrechat.app.data.local.entity.ConversationEntity
-import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DarkBackground
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -273,7 +272,7 @@ fun QRCodeScreen(
                                 cb.setPrimaryClip(ClipData.newPlainText("LivreChat ID", userId))
                                 Toast.makeText(context, "ID copiado!", Toast.LENGTH_SHORT).show()
                             }) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = "Copiar ID", tint = BluePrimary)
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copiar ID", tint = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
@@ -289,7 +288,7 @@ fun QRCodeScreen(
                             Icon(
                                 Icons.Default.CameraAlt,
                                 contentDescription = null,
-                                tint = BluePrimary,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(64.dp)
                             )
                             Spacer(modifier = Modifier.height(16.dp))
@@ -308,7 +307,7 @@ fun QRCodeScreen(
                             Spacer(modifier = Modifier.height(24.dp))
                             Button(
                                 onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                                colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
                                 Text("Permitir Câmera")
                             }
@@ -344,13 +343,13 @@ fun QRCodeScreen(
                             Box(
                                 modifier = Modifier
                                     .size(260.dp)
-                                    .border(3.dp, BluePrimary, RoundedCornerShape(16.dp))
+                                    .border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
                             )
 
                             Spacer(modifier = Modifier.height(24.dp))
 
                             if (isProcessingScan) {
-                                CircularProgressIndicator(color = BluePrimary)
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }

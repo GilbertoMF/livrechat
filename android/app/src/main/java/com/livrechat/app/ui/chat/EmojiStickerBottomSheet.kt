@@ -33,7 +33,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.livrechat.app.ui.theme.BluePrimary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
@@ -196,8 +195,8 @@ fun EmojiStickerPanel(
                     label = { Text("Emojis", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
                     leadingIcon = { Icon(Icons.Default.SentimentSatisfied, contentDescription = null, modifier = Modifier.size(16.dp)) },
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = BluePrimary.copy(alpha = 0.2f),
-                        selectedLabelColor = BluePrimary
+                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                        selectedLabelColor = MaterialTheme.colorScheme.primary
                     )
                 )
 
@@ -208,8 +207,8 @@ fun EmojiStickerPanel(
                     label = { Text("Figurinhas", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
                     leadingIcon = { Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp)) },
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = BluePrimary.copy(alpha = 0.2f),
-                        selectedLabelColor = BluePrimary
+                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                        selectedLabelColor = MaterialTheme.colorScheme.primary
                     )
                 )
 
@@ -220,8 +219,8 @@ fun EmojiStickerPanel(
                     label = { Text("GIFs", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
                     leadingIcon = { Icon(Icons.Default.Gif, contentDescription = null, modifier = Modifier.size(20.dp)) },
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = BluePrimary.copy(alpha = 0.2f),
-                        selectedLabelColor = BluePrimary
+                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                        selectedLabelColor = MaterialTheme.colorScheme.primary
                     )
                 )
             }
@@ -258,15 +257,15 @@ fun EmojiStickerPanel(
                         val isSelected = selectedCategoryIndex == index
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) BluePrimary.copy(alpha = 0.15f) else Color.Transparent,
-                            border = if (isSelected) BorderStroke(1.dp, BluePrimary.copy(alpha = 0.5f)) else null,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
+                            border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null,
                             modifier = Modifier.clickable { selectedCategoryIndex = index }
                         ) {
                             Text(
                                 text = title,
                                 fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) BluePrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
@@ -365,7 +364,7 @@ fun EmojiStickerPanel(
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                            border = BorderStroke(1.dp, BluePrimary.copy(alpha = 0.3f)),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                             modifier = Modifier
                                 .aspectRatio(1f)
                                 .clickable {

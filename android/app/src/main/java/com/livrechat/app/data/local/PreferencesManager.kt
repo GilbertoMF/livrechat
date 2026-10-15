@@ -80,7 +80,7 @@ class PreferencesManager(private val context: Context) {
     val paletteFlow: kotlinx.coroutines.flow.StateFlow<String> = _paletteFlow
 
     var colorPalette: String
-        get() = prefs.getString(KEY_COLOR_PALETTE, "default") ?: "default"
+        get() = prefs.getString(KEY_COLOR_PALETTE, "m3_kit") ?: "m3_kit"
         set(value) {
             prefs.edit().putString(KEY_COLOR_PALETTE, value).apply()
             _paletteFlow.value = value

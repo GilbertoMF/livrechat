@@ -26,7 +26,6 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.navigation.compose.rememberNavController
 import com.livrechat.app.ui.navigation.LivreChatNavGraph
-import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.LivreChatTheme
 import com.livrechat.app.util.BiometricHelper
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -120,7 +119,7 @@ class MainActivity : FragmentActivity() {
                             Icon(
                                 imageVector = Icons.Default.Fingerprint,
                                 contentDescription = "Digital",
-                                tint = BluePrimary,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(96.dp)
                             )
                             Spacer(modifier = Modifier.height(24.dp))
@@ -139,7 +138,7 @@ class MainActivity : FragmentActivity() {
                             Spacer(modifier = Modifier.height(32.dp))
                             Button(
                                 onClick = { triggerBiometricUnlock() },
-                                colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
                                 Text("Desbloquear com Biometria", color = Color.White)
                             }

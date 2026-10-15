@@ -77,7 +77,6 @@ import com.livrechat.app.data.remote.model.StatusDto
 import com.livrechat.app.ui.call.CallViewModel
 import com.livrechat.app.ui.chat.ChatViewModel
 import com.livrechat.app.ui.camera.CustomCameraDialog
-import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
 import com.livrechat.app.ui.theme.SuccessGreen
 import com.livrechat.app.util.BiometricHelper
@@ -529,7 +528,7 @@ fun HomeScreen(
                             Icon(
                                 imageVector = if (isLocked) Icons.Default.LockOpen else Icons.Default.Lock,
                                 contentDescription = null,
-                                tint = BluePrimary,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
@@ -582,7 +581,7 @@ fun HomeScreen(
                                 Icon(
                                     imageVector = if (isContactBlocked) Icons.Default.CheckCircle else Icons.Default.Block,
                                     contentDescription = null,
-                                    tint = if (isContactBlocked) BluePrimary else DangerRed,
+                                    tint = if (isContactBlocked) MaterialTheme.colorScheme.primary else DangerRed,
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
@@ -2205,8 +2204,8 @@ fun HomeScreen(
                 0 -> {
                     FloatingActionButton(
                         onClick = onNavigateToSearch,
-                        containerColor = Color(0xFF25D366),
-                        contentColor = Color.White,
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Icon(imageVector = Icons.Default.AddComment, contentDescription = "Novo Chat")
@@ -2229,7 +2228,7 @@ fun HomeScreen(
                         FloatingActionButton(
                             onClick = { showStatusOptionsDialog = true },
                             containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = Color.White,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Icon(imageVector = Icons.Default.Add, contentDescription = "Novo Flash")
@@ -2239,8 +2238,8 @@ fun HomeScreen(
                 2 -> {
                     FloatingActionButton(
                         onClick = onNavigateToSearch,
-                        containerColor = Color(0xFF25D366),
-                        contentColor = Color.White,
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Icon(imageVector = Icons.Default.Call, contentDescription = "Nova Chamada")
@@ -3940,7 +3939,7 @@ fun ConversationItem(
                         Icon(
                             imageVector = Icons.Default.Groups,
                             contentDescription = "Grupo",
-                            tint = BluePrimary,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
@@ -3957,7 +3956,7 @@ fun ConversationItem(
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = "Bloqueada",
-                            tint = BluePrimary,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(14.dp)
                         )
                     }
@@ -4027,13 +4026,13 @@ fun ConversationItem(
                 if (conversation.unreadCount > 0) {
                     Surface(
                         shape = CircleShape,
-                        color = BluePrimary,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = if (conversation.unreadCount > 99) "99+" else conversation.unreadCount.toString(),
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onPrimary,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -4093,7 +4092,7 @@ fun CallHistoryItem(
             Icon(
                 imageVector = Icons.Default.Phone,
                 contentDescription = "Ligar",
-                tint = BluePrimary
+                tint = MaterialTheme.colorScheme.primary
             )
         }
     }

@@ -16,7 +16,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.livrechat.app.ui.theme.BluePrimary
 
 import androidx.compose.material.icons.filled.Pin
 import androidx.compose.ui.graphics.Color
@@ -44,14 +43,14 @@ fun WelcomeScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Surface(
                     shape = RoundedCornerShape(24.dp),
-                    color = BluePrimary.copy(alpha = 0.15f),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                     modifier = Modifier.size(96.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.ChatBubble,
                             contentDescription = "Logo",
-                            tint = BluePrimary,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(54.dp)
                         )
                     }
@@ -103,7 +102,7 @@ fun WelcomeScreen(
                         .fillMaxWidth()
                         .height(56.dp),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Pin,
@@ -141,7 +140,7 @@ fun WelcomeScreen(
                         text = "Já tenho uma conta (Entrar)",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = BluePrimary
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
@@ -159,14 +158,14 @@ fun FeatureRow(icon: ImageVector, title: String, desc: String) {
     ) {
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = BluePrimary.copy(alpha = 0.1f),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
             modifier = Modifier.size(46.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = BluePrimary,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp)
                 )
             }

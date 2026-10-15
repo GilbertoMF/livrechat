@@ -41,7 +41,6 @@ import com.livrechat.app.data.remote.model.UserDto
 import com.livrechat.app.media.AudioPlayerHelper
 import com.livrechat.app.ui.common.UserAvatarView
 import com.livrechat.app.ui.contacts.ContactUiModel
-import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
 import com.livrechat.app.ui.theme.SuccessGreen
 import kotlinx.coroutines.Dispatchers
@@ -279,7 +278,7 @@ fun ContactProfileDialog(
                                 fontSize = 44.sp,
                                 modifier = Modifier
                                     .clip(CircleShape)
-                                    .border(2.dp, BluePrimary.copy(alpha = 0.5f), CircleShape)
+                                    .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), CircleShape)
                                     .clickable {
                                         if (!avatarUrl.isNullOrBlank()) {
                                             onViewMedia(avatarUrl)
@@ -313,7 +312,7 @@ fun ContactProfileDialog(
                                     Icon(
                                         Icons.Default.Edit,
                                         contentDescription = "Editar nome",
-                                        tint = BluePrimary,
+                                        tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
@@ -325,14 +324,14 @@ fun ContactProfileDialog(
                         // Identificador / Detalhes
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = BluePrimary.copy(alpha = 0.12f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, BluePrimary.copy(alpha = 0.25f))
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
                         ) {
                             Text(
                                 text = if (isGroup) displayHandle else "@$displayHandle",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = BluePrimary,
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                             )
                         }
@@ -476,7 +475,7 @@ fun ContactProfileDialog(
                                     clipboard.setPrimaryClip(ClipData.newPlainText("ID LivreChat", displayHandle))
                                     Toast.makeText(context, "ID copiado!", Toast.LENGTH_SHORT).show()
                                 }) {
-                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = BluePrimary, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
@@ -571,10 +570,10 @@ fun ContactProfileDialog(
                                                                     modifier = Modifier.fillMaxSize()
                                                                 )
                                                             } else {
-                                                                Icon(Icons.Default.Image, contentDescription = null, tint = BluePrimary)
+                                                                Icon(Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                                             }
                                                         } else {
-                                                            Icon(Icons.Default.Image, contentDescription = null, tint = BluePrimary)
+                                                            Icon(Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                                         }
                                                     }
                                                 }
@@ -608,7 +607,7 @@ fun ContactProfileDialog(
                                                 ) {
                                                     Surface(
                                                         shape = CircleShape,
-                                                        color = if (isThisPlaying) Color(0xFF25D366) else BluePrimary,
+                                                        color = if (isThisPlaying) Color(0xFF25D366) else MaterialTheme.colorScheme.primary,
                                                         modifier = Modifier.size(34.dp)
                                                     ) {
                                                         Box(contentAlignment = Alignment.Center) {
@@ -658,7 +657,7 @@ fun ContactProfileDialog(
                                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Icon(Icons.Default.InsertDriveFile, contentDescription = null, tint = BluePrimary, modifier = Modifier.size(26.dp))
+                                                    Icon(Icons.Default.InsertDriveFile, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
                                                     Spacer(modifier = Modifier.width(10.dp))
                                                     Column(modifier = Modifier.weight(1f)) {
                                                         Text(
@@ -714,7 +713,7 @@ fun ContactProfileDialog(
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(16.dp),
                                             strokeWidth = 2.dp,
-                                            color = BluePrimary
+                                            color = MaterialTheme.colorScheme.primary
                                         )
                                     }
                                 }
@@ -731,7 +730,7 @@ fun ContactProfileDialog(
                                 ) {
                                     Surface(
                                         shape = CircleShape,
-                                        color = BluePrimary,
+                                        color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(42.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
@@ -781,7 +780,7 @@ fun ContactProfileDialog(
                                             Icon(
                                                 Icons.Default.Link,
                                                 contentDescription = null,
-                                                tint = BluePrimary,
+                                                tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(22.dp)
                                             )
                                         }
@@ -908,7 +907,7 @@ fun ContactProfileDialog(
                                 Icon(
                                     Icons.Default.Security,
                                     contentDescription = null,
-                                    tint = BluePrimary,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Spacer(modifier = Modifier.width(14.dp))
@@ -946,7 +945,7 @@ fun ContactProfileDialog(
                                 Icon(
                                     Icons.Default.Fingerprint,
                                     contentDescription = null,
-                                    tint = if (isLocked) BluePrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = if (isLocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Spacer(modifier = Modifier.width(14.dp))
@@ -1049,7 +1048,7 @@ fun ContactProfileDialog(
                                     Icon(
                                         imageVector = if (isContactBlocked) Icons.Default.LockOpen else Icons.Default.Block,
                                         contentDescription = null,
-                                        tint = if (isContactBlocked) BluePrimary else DangerRed,
+                                        tint = if (isContactBlocked) MaterialTheme.colorScheme.primary else DangerRed,
                                         modifier = Modifier.size(22.dp)
                                     )
                                     Spacer(modifier = Modifier.width(14.dp))
@@ -1057,7 +1056,7 @@ fun ContactProfileDialog(
                                         text = if (isContactBlocked) "Desbloquear $displayTitle" else "Bloquear $displayTitle",
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = if (isContactBlocked) BluePrimary else DangerRed
+                                        color = if (isContactBlocked) MaterialTheme.colorScheme.primary else DangerRed
                                     )
                                 }
                             }
@@ -1078,7 +1077,7 @@ fun ContactProfileDialog(
             onDismissRequest = { showSecurityDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Security, contentDescription = null, tint = BluePrimary)
+                    Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Criptografia E2E Verificada", fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 }
@@ -1169,7 +1168,7 @@ fun ContactProfileDialog(
                 }) {
                     Text(
                         text = if (isContactBlocked) "Desbloquear" else "Bloquear",
-                        color = if (isContactBlocked) BluePrimary else DangerRed,
+                        color = if (isContactBlocked) MaterialTheme.colorScheme.primary else DangerRed,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -1505,14 +1504,14 @@ private fun QuickActionPill(
     ) {
         Surface(
             shape = CircleShape,
-            color = if (isToggled) BluePrimary else MaterialTheme.colorScheme.surfaceVariant,
+            color = if (isToggled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
             modifier = Modifier.size(52.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = icon,
                     contentDescription = label,
-                    tint = if (isToggled) Color.White else BluePrimary,
+                    tint = if (isToggled) Color.White else MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -1522,7 +1521,7 @@ private fun QuickActionPill(
             text = label,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            color = if (isToggled) BluePrimary else MaterialTheme.colorScheme.onSurfaceVariant
+            color = if (isToggled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

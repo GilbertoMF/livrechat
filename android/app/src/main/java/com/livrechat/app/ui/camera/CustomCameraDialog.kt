@@ -47,7 +47,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
-import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.common.PhotoAdjustDialog
 import android.media.ExifInterface
 import kotlinx.coroutines.Dispatchers
@@ -357,7 +356,7 @@ fun CustomCameraDialog(
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = Color.White,
                                     unfocusedTextColor = Color.White,
-                                    focusedBorderColor = BluePrimary,
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
                                     unfocusedBorderColor = Color.DarkGray
                                 ),
                                 modifier = Modifier
@@ -373,7 +372,7 @@ fun CustomCameraDialog(
                                         onDismiss()
                                     }
                                 },
-                                colors = IconButtonDefaults.iconButtonColors(containerColor = BluePrimary),
+                                colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.primary),
                                 modifier = Modifier.size(50.dp)
                             ) {
                                 Icon(
@@ -645,7 +644,7 @@ fun CustomCameraDialog(
                         ) {
                             if (isCapturing) {
                                 CircularProgressIndicator(
-                                    color = BluePrimary,
+                                    color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(36.dp),
                                     strokeWidth = 3.dp
                                 )

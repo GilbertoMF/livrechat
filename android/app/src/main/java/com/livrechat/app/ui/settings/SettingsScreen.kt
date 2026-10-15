@@ -733,14 +733,19 @@ fun SettingsScreen(
 
     // DIALOG: Cores e Aparência
     if (showThemeAndColorsDialog) {
-        val palettes = listOf(
-            "default" to Pair("Azul Safira (Padrão)", Color(0xFF0066FF)),
+        val palettes = mutableListOf(
+            "m3_kit" to Pair("Material 3 Design Kit (Oficial)", Color(0xFF6750A4)),
+            "default" to Pair("Azul Safira (Material 3)", Color(0xFF0066FF)),
             "emerald" to Pair("Esmeralda Cyber", Color(0xFF10B981)),
             "purple" to Pair("Roxo Ametista", Color(0xFF8B5CF6)),
             "amber" to Pair("Laranja Solar", Color(0xFFF59E0B)),
             "ruby" to Pair("Rosa Rubi", Color(0xFFEC4899)),
             "midnight" to Pair("Meia-Noite OLED", Color(0xFF06B6D4))
-        )
+        ).apply {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                add(0, "dynamic" to Pair("Material You (Cores do Papel de Parede)", Color(0xFF9A82DB)))
+            }
+        }
         val themes = listOf(
             "system" to "Padrão do Sistema",
             "dark" to "Modo Escuro",

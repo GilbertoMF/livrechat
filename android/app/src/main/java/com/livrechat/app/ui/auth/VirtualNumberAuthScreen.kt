@@ -35,7 +35,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.livrechat.app.notification.LivreChatNotificationManager
-import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.SuccessGreen
 import kotlinx.coroutines.delay
 import kotlin.random.Random
@@ -161,7 +160,7 @@ fun VirtualNumberAuthScreen(
                         .padding(bottom = 20.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = BluePrimary.copy(alpha = 0.12f)
+                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                     )
                 ) {
                     Row(
@@ -170,7 +169,7 @@ fun VirtualNumberAuthScreen(
                     ) {
                         Surface(
                             shape = CircleShape,
-                            color = BluePrimary,
+                            color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(42.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -208,7 +207,7 @@ fun VirtualNumberAuthScreen(
                                 }
                             },
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = BluePrimary),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Text("Inserir", fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -223,14 +222,14 @@ fun VirtualNumberAuthScreen(
                 // ==========================================
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = BluePrimary.copy(alpha = 0.15f),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                     modifier = Modifier.size(80.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.Pin,
                             contentDescription = "Número Virtual",
-                            tint = BluePrimary,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(44.dp)
                         )
                     }
@@ -273,7 +272,7 @@ fun VirtualNumberAuthScreen(
                         Text(
                             text = "ID  ",
                             fontWeight = FontWeight.Bold,
-                            color = BluePrimary,
+                            color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(start = 14.dp)
                         )
                     },
@@ -314,9 +313,9 @@ fun VirtualNumberAuthScreen(
                         .height(50.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(20.dp), tint = BluePrimary)
+                    Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Gerar Número Virtual Aleatório", fontWeight = FontWeight.SemiBold, color = BluePrimary)
+                    Text("Gerar Número Virtual Aleatório", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                 }
 
                 Spacer(modifier = Modifier.height(28.dp))
@@ -334,7 +333,7 @@ fun VirtualNumberAuthScreen(
                         .fillMaxWidth()
                         .height(54.dp),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     if (uiState is AuthUiState.Loading) {
                         CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
@@ -353,14 +352,14 @@ fun VirtualNumberAuthScreen(
                 // ==========================================
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = BluePrimary.copy(alpha = 0.15f),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                     modifier = Modifier.size(80.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.MarkEmailRead,
                             contentDescription = "Código SMS",
-                            tint = BluePrimary,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(44.dp)
                         )
                     }
@@ -401,7 +400,7 @@ fun VirtualNumberAuthScreen(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                             border = androidx.compose.foundation.BorderStroke(
                                 width = if (smsCode.length == i) 2.dp else 1.dp,
-                                color = if (smsCode.length == i) BluePrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                color = if (smsCode.length == i) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                             ),
                             modifier = Modifier
                                 .size(64.dp)
@@ -455,7 +454,7 @@ fun VirtualNumberAuthScreen(
                         .fillMaxWidth()
                         .height(54.dp),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     if (uiState is AuthUiState.Loading) {
                         CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
@@ -493,7 +492,7 @@ fun VirtualNumberAuthScreen(
                     ) {
                         Text(
                             text = if (countdown > 0) "Reenviar SMS em ${countdown}s" else "Reenviar SMS",
-                            color = if (countdown == 0) BluePrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (countdown == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.SemiBold
                         )
                     }

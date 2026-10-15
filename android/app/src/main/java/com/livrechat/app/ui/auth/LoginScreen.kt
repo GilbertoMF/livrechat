@@ -22,7 +22,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.livrechat.app.ui.theme.BluePrimary
 
 import androidx.compose.material.icons.filled.Pin
 
@@ -172,7 +171,7 @@ fun LoginScreen(
                     .fillMaxWidth()
                     .height(52.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 if (uiState is AuthUiState.Loading) {
                     CircularProgressIndicator(
@@ -198,14 +197,14 @@ fun LoginScreen(
                     imageVector = Icons.Default.Pin,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
-                    tint = BluePrimary
+                    tint = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Entrar com Número Virtual (SMS)",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = BluePrimary
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
@@ -214,7 +213,7 @@ fun LoginScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Não tem uma conta?", fontSize = 14.sp)
                 TextButton(onClick = onNavigateToRegister) {
-                    Text("Criar conta", fontWeight = FontWeight.Bold, color = BluePrimary)
+                    Text("Criar conta", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 }
             }
         }

@@ -13,7 +13,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
 import com.livrechat.app.ui.theme.DarkBackground
 import com.livrechat.app.webrtc.CallState
@@ -57,7 +56,7 @@ fun ActiveCallScreen(
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = BluePrimary.copy(alpha = 0.25f),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
                     modifier = Modifier.size(110.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {

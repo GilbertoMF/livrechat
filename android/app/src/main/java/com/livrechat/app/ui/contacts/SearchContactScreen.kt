@@ -33,7 +33,6 @@ import com.livrechat.app.data.remote.model.CreateGroupRequest
 import com.livrechat.app.data.remote.model.UserDto
 import com.livrechat.app.sync.ContactSyncHelper
 import com.livrechat.app.ui.common.UserAvatarView
-import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -625,7 +624,7 @@ fun SearchContactScreen(
                             ) {
                                 DropdownMenuItem(
                                     text = { Text("Sincronizar agenda") },
-                                    leadingIcon = { Icon(Icons.Default.Sync, contentDescription = null, tint = BluePrimary) },
+                                    leadingIcon = { Icon(Icons.Default.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = {
                                         showMenu = false
                                         syncPhoneContacts()
@@ -686,7 +685,7 @@ fun SearchContactScreen(
                                 LivreActionCard(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Default.GroupAdd,
-                                    iconTint = BluePrimary,
+                                    iconTint = MaterialTheme.colorScheme.primary,
                                     title = "Novo Grupo",
                                     subtitle = "Criar sala",
                                     onClick = {
@@ -778,13 +777,13 @@ fun SearchContactScreen(
                         val otherCount = filteredContacts.count { !it.isSelf }
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = BluePrimary.copy(alpha = 0.12f)
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                         ) {
                             Text(
                                 text = "$otherCount salvo(s)",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = BluePrimary,
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
@@ -867,7 +866,7 @@ fun SearchContactScreen(
                             text = "Outros usuários encontrados no LivreChat",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = BluePrimary,
+                            color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                         )
                     }
@@ -983,7 +982,7 @@ fun ContactRowItem(
                 Icon(
                     imageVector = Icons.Default.ChatBubbleOutline,
                     contentDescription = "Conversar",
-                    tint = BluePrimary,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(19.dp)
                 )
             }

@@ -17,7 +17,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.livrechat.app.ui.theme.BluePrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -132,7 +131,7 @@ fun RecoveryScreen(
                     .fillMaxWidth()
                     .height(52.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 if (uiState is AuthUiState.Loading) {
                     CircularProgressIndicator(

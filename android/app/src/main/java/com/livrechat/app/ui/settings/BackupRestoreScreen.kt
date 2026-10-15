@@ -24,7 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.livrechat.app.LivreChatApp
-import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
 import com.livrechat.app.ui.theme.SuccessGreen
 import java.text.SimpleDateFormat
@@ -92,7 +91,7 @@ fun BackupRestoreScreen(
             onDismissRequest = { showAccountDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CloudQueue, contentDescription = null, tint = BluePrimary)
+                    Icon(Icons.Default.CloudQueue, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Conta Google Drive", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
@@ -115,7 +114,7 @@ fun BackupRestoreScreen(
                         deviceGoogleAccounts.forEach { email ->
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = if (accountInput == email) BluePrimary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                                color = if (accountInput == email) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { accountInput = email }
@@ -124,7 +123,7 @@ fun BackupRestoreScreen(
                                     modifier = Modifier.padding(10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.AccountCircle, contentDescription = null, tint = BluePrimary, modifier = Modifier.size(20.dp))
+                                    Icon(Icons.Default.AccountCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(email, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                 }
@@ -157,7 +156,7 @@ fun BackupRestoreScreen(
                             Toast.makeText(context, "Digite um e-mail válido", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Salvar Conta")
                 }
@@ -180,7 +179,7 @@ fun BackupRestoreScreen(
                     Icon(
                         if (isRestore) Icons.Default.Restore else Icons.Default.Lock,
                         contentDescription = null,
-                        tint = BluePrimary
+                        tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(if (isRestore) "Restaurar Backup" else "Criptografar Backup")
@@ -236,7 +235,7 @@ fun BackupRestoreScreen(
                             }
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text(if (isRestore) "Restaurar" else "Avançar")
                 }
@@ -286,7 +285,7 @@ fun BackupRestoreScreen(
                                 modifier = Modifier
                                     .size(38.dp)
                                     .background(
-                                        if (googleDriveAccount != null) SuccessGreen.copy(alpha = 0.15f) else BluePrimary.copy(alpha = 0.15f),
+                                        if (googleDriveAccount != null) SuccessGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                                         CircleShape
                                     ),
                                 contentAlignment = Alignment.Center
@@ -294,7 +293,7 @@ fun BackupRestoreScreen(
                                 Icon(
                                     imageVector = if (googleDriveAccount != null) Icons.Default.CloudDone else Icons.Default.CloudQueue,
                                     contentDescription = null,
-                                    tint = if (googleDriveAccount != null) SuccessGreen else BluePrimary,
+                                    tint = if (googleDriveAccount != null) SuccessGreen else MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
@@ -350,7 +349,7 @@ fun BackupRestoreScreen(
                                 showAccountDialog = true
                             },
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = BluePrimary),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             modifier = Modifier.weight(1f)
                         ) {
                             Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -384,7 +383,7 @@ fun BackupRestoreScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Security, contentDescription = null, tint = BluePrimary, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Status dos Dados", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     }
@@ -412,9 +411,9 @@ fun BackupRestoreScreen(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    CircularProgressIndicator(color = BluePrimary, modifier = Modifier.size(32.dp))
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Processando criptografia e dados...", fontSize = 13.sp, color = BluePrimary)
+                    Text("Processando criptografia e dados...", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
                 }
             } else if (backupState is BackupUiState.Success) {
                 Surface(
@@ -468,7 +467,7 @@ fun BackupRestoreScreen(
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BluePrimary)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Icon(Icons.Default.CloudUpload, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
