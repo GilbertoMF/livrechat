@@ -1226,6 +1226,67 @@ class DatabaseService {
       .map(m => m.user_id);
   }
 
+  public async getConversationById(conversationId: string): Promise<Conversation | null> {
+    if (this.pgPool) {
+      try {
+        const res = await this.pgPool.query('SELECT * FROM conversations WHERE id = $1', [conversationId]);
+        if (res.rows.length > 0) return res.rows[0];
+      } catch (e) {
+        console.warn('[Database] Erro PG getConversationById:', e);
+      }
+    }
+    return this.memoryStore.conversations.find(c => c.id === conversationId) || null;
+  }
+
+  public async addConversationMembers(conversationId: string, memberIds: string[]): Promise<string[]> {
+    for (const mId of memberIds) {
+      if (!this.memoryStore.conversation_members.some(m => m.conversation_id === conversationId && m.user_id === mId)) {
+        this.memoryStore.conversation_members.push({
+          conversation_id: conversationId,
+          user_id: mId,
+          is_pinned: false,
+          is_archived: false,
+          is_muted: false
+        });
+      }
+    }
+    this.saveToLocal();
+
+    if (this.pgPool) {
+      try {
+        for (const mId of memberIds) {
+          await this.ensureUserExists(mId);
+          await this.pgPool.query(
+            'INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [conversationId, mId]
+          );
+        }
+      } catch (e) {
+        console.warn('[Database] Erro PG addConversationMembers:', e);
+      }
+    }
+    return this.getConversationMembers(conversationId);
+  }
+
+  public async removeConversationMember(conversationId: string, memberId: string): Promise<boolean> {
+    this.memoryStore.conversation_members = this.memoryStore.conversation_members.filter(
+      m => !(m.conversation_id === conversationId && m.user_id === memberId)
+    );
+    this.saveToLocal();
+
+    if (this.pgPool) {
+      try {
+        await this.pgPool.query(
+          'DELETE FROM conversation_members WHERE conversation_id = $1 AND user_id = $2',
+          [conversationId, memberId]
+        );
+      } catch (e) {
+        console.warn('[Database] Erro PG removeConversationMember:', e);
+      }
+    }
+    return true;
+  }
+
   // ==========================================
   // MESSAGES
   // ==========================================

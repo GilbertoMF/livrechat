@@ -762,6 +762,7 @@ fun ChatScreen(
     }
 
     if (showContactProfile) {
+        val isGroup = currentConv?.isGroup == true
         ContactProfileDialog(
             conversationId = conversationId,
             otherUserId = otherUserId,
@@ -770,7 +771,26 @@ fun ChatScreen(
             otherAvatarUrl = currentConv?.otherAvatarUrl,
             messages = messages,
             isLocked = isConvLocked,
+            isGroup = isGroup,
+            groupTitle = currentConv?.groupTitle,
+            groupAvatar = currentConv?.groupAvatar,
             onDismiss = { showContactProfile = false },
+            onLeaveGroup = {
+                showContactProfile = false
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        val currentUserId = prefs.currentUserId
+                        if (currentUserId != null) {
+                            app.apiClient.apiService.removeGroupMember(conversationId, currentUserId)
+                        }
+                        app.database.conversationDao().deleteConversation(conversationId)
+                    } catch (e: Exception) {}
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Você saiu do grupo", Toast.LENGTH_SHORT).show()
+                        onNavigateBack()
+                    }
+                }
+            },
             onStartCall = {
                 onStartCall(
                     otherUserId,
@@ -852,23 +872,36 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
-                        if (isContactBlocked) {
-                            Toast.makeText(context, "Desbloqueie o contato para fazer chamadas", Toast.LENGTH_SHORT).show()
-                            return@IconButton
+                    val isGroup = currentConv?.isGroup == true
+                    if (isGroup) {
+                        IconButton(onClick = {
+                            showContactProfile = true
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.PersonAdd,
+                                contentDescription = "Adicionar pessoas",
+                                tint = BluePrimary
+                            )
                         }
-                        onStartCall(
-                            otherUserId,
-                            otherDisplayName,
-                            currentConv?.otherUsername ?: "",
-                            currentConv?.otherAvatarUrl
-                        )
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.Phone,
-                            contentDescription = "Chamada de Voz WebRTC",
-                            tint = BluePrimary
-                        )
+                    } else {
+                        IconButton(onClick = {
+                            if (isContactBlocked) {
+                                Toast.makeText(context, "Desbloqueie o contato para fazer chamadas", Toast.LENGTH_SHORT).show()
+                                return@IconButton
+                            }
+                            onStartCall(
+                                otherUserId,
+                                otherDisplayName,
+                                currentConv?.otherUsername ?: "",
+                                currentConv?.otherAvatarUrl
+                            )
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Phone,
+                                contentDescription = "Chamada de Voz WebRTC",
+                                tint = BluePrimary
+                            )
+                        }
                     }
 
                     Box {
@@ -880,15 +913,31 @@ fun ChatScreen(
                             onDismissRequest = { showMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Dados do contato") },
+                                text = { Text(if (isGroup) "Dados do grupo" else "Dados do contato") },
                                 onClick = {
                                     showMenu = false
                                     showContactProfile = true
                                 },
                                 leadingIcon = {
-                                    Icon(Icons.Default.Person, contentDescription = null, tint = BluePrimary)
+                                    Icon(
+                                        imageVector = if (isGroup) Icons.Default.Group else Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = BluePrimary
+                                    )
                                 }
                             )
+                            if (isGroup) {
+                                DropdownMenuItem(
+                                    text = { Text("Adicionar pessoas") },
+                                    onClick = {
+                                        showMenu = false
+                                        showContactProfile = true
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.PersonAdd, contentDescription = null, tint = BluePrimary)
+                                    }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Papel de parede") },
                                 onClick = {

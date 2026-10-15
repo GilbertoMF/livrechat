@@ -183,3 +183,16 @@ data class CreateGroupRequest(
     val title: String,
     val memberIds: List<String>
 )
+
+data class GroupMemberDto(
+    val id: String,
+    val username: String,
+    val displayName: String,
+    val avatarUrl: String? = null,
+    val bio: String? = null,
+    val isAdmin: Boolean = false
+)
+
+data class AddMembersRequest(
+    val memberIds: List<String>
+)

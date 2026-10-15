@@ -35,11 +35,15 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.livrechat.app.LivreChatApp
 import com.livrechat.app.data.local.entity.MessageEntity
+import com.livrechat.app.data.remote.model.AddMembersRequest
+import com.livrechat.app.data.remote.model.GroupMemberDto
 import com.livrechat.app.data.remote.model.UserDto
 import com.livrechat.app.media.AudioPlayerHelper
 import com.livrechat.app.ui.common.UserAvatarView
+import com.livrechat.app.ui.contacts.ContactUiModel
 import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
+import com.livrechat.app.ui.theme.SuccessGreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -58,11 +62,15 @@ fun ContactProfileDialog(
     otherAvatarUrl: String?,
     messages: List<MessageEntity>,
     isLocked: Boolean,
+    isGroup: Boolean = false,
+    groupTitle: String? = null,
+    groupAvatar: String? = null,
     onDismiss: () -> Unit,
     onStartCall: () -> Unit,
     onToggleLock: (Boolean) -> Unit,
     onClearChat: () -> Unit,
     onBlockContact: () -> Unit,
+    onLeaveGroup: () -> Unit = {},
     onViewMedia: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -78,38 +86,116 @@ fun ContactProfileDialog(
     var editNicknameInput by remember { mutableStateOf("") }
     var isContactBlocked by remember { mutableStateOf(app.preferencesManager.isUserBlocked(otherUserId)) }
 
-    // Carrega perfil enriquecido do contato e status de bloqueio
-    LaunchedEffect(otherUserId) {
-        withContext(Dispatchers.IO) {
+    // Group specific state
+    var groupMembers by remember { mutableStateOf<List<GroupMemberDto>>(emptyList()) }
+    var isLoadingMembers by remember { mutableStateOf(false) }
+    var showAddMembersDialog by remember { mutableStateOf(false) }
+    var contactsToSelect by remember { mutableStateOf<List<ContactUiModel>>(emptyList()) }
+    var selectedMemberIdsToAdd by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var isAddingMembers by remember { mutableStateOf(false) }
+    var showLeaveGroupConfirm by remember { mutableStateOf(false) }
+    var memberToRemove by remember { mutableStateOf<GroupMemberDto?>(null) }
+
+    fun loadMembers() {
+        if (!isGroup) return
+        scope.launch(Dispatchers.IO) {
             try {
-                val res = app.apiClient.apiService.getUserProfile(otherUserId)
+                isLoadingMembers = true
+                val res = app.apiClient.apiService.getGroupMembers(conversationId)
                 if (res.isSuccessful && res.body() != null) {
-                    userProfile = res.body()
-                }
-            } catch (e: Exception) {}
-            try {
-                val blockedRes = app.apiClient.apiService.getBlockedUsers()
-                if (blockedRes.isSuccessful && blockedRes.body() != null) {
-                    val isBlockedOnServer = blockedRes.body()!!.any { it.id == otherUserId }
-                    app.preferencesManager.setUserBlocked(otherUserId, isBlockedOnServer)
                     withContext(Dispatchers.Main) {
-                        isContactBlocked = isBlockedOnServer
+                        groupMembers = res.body()!!
                     }
                 }
-            } catch (e: Exception) {}
+            } catch (e: Exception) {
+            } finally {
+                withContext(Dispatchers.Main) {
+                    isLoadingMembers = false
+                }
+            }
         }
     }
 
-    val customSavedName = remember(otherUserId) { app.preferencesManager.getContactCustomName(otherUserId) }
+    LaunchedEffect(conversationId, isGroup) {
+        if (isGroup) {
+            loadMembers()
+        }
+    }
+
+    fun openAddMembersDialog() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val currentUserId = app.preferencesManager.currentUserId
+                val allContacts = app.database.contactDao().getAllContacts()
+                val existingMemberIds = groupMembers.map { it.id }.toSet()
+                val available = allContacts
+                    .filter { it.contactUserId != currentUserId && it.contactUserId !in existingMemberIds }
+                    .map {
+                        ContactUiModel(
+                            userId = it.contactUserId,
+                            displayName = it.displayName.ifBlank { it.username },
+                            username = it.username,
+                            avatarUrl = it.avatarUrl,
+                            bio = it.bio
+                        )
+                    }
+                withContext(Dispatchers.Main) {
+                    contactsToSelect = available
+                    selectedMemberIdsToAdd = emptySet()
+                    showAddMembersDialog = true
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Erro ao carregar contatos", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // Carrega perfil enriquecido do contato e status de bloqueio
+    LaunchedEffect(otherUserId, isGroup) {
+        if (!isGroup) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val res = app.apiClient.apiService.getUserProfile(otherUserId)
+                    if (res.isSuccessful && res.body() != null) {
+                        userProfile = res.body()
+                    }
+                } catch (e: Exception) {}
+                try {
+                    val blockedRes = app.apiClient.apiService.getBlockedUsers()
+                    if (blockedRes.isSuccessful && blockedRes.body() != null) {
+                        val isBlockedOnServer = blockedRes.body()!!.any { it.id == otherUserId }
+                        app.preferencesManager.setUserBlocked(otherUserId, isBlockedOnServer)
+                        withContext(Dispatchers.Main) {
+                            isContactBlocked = isBlockedOnServer
+                        }
+                    }
+                } catch (e: Exception) {}
+            }
+        }
+    }
+
+    val customSavedName = remember(otherUserId) { if (!isGroup) app.preferencesManager.getContactCustomName(otherUserId) else null }
     var localCustomName by remember { mutableStateOf(customSavedName) }
 
-    val displayTitle = localCustomName
-        ?: userProfile?.displayName?.ifBlank { null }
-        ?: otherDisplayName.ifBlank { "Contato" }
-    val displayHandle = userProfile?.username?.ifBlank { null }
-        ?: otherUsername.ifBlank { otherUserId.take(12) }
-    val avatarUrl = userProfile?.avatarUrl ?: otherAvatarUrl
-    val bioText = userProfile?.bio?.ifBlank { null } ?: "Disponível no LivreChat"
+    val displayTitle = if (isGroup) {
+        groupTitle?.ifBlank { null } ?: otherDisplayName.ifBlank { "Grupo" }
+    } else {
+        localCustomName
+            ?: userProfile?.displayName?.ifBlank { null }
+            ?: otherDisplayName.ifBlank { "Contato" }
+    }
+
+    val displayHandle = if (isGroup) {
+        "Grupo · ${groupMembers.size} participante(s)"
+    } else {
+        userProfile?.username?.ifBlank { null }
+            ?: otherUsername.ifBlank { otherUserId.take(12) }
+    }
+
+    val avatarUrl = if (isGroup) groupAvatar else (userProfile?.avatarUrl ?: otherAvatarUrl)
+    val bioText = if (isGroup) "Grupo criado no LivreChat" else (userProfile?.bio?.ifBlank { null } ?: "Disponível no LivreChat")
 
     val audioPlayerHelper = remember { AudioPlayerHelper(context) }
     DisposableEffect(Unit) {
@@ -153,7 +239,7 @@ fun ContactProfileDialog(
                 TopAppBar(
                     title = {
                         Text(
-                            text = "Dados do contato",
+                            text = if (isGroup) "Dados do grupo" else "Dados do contato",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -215,33 +301,35 @@ fun ContactProfileDialog(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            IconButton(
-                                onClick = {
-                                    editNicknameInput = displayTitle
-                                    showEditNicknameDialog = true
-                                },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = "Editar nome",
-                                    tint = BluePrimary,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                            if (!isGroup) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                IconButton(
+                                    onClick = {
+                                        editNicknameInput = displayTitle
+                                        showEditNicknameDialog = true
+                                    },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Editar nome",
+                                        tint = BluePrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
 
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        // Identificador / Username
+                        // Identificador / Detalhes
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = BluePrimary.copy(alpha = 0.12f),
                             border = androidx.compose.foundation.BorderStroke(1.dp, BluePrimary.copy(alpha = 0.25f))
                         ) {
                             Text(
-                                text = "@$displayHandle",
+                                text = if (isGroup) displayHandle else "@$displayHandle",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = BluePrimary,
@@ -251,21 +339,31 @@ fun ContactProfileDialog(
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // Linha de Ações Rápidas (Áudio, Mensagem, Silenciar)
+                        // Linha de Ações Rápidas (Áudio/Adicionar, Mensagem, Silenciar)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 32.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            QuickActionPill(
-                                icon = Icons.Default.Phone,
-                                label = "Áudio",
-                                onClick = {
-                                    onDismiss()
-                                    onStartCall()
-                                }
-                            )
+                            if (isGroup) {
+                                QuickActionPill(
+                                    icon = Icons.Default.PersonAdd,
+                                    label = "Adicionar",
+                                    onClick = {
+                                        openAddMembersDialog()
+                                    }
+                                )
+                            } else {
+                                QuickActionPill(
+                                    icon = Icons.Default.Phone,
+                                    label = "Áudio",
+                                    onClick = {
+                                        onDismiss()
+                                        onStartCall()
+                                    }
+                                )
+                            }
 
                             QuickActionPill(
                                 icon = Icons.Default.Chat,
@@ -590,6 +688,205 @@ fun ContactProfileDialog(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
+                // 3.5. Card: Participantes do Grupo (Estilo WhatsApp / Telegram)
+                if (isGroup) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${groupMembers.size} participante${if (groupMembers.size != 1) "s" else ""}",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (isLoadingMembers) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = BluePrimary
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Adicionar participantes
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { openAddMembersDialog() }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = BluePrimary,
+                                        modifier = Modifier.size(42.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                Icons.Default.PersonAdd,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(14.dp))
+                                    Column {
+                                        Text(
+                                            text = "Adicionar participantes",
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "Convidar contatos salvos",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                // Convidar via link
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            val clip = ClipData.newPlainText("Link do Grupo", "https://livrechat.app/join/$conversationId")
+                                            clipboard.setPrimaryClip(clip)
+                                            Toast.makeText(context, "Link do grupo copiado para a área de transferência!", Toast.LENGTH_SHORT).show()
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier.size(42.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                Icons.Default.Link,
+                                                contentDescription = null,
+                                                tint = BluePrimary,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(14.dp))
+                                    Column {
+                                        Text(
+                                            text = "Convidar via link",
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "Compartilhar convite de acesso rápido",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                if (groupMembers.isNotEmpty()) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(vertical = 10.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                    )
+                                }
+
+                                // Lista de Membros
+                                val currentUserId = app.preferencesManager.currentUserId
+                                val isCurrentUserAdmin = groupMembers.any { it.id == currentUserId && it.isAdmin }
+
+                                groupMembers.forEach { member ->
+                                    val isSelf = member.id == currentUserId
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        UserAvatarView(
+                                            avatarUrl = member.avatarUrl,
+                                            displayName = member.displayName ?: member.username,
+                                            size = 42.dp,
+                                            fontSize = 16.sp
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = (member.displayName ?: member.username) + if (isSelf) " (Você)" else "",
+                                                    fontSize = 15.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                if (member.isAdmin) {
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Surface(
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        color = SuccessGreen.copy(alpha = 0.15f)
+                                                    ) {
+                                                        Text(
+                                                            text = "Admin",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = SuccessGreen,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Text(
+                                                text = if (!member.bio.isNullOrBlank()) member.bio else "@${member.username}",
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+
+                                        if (isCurrentUserAdmin && !isSelf) {
+                                            IconButton(
+                                                onClick = { memberToRemove = member },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.RemoveCircleOutline,
+                                                    contentDescription = "Remover do grupo",
+                                                    tint = DangerRed.copy(alpha = 0.8f),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                }
+
                 // 4. Card: Privacidade e Segurança
                 item {
                     Card(
@@ -679,7 +976,7 @@ fun ContactProfileDialog(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                // 5. Card: Ações do Contato (Limpar conversa, Bloquear contato)
+                // 5. Card: Ações do Contato ou Grupo
                 item {
                     Card(
                         shape = RoundedCornerShape(16.dp),
@@ -717,27 +1014,52 @@ fun ContactProfileDialog(
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                             )
 
-                            // Bloquear ou Desbloquear Contato
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showBlockConfirmDialog = true }
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = if (isContactBlocked) Icons.Default.LockOpen else Icons.Default.Block,
-                                    contentDescription = null,
-                                    tint = if (isContactBlocked) BluePrimary else DangerRed,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(modifier = Modifier.width(14.dp))
-                                Text(
-                                    text = if (isContactBlocked) "Desbloquear $displayTitle" else "Bloquear $displayTitle",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = if (isContactBlocked) BluePrimary else DangerRed
-                                )
+                            if (isGroup) {
+                                // Sair do grupo
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showLeaveGroupConfirm = true }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ExitToApp,
+                                        contentDescription = null,
+                                        tint = DangerRed,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(14.dp))
+                                    Text(
+                                        text = "Sair do grupo",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = DangerRed
+                                    )
+                                }
+                            } else {
+                                // Bloquear ou Desbloquear Contato
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showBlockConfirmDialog = true }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isContactBlocked) Icons.Default.LockOpen else Icons.Default.Block,
+                                        contentDescription = null,
+                                        tint = if (isContactBlocked) BluePrimary else DangerRed,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(14.dp))
+                                    Text(
+                                        text = if (isContactBlocked) "Desbloquear $displayTitle" else "Bloquear $displayTitle",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (isContactBlocked) BluePrimary else DangerRed
+                                    )
+                                }
                             }
                         }
                     }
@@ -923,6 +1245,244 @@ fun ContactProfileDialog(
             },
             dismissButton = {
                 TextButton(onClick = { showEditNicknameDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Diálogo: Adicionar participantes ao grupo
+    if (showAddMembersDialog) {
+        var addFilterQuery by remember { mutableStateOf("") }
+        val filteredContacts = remember(contactsToSelect, addFilterQuery) {
+            if (addFilterQuery.isBlank()) contactsToSelect
+            else contactsToSelect.filter {
+                it.displayName.contains(addFilterQuery, ignoreCase = true) ||
+                it.username.contains(addFilterQuery, ignoreCase = true)
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { if (!isAddingMembers) showAddMembersDialog = false },
+            title = {
+                Text(
+                    text = "Adicionar ao grupo",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                    OutlinedTextField(
+                        value = addFilterQuery,
+                        onValueChange = { addFilterQuery = it },
+                        placeholder = { Text("Pesquisar contatos...") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    )
+
+                    if (contactsToSelect.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Nenhum novo contato para adicionar.",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else if (filteredContacts.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Nenhum contato encontrado.",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                            items(filteredContacts) { contact ->
+                                val isSelected = selectedMemberIdsToAdd.contains(contact.userId)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedMemberIdsToAdd = if (isSelected) {
+                                                selectedMemberIdsToAdd - contact.userId
+                                            } else {
+                                                selectedMemberIdsToAdd + contact.userId
+                                            }
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    UserAvatarView(
+                                        avatarUrl = contact.avatarUrl,
+                                        displayName = contact.displayName,
+                                        size = 40.dp,
+                                        fontSize = 16.sp
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = contact.displayName,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 14.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "@${contact.username}",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Checkbox(
+                                        checked = isSelected,
+                                        onCheckedChange = { checked ->
+                                            selectedMemberIdsToAdd = if (checked) {
+                                                selectedMemberIdsToAdd + contact.userId
+                                            } else {
+                                                selectedMemberIdsToAdd - contact.userId
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (selectedMemberIdsToAdd.isEmpty()) return@Button
+                        isAddingMembers = true
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                val res = app.apiClient.apiService.addGroupMembers(
+                                    conversationId,
+                                    AddMembersRequest(selectedMemberIdsToAdd.toList())
+                                )
+                                if (res.isSuccessful) {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "Participante(s) adicionado(s) com sucesso!", Toast.LENGTH_SHORT).show()
+                                        showAddMembersDialog = false
+                                        loadMembers()
+                                    }
+                                } else {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "Não foi possível adicionar os membros", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "Erro de rede ao adicionar", Toast.LENGTH_SHORT).show()
+                                }
+                            } finally {
+                                withContext(Dispatchers.Main) {
+                                    isAddingMembers = false
+                                }
+                            }
+                        }
+                    },
+                    enabled = selectedMemberIdsToAdd.isNotEmpty() && !isAddingMembers
+                ) {
+                    if (isAddingMembers) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(if (selectedMemberIdsToAdd.isNotEmpty()) "Adicionar (${selectedMemberIdsToAdd.size})" else "Adicionar")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showAddMembersDialog = false },
+                    enabled = !isAddingMembers
+                ) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Diálogo: Confirmar remoção de participante
+    if (memberToRemove != null) {
+        val member = memberToRemove!!
+        AlertDialog(
+            onDismissRequest = { memberToRemove = null },
+            title = { Text("Remover participante?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("Deseja remover ${member.displayName ?: member.username} do grupo?")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val toRemoveId = member.id
+                    memberToRemove = null
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            val res = app.apiClient.apiService.removeGroupMember(conversationId, toRemoveId)
+                            if (res.isSuccessful) {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "Participante removido do grupo", Toast.LENGTH_SHORT).show()
+                                    loadMembers()
+                                }
+                            } else {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "Não foi possível remover participante", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "Erro ao remover participante", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }) {
+                    Text("Remover", color = DangerRed, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { memberToRemove = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Diálogo: Confirmar saída do grupo
+    if (showLeaveGroupConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLeaveGroupConfirm = false },
+            title = { Text("Sair do grupo?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("Você não receberá mais mensagens deste grupo.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLeaveGroupConfirm = false
+                    onLeaveGroup()
+                }) {
+                    Text("Sair do grupo", color = DangerRed, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLeaveGroupConfirm = false }) {
                     Text("Cancelar")
                 }
             }

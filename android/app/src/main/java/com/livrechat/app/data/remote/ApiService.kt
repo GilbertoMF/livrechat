@@ -1,21 +1,6 @@
 package com.livrechat.app.data.remote
 
-import com.livrechat.app.data.remote.model.AddContactRequest
-import com.livrechat.app.data.remote.model.BaseResponse
-import com.livrechat.app.data.remote.model.CallHistoryDto
-import com.livrechat.app.data.remote.model.ContactDto
-import com.livrechat.app.data.remote.model.ConversationDto
-import com.livrechat.app.data.remote.model.CreateGroupRequest
-import com.livrechat.app.data.remote.model.IceServersResponse
-import com.livrechat.app.data.remote.model.LoginRequest
-import com.livrechat.app.data.remote.model.LoginResponse
-import com.livrechat.app.data.remote.model.MessageDto
-import com.livrechat.app.data.remote.model.RecoverRequest
-import com.livrechat.app.data.remote.model.RegisterRequest
-import com.livrechat.app.data.remote.model.RegisterResponse
-import com.livrechat.app.data.remote.model.SendMessageRequest
-import com.livrechat.app.data.remote.model.StatusDto
-import com.livrechat.app.data.remote.model.UserDto
+import com.livrechat.app.data.remote.model.*
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -146,6 +131,18 @@ interface ApiService {
     @GET("api/messages/conversations/{conversationId}/members")
     suspend fun getGroupMembers(
         @Path("conversationId") conversationId: String
-    ): Response<List<UserDto>>
+    ): Response<List<GroupMemberDto>>
+
+    @POST("api/messages/conversations/{conversationId}/members")
+    suspend fun addGroupMembers(
+        @Path("conversationId") conversationId: String,
+        @Body request: AddMembersRequest
+    ): Response<BaseResponse>
+
+    @DELETE("api/messages/conversations/{conversationId}/members/{memberId}")
+    suspend fun removeGroupMember(
+        @Path("conversationId") conversationId: String,
+        @Path("memberId") memberId: String
+    ): Response<BaseResponse>
 }
 

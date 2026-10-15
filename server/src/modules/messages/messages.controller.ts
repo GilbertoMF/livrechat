@@ -329,6 +329,7 @@ export class MessagesController {
     try {
       const { conversationId } = req.params;
       const memberIds = await db.getConversationMembers(conversationId);
+      const conv = await db.getConversationById(conversationId);
       const members = [];
       for (const mId of memberIds) {
         const u = await db.findUserById(mId);
@@ -338,11 +339,69 @@ export class MessagesController {
             id: u.id,
             username: u.username,
             displayName: p?.display_name || u.username,
-            avatarUrl: p?.avatar_url || null
+            avatarUrl: p?.avatar_url || null,
+            bio: p?.bio || null,
+            isAdmin: conv ? conv.created_by === u.id : false
           });
         }
       }
       return res.status(200).json(members);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  public static async addConversationMembers(req: AuthRequest, res: Response) {
+    try {
+      const { conversationId } = req.params;
+      const { memberIds } = req.body;
+      if (!Array.isArray(memberIds) || memberIds.length === 0) {
+        return res.status(400).json({ error: 'Nenhum membro informado.' });
+      }
+
+      const updatedMemberIds = await db.addConversationMembers(conversationId, memberIds);
+
+      // WebSocket notification
+      const wsManager = WebSocketManager.getInstance();
+      if (wsManager) {
+        for (const mId of updatedMemberIds) {
+          wsManager.sendToUser(mId, {
+            type: 'group:members_updated',
+            conversationId,
+            memberIds: updatedMemberIds
+          });
+        }
+      }
+
+      return res.status(200).json({ success: true, memberIds: updatedMemberIds });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  public static async removeConversationMember(req: AuthRequest, res: Response) {
+    try {
+      const { conversationId, memberId } = req.params;
+
+      await db.removeConversationMember(conversationId, memberId);
+
+      const wsManager = WebSocketManager.getInstance();
+      if (wsManager) {
+        const remaining = await db.getConversationMembers(conversationId);
+        for (const mId of remaining) {
+          wsManager.sendToUser(mId, {
+            type: 'group:members_updated',
+            conversationId,
+            memberIds: remaining
+          });
+        }
+        wsManager.sendToUser(memberId, {
+          type: 'group:removed',
+          conversationId
+        });
+      }
+
+      return res.status(200).json({ success: true });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }

@@ -12,6 +12,9 @@ interface ContactDao {
     @Query("SELECT * FROM contacts ORDER BY displayName ASC")
     fun getAllContactsFlow(): Flow<List<ContactEntity>>
 
+    @Query("SELECT * FROM contacts ORDER BY displayName ASC")
+    suspend fun getAllContacts(): List<ContactEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertContact(contact: ContactEntity)
 
