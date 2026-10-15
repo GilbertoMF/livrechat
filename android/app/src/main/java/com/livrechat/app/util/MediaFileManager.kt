@@ -55,7 +55,7 @@ object MediaFileManager {
             val clean = if (base64Data.contains(",")) base64Data.substringAfter(",") else base64Data
             val bytes = Base64.decode(clean, Base64.DEFAULT)
             saveBytesToLocalFile(context, bytes, originalFileName)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             null
         }
     }
@@ -172,9 +172,21 @@ object MediaFileManager {
                         ExifInterface.ORIENTATION_ROTATE_270 -> 270f
                         else -> 0f
                     }
-                } catch (e: Exception) {}
+                } catch (e: Throwable) {}
 
-                val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+                val opts = android.graphics.BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
+                }
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+                var sampleSize = 1
+                val maxTarget = 1280
+                while ((opts.outWidth / sampleSize) > maxTarget || (opts.outHeight / sampleSize) > maxTarget) {
+                    sampleSize *= 2
+                }
+                val decodeOpts = android.graphics.BitmapFactory.Options().apply {
+                    inSampleSize = sampleSize
+                }
+                val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOpts) ?: return null
                 if (rotation != 0f) {
                     val rotated = rotateBitmap(bmp, rotation)
                     if (rotated != bmp) bmp.recycle()
@@ -183,7 +195,7 @@ object MediaFileManager {
                     bmp
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             null
         }
     }

@@ -236,10 +236,14 @@ fun ChatScreen(
 
     val isImeVisible = WindowInsets.isImeVisible
     val imeBottom = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current)
-    LaunchedEffect(isImeVisible, imeBottom > 0) {
+    LaunchedEffect(isImeVisible, imeBottom) {
         if ((isImeVisible || imeBottom > 0) && messages.isNotEmpty()) {
-            delay(120)
+            delay(50)
+            listState.scrollToItem(messages.size - 1)
+            delay(180)
             listState.animateScrollToItem(messages.size - 1)
+            delay(120)
+            listState.scrollToItem(messages.size - 1)
             showScrollToBottomButton = false
             unreadBelowCount = 0
         }
@@ -1037,8 +1041,24 @@ fun ChatScreen(
                                         })
 
                                         et.setOnFocusChangeListener { _, hasFocus ->
-                                            if (hasFocus && showEmojiStickerSheet) {
-                                                showEmojiStickerSheet = false
+                                            if (hasFocus) {
+                                                if (showEmojiStickerSheet) {
+                                                    showEmojiStickerSheet = false
+                                                }
+                                                scope.launch {
+                                                    delay(100)
+                                                    if (messages.isNotEmpty()) listState.scrollToItem(messages.size - 1)
+                                                    delay(220)
+                                                    if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+                                                }
+                                            }
+                                        }
+                                        et.setOnClickListener {
+                                            scope.launch {
+                                                delay(100)
+                                                if (messages.isNotEmpty()) listState.scrollToItem(messages.size - 1)
+                                                delay(220)
+                                                if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
                                             }
                                         }
                                         et
@@ -1176,7 +1196,8 @@ fun ChatScreen(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(messages, key = { it.id }) { message ->

@@ -272,6 +272,15 @@ class DatabaseService {
     }
   }
 
+  public handlePgError(e: any) {
+    const msg = (e?.message || '').toLowerCase();
+    if (msg.includes('exceeded the quota') || msg.includes('suspended') || msg.includes('limit') || msg.includes('quota')) {
+      console.warn('[Database] Alerta Neon/PG: Limite de cota excedido. Alternando automaticamente para Zero-Setup local persistente.');
+      try { this.pgPool?.end().catch(() => {}); } catch (_) {}
+      this.pgPool = null;
+    }
+  }
+
   // ==========================================
   // USERS
   // ==========================================
@@ -1868,6 +1877,7 @@ class DatabaseService {
           status.expires_at
         ]);
       } catch (e) {
+        this.handlePgError(e);
         console.warn('[Database] Erro PG createStatus:', e);
       }
     }
@@ -1915,6 +1925,7 @@ class DatabaseService {
           views: typeof r.views === 'string' ? JSON.parse(r.views) : (r.views || [])
         }));
       } catch (e) {
+        this.handlePgError(e);
         console.warn('[Database] Erro PG getActiveStatuses:', e);
       }
     }
@@ -1941,6 +1952,7 @@ class DatabaseService {
         const res = await this.pgPool.query('SELECT * FROM statuses WHERE id = $1', [statusId]);
         if (res.rows.length > 0) return res.rows[0];
       } catch (e) {
+        this.handlePgError(e);
         console.warn('[Database] Erro PG getStatusById:', e);
       }
     }
@@ -1978,6 +1990,7 @@ class DatabaseService {
           await this.pgPool.query('UPDATE statuses SET reactions = $1 WHERE id = $2', [JSON.stringify(list), statusId]);
         }
       } catch (e) {
+        this.handlePgError(e);
         console.warn('[Database] Erro PG addStatusReaction:', e);
       }
     }
@@ -2014,6 +2027,7 @@ class DatabaseService {
           await this.pgPool.query('UPDATE statuses SET views = $1 WHERE id = $2', [JSON.stringify(list), statusId]);
         }
       } catch (e) {
+        this.handlePgError(e);
         console.warn('[Database] Erro PG addStatusView:', e);
       }
     }
@@ -2030,6 +2044,7 @@ class DatabaseService {
       try {
         await this.pgPool.query('DELETE FROM statuses WHERE id = $1 AND user_id = $2', [statusId, userId]);
       } catch (e) {
+        this.handlePgError(e);
         console.warn('[Database] Erro PG deleteStatus:', e);
       }
     }

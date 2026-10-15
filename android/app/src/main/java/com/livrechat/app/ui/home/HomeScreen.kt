@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.livrechat.app.util.MediaFileManager
 import java.io.File
 import java.io.FileOutputStream
 import android.media.MediaPlayer
@@ -264,26 +265,10 @@ fun HomeScreen(
         if (uri != null) {
             scope.launch(Dispatchers.IO) {
                 try {
-                    val inputStream = context.contentResolver.openInputStream(uri)
-                    val originalBitmap = BitmapFactory.decodeStream(inputStream)
-                    inputStream?.close()
-                    if (originalBitmap != null) {
-                        val maxDim = 1080
-                        val width = originalBitmap.width
-                        val height = originalBitmap.height
-                        val scale = if (width > height) maxDim.toFloat() / width else maxDim.toFloat() / height
-                        val scaledBitmap = if (scale < 1f) {
-                            Bitmap.createScaledBitmap(
-                                originalBitmap,
-                                (width * scale).toInt().coerceAtLeast(1),
-                                (height * scale).toInt().coerceAtLeast(1),
-                                true
-                            )
-                        } else {
-                            originalBitmap
-                        }
+                    val correctedBitmap = MediaFileManager.loadGalleryImageCorrected(context, uri, 960)
+                    if (correctedBitmap != null) {
                         val baos = ByteArrayOutputStream()
-                        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 75, baos)
+                        correctedBitmap.compress(Bitmap.CompressFormat.JPEG, 70, baos)
                         val bytes = baos.toByteArray()
                         val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                         val dataUri = "data:image/jpeg;base64,$base64"
@@ -292,10 +277,14 @@ fun HomeScreen(
                             newImageStatusCaption = ""
                             showCreateImageStatusDialog = true
                         }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Não foi possível carregar a imagem", Toast.LENGTH_SHORT).show()
+                        }
                     }
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Erro ao carregar imagem", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Erro ao carregar imagem: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -316,7 +305,7 @@ fun HomeScreen(
                     val inputStream = context.contentResolver.openInputStream(uri)
                     val bytes = inputStream?.readBytes()
                     inputStream?.close()
-                    if (bytes != null && bytes.size <= 12 * 1024 * 1024) {
+                    if (bytes != null && bytes.size <= 3 * 1024 * 1024) {
                         val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                         val dataUri = "data:audio/mp3;base64,$base64"
 
@@ -348,10 +337,10 @@ fun HomeScreen(
                         }
                     } else {
                         withContext(Dispatchers.Main) {
-                            Toast.makeText(context, "Arquivo de música muito grande (máx 12MB)", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Arquivo de música muito grande (máx 3MB)", Toast.LENGTH_SHORT).show()
                         }
                     }
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(context, "Erro ao carregar arquivo de música", Toast.LENGTH_SHORT).show()
                     }
@@ -2020,10 +2009,17 @@ fun FullScreenStatusViewer(
                 val content = currentStatus.content
                 if (content.startsWith("data:") || content.length > 500) {
                     val file = File(context.cacheDir, "status_play_${currentStatus.id}.mp3")
-                    val base64 = if (content.contains(",")) content.substringAfter(",") else content
-                    val bytes = Base64.decode(base64, Base64.DEFAULT)
-                    FileOutputStream(file).use { it.write(bytes) }
-                    mp.setDataSource(file.absolutePath)
+                    if (!file.exists() || file.length() == 0L) {
+                        MediaFileManager.saveBase64ToLocalFile(context, content, "status_play_${currentStatus.id}.mp3")
+                    }
+                    if (file.exists() && file.length() > 0L) {
+                        mp.setDataSource(file.absolutePath)
+                    } else {
+                        val base64 = if (content.contains(",")) content.substringAfter(",") else content
+                        val bytes = Base64.decode(base64, Base64.DEFAULT)
+                        FileOutputStream(file).use { it.write(bytes) }
+                        mp.setDataSource(file.absolutePath)
+                    }
                 } else {
                     mp.setDataSource(content)
                 }
@@ -2040,8 +2036,8 @@ fun FullScreenStatusViewer(
                 }
                 mp.prepareAsync()
                 statusMediaPlayer = mp
-            } catch (e: Exception) {
-                e.printStackTrace()
+            } catch (e: Throwable) {
+                android.util.Log.e("StatusViewer", "Erro ao carregar audio do Flash", e)
             }
         }
         onDispose {
@@ -2116,17 +2112,17 @@ fun FullScreenStatusViewer(
                     }
                     "image" -> {
                         val imageContent = currentStatus.content
-                        val decodedBitmap = remember(imageContent) {
-                            if (imageContent.startsWith("data:image/") || (!imageContent.startsWith("http://") && !imageContent.startsWith("https://") && imageContent.length > 100)) {
+                        var decodedBitmap by remember(imageContent) { mutableStateOf<Bitmap?>(null) }
+                        LaunchedEffect(imageContent) {
+                            withContext(Dispatchers.IO) {
                                 try {
-                                    val cleanB64 = if (imageContent.contains(",")) imageContent.substringAfter(",") else imageContent
-                                    val decodedBytes = Base64.decode(cleanB64, Base64.DEFAULT)
-                                    BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
-                                } catch (e: Exception) {
-                                    null
+                                    val bmp = MediaFileManager.decodeAndCorrectBitmap(context, imageContent)
+                                    withContext(Dispatchers.Main) {
+                                        decodedBitmap = bmp
+                                    }
+                                } catch (e: Throwable) {
+                                    android.util.Log.e("StatusViewer", "Erro ao decodificar imagem", e)
                                 }
-                            } else {
-                                null
                             }
                         }
 
@@ -2152,7 +2148,7 @@ fun FullScreenStatusViewer(
 
                         if (decodedBitmap != null) {
                             Image(
-                                bitmap = decodedBitmap.asImageBitmap(),
+                                bitmap = decodedBitmap!!.asImageBitmap(),
                                 contentDescription = null,
                                 modifier = zoomModifier,
                                 contentScale = ContentScale.Fit
@@ -2168,23 +2164,38 @@ fun FullScreenStatusViewer(
                     }
                     "video" -> {
                         val videoContent = currentStatus.content
-                        val videoUri = remember(videoContent) {
-                            if (videoContent.startsWith("data:video/")) {
-                                try {
-                                    val cleanB64 = videoContent.substringAfter(",")
-                                    val decodedBytes = Base64.decode(cleanB64, Base64.DEFAULT)
-                                    val tempFile = File(context.cacheDir, "status_vid_${currentStatus.id}.mp4")
-                                    if (!tempFile.exists() || tempFile.length() == 0L) {
-                                        tempFile.writeBytes(decodedBytes)
+                        var videoUri by remember(currentStatus.id) {
+                            val cachedFile = File(context.cacheDir, "status_vid_${currentStatus.id}.mp4")
+                            mutableStateOf(if (cachedFile.exists() && cachedFile.length() > 0L) Uri.fromFile(cachedFile) else null)
+                        }
+                        LaunchedEffect(videoContent) {
+                            if (videoUri == null) {
+                                withContext(Dispatchers.IO) {
+                                    try {
+                                        if (videoContent.startsWith("data:video/")) {
+                                            val tempFile = MediaFileManager.saveBase64ToLocalFile(
+                                                context,
+                                                videoContent,
+                                                "status_vid_${currentStatus.id}.mp4"
+                                            )
+                                            val parsedUri = if (tempFile != null) Uri.fromFile(tempFile) else null
+                                            withContext(Dispatchers.Main) {
+                                                videoUri = parsedUri
+                                            }
+                                        } else if (videoContent.startsWith("http://") || videoContent.startsWith("https://")) {
+                                            val parsedUri = Uri.parse(videoContent)
+                                            withContext(Dispatchers.Main) {
+                                                videoUri = parsedUri
+                                            }
+                                        } else {
+                                            withContext(Dispatchers.Main) {
+                                                videoUri = null
+                                            }
+                                        }
+                                    } catch (e: Throwable) {
+                                        android.util.Log.e("StatusViewer", "Erro ao carregar video", e)
                                     }
-                                    Uri.fromFile(tempFile)
-                                } catch (e: Exception) {
-                                    null
                                 }
-                            } else if (videoContent.startsWith("http://") || videoContent.startsWith("https://")) {
-                                Uri.parse(videoContent)
-                            } else {
-                                null
                             }
                         }
 
