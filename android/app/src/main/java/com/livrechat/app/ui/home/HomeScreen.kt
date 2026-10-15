@@ -14,6 +14,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.livrechat.app.util.MediaFileManager
+import com.livrechat.app.media.AudioRecorderHelper
+import com.livrechat.app.media.AudioPlayerHelper
 import java.io.File
 import java.io.FileOutputStream
 import android.media.MediaPlayer
@@ -128,9 +130,22 @@ fun HomeScreen(
     var showStatusOptionsDialog by remember { mutableStateOf(false) }
     var showStatusCameraDialog by remember { mutableStateOf(false) }
     var showCreateTextStatusDialog by remember { mutableStateOf(false) }
+    var showCreateStatusFlow by remember { mutableStateOf(false) }
+    var statusCreationMode by remember { mutableStateOf("Voz") } // "Voz", "Texto"
+    var voiceRecordingJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var voiceRecordedFile by remember { mutableStateOf<File?>(null) }
+    var voiceRecordedBase64 by remember { mutableStateOf<String?>(null) }
+    var voiceRecordingSeconds by remember { mutableStateOf(0) }
+    val voiceRecordingAmplitudes = remember { mutableStateListOf<Int>() }
+    var isVoiceRecording by remember { mutableStateOf(false) }
+    val statusVoiceRecorder = remember { AudioRecorderHelper(context) }
+    val statusVoicePlayer = remember { AudioPlayerHelper(context) }
+    val isVoicePlayerPlaying by statusVoicePlayer.isPlaying.collectAsState()
+    val voicePlayerProgress by statusVoicePlayer.progress.collectAsState()
+
     var showCreateImageStatusDialog by remember { mutableStateOf(false) }
     var newTextStatusContent by remember { mutableStateOf("") }
-    var newStatusBgColor by remember { mutableStateOf("#075E54") }
+    var newStatusBgColor by remember { mutableStateOf("#1E88E5") }
     var newImageStatusBase64 by remember { mutableStateOf("") }
     var newImageStatusCaption by remember { mutableStateOf("") }
     var showCreateMusicStatusDialog by remember { mutableStateOf(false) }
@@ -304,6 +319,72 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+    }
+
+    fun cancelVoiceStatusRecording() {
+        voiceRecordingJob?.cancel()
+        statusVoicePlayer.stop()
+        statusVoiceRecorder.cancelRecording()
+        voiceRecordedFile?.delete()
+        voiceRecordedFile = null
+        voiceRecordedBase64 = null
+        isVoiceRecording = false
+        voiceRecordingSeconds = 0
+        voiceRecordingAmplitudes.clear()
+    }
+
+    fun stopVoiceStatusRecording() {
+        voiceRecordingJob?.cancel()
+        val file = statusVoiceRecorder.stopRecording()
+        isVoiceRecording = false
+        if (file != null && file.exists() && file.length() > 0) {
+            voiceRecordedFile = file
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val bytes = file.readBytes()
+                    val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    withContext(Dispatchers.Main) {
+                        voiceRecordedBase64 = "data:audio/mp4;base64,$b64"
+                    }
+                } catch (e: Exception) {}
+            }
+        }
+    }
+
+    val voiceStatusPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            voiceRecordingJob?.cancel()
+            val file = statusVoiceRecorder.startRecording()
+            if (file != null) {
+                voiceRecordedFile = file
+                voiceRecordedBase64 = null
+                isVoiceRecording = true
+                voiceRecordingSeconds = 0
+                voiceRecordingAmplitudes.clear()
+                voiceRecordingJob = scope.launch {
+                    var tick = 0
+                    while (isActive) {
+                        kotlinx.coroutines.delay(100)
+                        val amp = statusVoiceRecorder.getMaxAmplitude()
+                        voiceRecordingAmplitudes.add(amp)
+                        tick++
+                        if (tick % 10 == 0) {
+                            voiceRecordingSeconds++
+                            if (voiceRecordingSeconds >= 60) {
+                                stopVoiceStatusRecording()
+                                break
+                            }
+                        }
+                    }
+                }
+            } else {
+                Toast.makeText(context, "Erro ao iniciar gravação de voz", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(context, "Permissão de microfone necessária para gravar áudio", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -792,7 +873,8 @@ fun HomeScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.clickable {
                                 showStatusOptionsDialog = false
-                                showCreateTextStatusDialog = true
+                                statusCreationMode = "Texto"
+                                showCreateStatusFlow = true
                             }
                         ) {
                             Surface(
@@ -844,7 +926,9 @@ fun HomeScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.clickable {
                                 showStatusOptionsDialog = false
-                                statusAudioPickerLauncher.launch("audio/*")
+                                statusCreationMode = "Voz"
+                                cancelVoiceStatusRecording()
+                                showCreateStatusFlow = true
                             }
                         ) {
                             Surface(
@@ -974,11 +1058,18 @@ fun HomeScreen(
         }
     }
 
-    // FULLSCREEN DIALOG: Criar Status de Texto (Estilo WhatsApp Imersivo)
-    if (showCreateTextStatusDialog) {
+    // FULLSCREEN DIALOG: Criar Status WhatsApp (Voz & Texto Estilo WhatsApp)
+    if (showCreateStatusFlow || showCreateTextStatusDialog) {
         val colorOptions = listOf(
-            "#075E54", "#128C7E", "#263238", "#7B1FA2", "#AD1457",
-            "#D81B60", "#E65100", "#1565C0", "#2E7D32", "#37474F", "#3E2723"
+            "#1E88E5", // Sky Blue (WhatsApp Voice Status padrão)
+            "#5E35B1", // Deep Purple
+            "#00897B", // Teal Green
+            "#2E7D32", // Forest Green
+            "#E53935", // Red
+            "#FB8C00", // Vibrant Orange
+            "#6D4C41", // Warm Brown (WhatsApp Status)
+            "#263238", // Slate Charcoal
+            "#075E54"  // Classic Dark Teal
         )
         val fontOptions = listOf(
             FontFamily.Default to "Padrão",
@@ -990,12 +1081,19 @@ fun HomeScreen(
         val currentFont = fontOptions[selectedFontIndex].first
 
         val parsedBgColor = remember(newStatusBgColor) {
-            try { Color(android.graphics.Color.parseColor(newStatusBgColor)) } catch (e: Exception) { Color(0xFF075E54) }
+            try { Color(android.graphics.Color.parseColor(newStatusBgColor)) } catch (e: Exception) { Color(0xFF1E88E5) }
         }
         val animatedBgColor by animateColorAsState(targetValue = parsedBgColor, label = "statusBgColor")
 
+        fun closeStatusFlow() {
+            cancelVoiceStatusRecording()
+            showCreateStatusFlow = false
+            showCreateTextStatusDialog = false
+            newTextStatusContent = ""
+        }
+
         Dialog(
-            onDismissRequest = { if (!isPostingStatus) showCreateTextStatusDialog = false },
+            onDismissRequest = { if (!isPostingStatus) closeStatusFlow() },
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
             Box(
@@ -1014,7 +1112,7 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
-                        onClick = { if (!isPostingStatus) showCreateTextStatusDialog = false },
+                        onClick = { if (!isPostingStatus) closeStatusFlow() },
                         modifier = Modifier
                             .size(44.dp)
                             .background(Color.Black.copy(alpha = 0.25f), CircleShape)
@@ -1023,19 +1121,19 @@ fun HomeScreen(
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        // Alternar Estilo de Fonte (T)
-                        IconButton(
-                            onClick = {
-                                selectedFontIndex = (selectedFontIndex + 1) % fontOptions.size
-                            },
-                            modifier = Modifier
-                                .size(44.dp)
-                                .background(Color.Black.copy(alpha = 0.25f), CircleShape)
-                        ) {
-                            Icon(Icons.Default.TextFields, contentDescription = "Fonte", tint = Color.White)
+                        if (statusCreationMode == "Texto") {
+                            IconButton(
+                                onClick = {
+                                    selectedFontIndex = (selectedFontIndex + 1) % fontOptions.size
+                                },
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .background(Color.Black.copy(alpha = 0.25f), CircleShape)
+                            ) {
+                                Icon(Icons.Default.TextFields, contentDescription = "Fonte", tint = Color.White)
+                            }
                         }
 
-                        // Alternar Cor de Fundo (Paleta rápida)
                         IconButton(
                             onClick = {
                                 val curIdx = colorOptions.indexOf(newStatusBgColor)
@@ -1051,135 +1149,485 @@ fun HomeScreen(
                     }
                 }
 
-                // Editor de Texto Central Imersivo
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 28.dp, vertical = 90.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    BasicTextField(
-                        value = newTextStatusContent,
-                        onValueChange = { if (it.length <= 500) newTextStatusContent = it },
-                        textStyle = TextStyle(
+                // Conteúdo Central: Modo Voz vs Modo Texto
+                if (statusCreationMode == "Voz") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(32.dp),
                             color = Color.White,
-                            fontSize = if (newTextStatusContent.length > 100) 24.sp else 32.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center,
-                            fontFamily = currentFont
-                        ),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
-                        modifier = Modifier.fillMaxWidth(),
-                        decorationBox = { innerTextField ->
-                            Box(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (newTextStatusContent.isEmpty()) {
-                                    Text(
-                                        text = "Digite seu Flash...",
-                                        color = Color.White.copy(alpha = 0.55f),
-                                        fontSize = 32.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Center,
-                                        fontFamily = currentFont
-                                    )
-                                }
-                                innerTextField()
-                            }
-                        }
-                    )
-                }
-
-                // Barra Inferior: Seletor de Paleta Horizontal + Botão Flutuante de Envio
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 24.dp)
-                ) {
-                    // Carrossel horizontal de cores
-                    LazyRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        items(colorOptions) { hex ->
-                            val color = try { Color(android.graphics.Color.parseColor(hex)) } catch (e: Exception) { Color.Black }
-                            val isSelected = newStatusBgColor == hex
-                            Surface(
-                                shape = CircleShape,
-                                color = color,
+                            shadowElevation = 8.dp,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
                                 modifier = Modifier
-                                    .size(if (isSelected) 38.dp else 30.dp)
-                                    .border(
-                                        width = if (isSelected) 3.dp else 1.5.dp,
-                                        color = if (isSelected) Color.White else Color.White.copy(alpha = 0.4f),
-                                        shape = CircleShape
-                                    )
-                                    .clickable { newStatusBgColor = hex }
-                            ) {}
-                        }
-                    }
-
-                    // Linha inferior com contador e botão flutuante de envio
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${newTextStatusContent.length}/500",
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-
-                        FloatingActionButton(
-                            onClick = {
-                                val trimmed = newTextStatusContent.trim()
-                                if (trimmed.isNotBlank() && !isPostingStatus) {
-                                    scope.launch {
-                                        isPostingStatus = true
-                                        try {
-                                            val res = apiService.createStatus(
-                                                mapOf(
-                                                    "contentType" to "text",
-                                                    "content" to trimmed,
-                                                    "backgroundColor" to newStatusBgColor,
-                                                    "avatarUrl" to (prefs.userAvatarUrl ?: ""),
-                                                    "displayName" to (prefs.currentDisplayName ?: prefs.currentUsername ?: "Usuário")
-                                                )
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Avatar com badge de microfone no canto inferior direito
+                                Box(
+                                    modifier = Modifier.size(54.dp),
+                                    contentAlignment = Alignment.BottomEnd
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        modifier = Modifier.size(52.dp),
+                                        color = Color(0xFFE0E0E0)
+                                    ) {
+                                        val avatar = prefs.userAvatarUrl
+                                        if (!avatar.isNullOrBlank()) {
+                                            AsyncImage(
+                                                model = avatar,
+                                                contentDescription = null,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
                                             )
-                                            if (res.isSuccessful) {
-                                                showCreateTextStatusDialog = false
-                                                newTextStatusContent = ""
-                                                Toast.makeText(context, "Flash publicado!", Toast.LENGTH_SHORT).show()
-                                                loadStatuses()
-                                            } else {
-                                                Toast.makeText(context, "Falha ao publicar Flash", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    Icons.Default.Person,
+                                                    contentDescription = null,
+                                                    tint = Color.Gray,
+                                                    modifier = Modifier.size(32.dp)
+                                                )
                                             }
-                                        } catch (e: Exception) {
-                                            Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                                        } finally {
-                                            isPostingStatus = false
+                                        }
+                                    }
+
+                                    // Badge verde com ícone de microfone
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = Color(0xFF25D366),
+                                        border = BorderStroke(2.dp, Color.White),
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                Icons.Default.Mic,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(11.dp)
+                                            )
                                         }
                                     }
                                 }
-                            },
-                            containerColor = Color(0xFF25D366),
-                            contentColor = Color.White,
-                            shape = CircleShape,
-                            modifier = Modifier.size(56.dp)
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                // Meio Dinâmico: Gravando / Gravado / Espera (Pontilhado)
+                                if (isVoiceRecording) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(8.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color.Red)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    "Gravando...",
+                                                    color = Color.Red,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            Text(
+                                                text = "%02d:%02d / 01:00".format(voiceRecordingSeconds / 60, voiceRecordingSeconds % 60),
+                                                fontSize = 12.sp,
+                                                color = Color.Gray,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        // Barras de áudio animadas
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(28.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            val amps = voiceRecordingAmplitudes.takeLast(28)
+                                            for (i in 0 until 28) {
+                                                val amp = amps.getOrNull(amps.size - 28 + i) ?: 0
+                                                val heightPercent = (amp.toFloat() / 25000f).coerceIn(0.12f, 1f)
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height((28 * heightPercent).dp)
+                                                        .clip(RoundedCornerShape(2.dp))
+                                                        .background(Color(0xFF25D366))
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else if (voiceRecordedFile != null) {
+                                    // Áudio gravado com preview e progresso
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            IconButton(
+                                                onClick = {
+                                                    if (isVoicePlayerPlaying) {
+                                                        statusVoicePlayer.pause()
+                                                    } else {
+                                                        voiceRecordedFile?.let { f ->
+                                                            statusVoicePlayer.playAudio("preview_status_voice", f.absolutePath)
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isVoicePlayerPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                    contentDescription = "Preview",
+                                                    tint = Color(0xFF1E88E5),
+                                                    modifier = Modifier.size(28.dp)
+                                                )
+                                            }
+
+                                            Spacer(modifier = Modifier.width(4.dp))
+
+                                            LinearProgressIndicator(
+                                                progress = { voicePlayerProgress },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(4.dp)
+                                                    .clip(RoundedCornerShape(2.dp)),
+                                                color = Color(0xFF1E88E5),
+                                                trackColor = Color(0xFFE0E0E0)
+                                            )
+
+                                            Spacer(modifier = Modifier.width(6.dp))
+
+                                            Text(
+                                                text = "%02d:%02d".format(voiceRecordingSeconds / 60, voiceRecordingSeconds % 60),
+                                                fontSize = 11.sp,
+                                                color = Color.Gray
+                                            )
+
+                                            IconButton(
+                                                onClick = { cancelVoiceStatusRecording() },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Delete,
+                                                    contentDescription = "Excluir gravação",
+                                                    tint = Color(0xFFE53935),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // Estado Inicial: Linha pontilhada (estilo WhatsApp)
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.weight(1f),
+                                            horizontalArrangement = Arrangement.SpaceEvenly,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            for (i in 0 until 24) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(4.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color(0xFFBDBDBD))
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = "0:00",
+                                            fontSize = 12.sp,
+                                            color = Color.Gray,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // statusCreationMode == "Texto"
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 28.dp, vertical = 90.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        BasicTextField(
+                            value = newTextStatusContent,
+                            onValueChange = { if (it.length <= 500) newTextStatusContent = it },
+                            textStyle = TextStyle(
+                                color = Color.White,
+                                fontSize = if (newTextStatusContent.length > 100) 24.sp else 32.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                fontFamily = currentFont
+                            ),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
+                            modifier = Modifier.fillMaxWidth(),
+                            decorationBox = { innerTextField ->
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (newTextStatusContent.isEmpty()) {
+                                        Text(
+                                            text = "Digite seu status",
+                                            color = Color.White.copy(alpha = 0.6f),
+                                            fontSize = 32.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            fontFamily = currentFont
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            }
+                        )
+                    }
+                }
+
+                // Barra Inferior: Cápsula Seletora de Modo ("Foto" | "Texto" | "Voz") + Botão Flutuante
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(start = 20.dp, end = 20.dp, bottom = 28.dp)
+                ) {
+                    // Cápsula Centralizada de Seleção de Modo
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.Black.copy(alpha = 0.35f),
+                        modifier = Modifier.align(Alignment.Center)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (isPostingStatus) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.5.dp)
+                            // 1. Foto
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .clickable {
+                                        closeStatusFlow()
+                                        statusImagePickerLauncher.launch("image/*")
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = "Foto",
+                                    color = Color.White.copy(alpha = 0.75f),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            // 2. Texto
+                            val isTextoSelected = statusCreationMode == "Texto"
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(if (isTextoSelected) Color.White.copy(alpha = 0.25f) else Color.Transparent)
+                                    .clickable {
+                                        statusCreationMode = "Texto"
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = "Texto",
+                                    color = if (isTextoSelected) Color.White else Color.White.copy(alpha = 0.75f),
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isTextoSelected) FontWeight.Bold else FontWeight.SemiBold
+                                )
+                            }
+
+                            // 3. Voz
+                            val isVozSelected = statusCreationMode == "Voz"
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(if (isVozSelected) Color.White.copy(alpha = 0.25f) else Color.Transparent)
+                                    .clickable {
+                                        statusCreationMode = "Voz"
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = "Voz",
+                                    color = if (isVozSelected) Color.White else Color.White.copy(alpha = 0.75f),
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isVozSelected) FontWeight.Bold else FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
+                    // Botão Flutuante de Ação no Canto Inferior Direito
+                    Box(modifier = Modifier.align(Alignment.CenterEnd)) {
+                        if (statusCreationMode == "Voz") {
+                            if (isVoiceRecording) {
+                                // Botão Parar Gravação (Vermelho)
+                                FloatingActionButton(
+                                    onClick = { stopVoiceStatusRecording() },
+                                    containerColor = Color(0xFFE53935),
+                                    contentColor = Color.White,
+                                    shape = CircleShape,
+                                    modifier = Modifier.size(56.dp)
+                                ) {
+                                    Icon(Icons.Default.Stop, contentDescription = "Parar Gravação", modifier = Modifier.size(28.dp))
+                                }
+                            } else if (voiceRecordedFile != null) {
+                                // Botão Enviar Flash de Voz (Verde WhatsApp)
+                                FloatingActionButton(
+                                    onClick = {
+                                        val b64 = voiceRecordedBase64
+                                        if (b64 != null && !isPostingStatus) {
+                                            scope.launch {
+                                                isPostingStatus = true
+                                                try {
+                                                    val res = apiService.createStatus(
+                                                        mapOf(
+                                                            "contentType" to "audio",
+                                                            "content" to b64,
+                                                            "caption" to "🎤 Mensagem de Voz",
+                                                            "backgroundColor" to newStatusBgColor,
+                                                            "avatarUrl" to (prefs.userAvatarUrl ?: ""),
+                                                            "displayName" to (prefs.currentDisplayName ?: prefs.currentUsername ?: "Usuário")
+                                                        )
+                                                    )
+                                                    if (res.isSuccessful) {
+                                                        closeStatusFlow()
+                                                        Toast.makeText(context, "Flash de voz publicado!", Toast.LENGTH_SHORT).show()
+                                                        loadStatuses()
+                                                    } else {
+                                                        Toast.makeText(context, "Falha ao publicar Flash de voz", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                } catch (e: Exception) {
+                                                    Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                                } finally {
+                                                    isPostingStatus = false
+                                                }
+                                            }
+                                        }
+                                    },
+                                    containerColor = Color(0xFF25D366),
+                                    contentColor = Color.White,
+                                    shape = CircleShape,
+                                    modifier = Modifier.size(56.dp)
+                                ) {
+                                    if (isPostingStatus) {
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.5.dp)
+                                    } else {
+                                        Icon(Icons.Default.Send, contentDescription = "Publicar Flash de Voz", modifier = Modifier.size(26.dp))
+                                    }
+                                }
                             } else {
-                                Icon(Icons.Default.Send, contentDescription = "Publicar Flash", modifier = Modifier.size(26.dp))
+                                // Botão Microfone Preto/Escuro (Estilo WhatsApp)
+                                FloatingActionButton(
+                                    onClick = {
+                                        val hasPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                                        if (hasPerm) {
+                                            voiceRecordingJob?.cancel()
+                                            val file = statusVoiceRecorder.startRecording()
+                                            if (file != null) {
+                                                voiceRecordedFile = file
+                                                voiceRecordedBase64 = null
+                                                isVoiceRecording = true
+                                                voiceRecordingSeconds = 0
+                                                voiceRecordingAmplitudes.clear()
+                                                voiceRecordingJob = scope.launch {
+                                                    var tick = 0
+                                                    while (isActive) {
+                                                        kotlinx.coroutines.delay(100)
+                                                        val amp = statusVoiceRecorder.getMaxAmplitude()
+                                                        voiceRecordingAmplitudes.add(amp)
+                                                        tick++
+                                                        if (tick % 10 == 0) {
+                                                            voiceRecordingSeconds++
+                                                            if (voiceRecordingSeconds >= 60) {
+                                                                stopVoiceStatusRecording()
+                                                                break
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                Toast.makeText(context, "Erro ao iniciar gravação", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } else {
+                                            voiceStatusPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    },
+                                    containerColor = Color(0xFF1E2428),
+                                    contentColor = Color.White,
+                                    shape = CircleShape,
+                                    modifier = Modifier.size(56.dp)
+                                ) {
+                                    Icon(Icons.Default.Mic, contentDescription = "Gravar Voz", modifier = Modifier.size(28.dp))
+                                }
+                            }
+                        } else {
+                            // statusCreationMode == "Texto"
+                            FloatingActionButton(
+                                onClick = {
+                                    val trimmed = newTextStatusContent.trim()
+                                    if (trimmed.isNotBlank() && !isPostingStatus) {
+                                        scope.launch {
+                                            isPostingStatus = true
+                                            try {
+                                                val res = apiService.createStatus(
+                                                    mapOf(
+                                                        "contentType" to "text",
+                                                        "content" to trimmed,
+                                                        "backgroundColor" to newStatusBgColor,
+                                                        "avatarUrl" to (prefs.userAvatarUrl ?: ""),
+                                                        "displayName" to (prefs.currentDisplayName ?: prefs.currentUsername ?: "Usuário")
+                                                    )
+                                                )
+                                                if (res.isSuccessful) {
+                                                    closeStatusFlow()
+                                                    Toast.makeText(context, "Flash publicado!", Toast.LENGTH_SHORT).show()
+                                                    loadStatuses()
+                                                } else {
+                                                    Toast.makeText(context, "Falha ao publicar Flash", Toast.LENGTH_SHORT).show()
+                                                }
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                            } finally {
+                                                isPostingStatus = false
+                                            }
+                                        }
+                                    }
+                                },
+                                containerColor = Color(0xFF25D366),
+                                contentColor = Color.White,
+                                shape = CircleShape,
+                                modifier = Modifier.size(56.dp)
+                            ) {
+                                if (isPostingStatus) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.5.dp)
+                                } else {
+                                    Icon(Icons.Default.Send, contentDescription = "Publicar Flash", modifier = Modifier.size(26.dp))
+                                }
                             }
                         }
                     }
@@ -1767,7 +2215,10 @@ fun HomeScreen(
                 1 -> {
                     Column(horizontalAlignment = Alignment.End) {
                         SmallFloatingActionButton(
-                            onClick = { showCreateTextStatusDialog = true },
+                            onClick = {
+                                statusCreationMode = "Texto"
+                                showCreateStatusFlow = true
+                            },
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             shape = CircleShape
@@ -2017,7 +2468,10 @@ fun HomeScreen(
                                             modifier = Modifier.size(26.dp)
                                         )
                                     }
-                                    IconButton(onClick = { showCreateTextStatusDialog = true }) {
+                                    IconButton(onClick = {
+                                        statusCreationMode = "Texto"
+                                        showCreateStatusFlow = true
+                                    }) {
                                         Icon(Icons.Default.Edit, contentDescription = "Texto", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                     IconButton(onClick = { showStatusCameraDialog = true }) {
@@ -2344,7 +2798,9 @@ fun FullScreenStatusViewer(
     LaunchedEffect(currentIndex, isPaused) {
         progress = 0f
         val stepMs = 50L
-        val totalMs = if (currentStatus.contentType == "audio") 15000L else 5000L
+        val totalMs = if (currentStatus.contentType == "audio") {
+            if (audioDurationMs > 0) audioDurationMs.toLong() else 15000L
+        } else 5000L
         val steps = (totalMs / stepMs).toInt()
         for (i in 1..steps) {
             if (isPaused) {
@@ -2530,234 +2986,365 @@ fun FullScreenStatusViewer(
                             listOf(title, artist, art, userC)
                         }
 
+                        val isMusic = rawCaption.startsWith("🎵") || rawCaption.contains("[art:") || (musicArtist.isNotBlank() && musicTitle != "Música do Flash")
                         val activeRotation = if (isAudioPlaying && !isPaused) vinylRotation else 0f
 
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
-                        ) {
-                            // WhatsApp-style Vinyl Record (Disco de Vinil)
+                        if (!isMusic) {
+                            // Card de Flash de Voz Estilo WhatsApp (Screenshot 2)
                             Box(
                                 modifier = Modifier
-                                    .size(200.dp)
-                                    .clickable {
-                                        try {
-                                            if (statusMediaPlayer?.isPlaying == true) {
-                                                statusMediaPlayer?.pause()
-                                                isAudioPlaying = false
-                                                isPaused = true
-                                            } else {
-                                                statusMediaPlayer?.start()
-                                                isAudioPlaying = true
-                                                isPaused = false
-                                            }
-                                        } catch (e: Exception) {}
-                                    },
+                                    .fillMaxSize()
+                                    .padding(horizontal = 24.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                // Outer Vinyl Shell with grooves & rotation
+                                Surface(
+                                    shape = RoundedCornerShape(32.dp),
+                                    color = Color.White,
+                                    shadowElevation = 8.dp,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Avatar do Autor com badge de microfone no canto
+                                        Box(
+                                            modifier = Modifier.size(54.dp),
+                                            contentAlignment = Alignment.BottomEnd
+                                        ) {
+                                            Surface(
+                                                shape = CircleShape,
+                                                modifier = Modifier.size(52.dp),
+                                                color = Color(0xFFE0E0E0)
+                                            ) {
+                                                val authorAvatar = currentStatus.avatarUrl
+                                                if (!authorAvatar.isNullOrBlank()) {
+                                                    AsyncImage(
+                                                        model = authorAvatar,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentScale = ContentScale.Crop
+                                                    )
+                                                } else {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        Icon(
+                                                            Icons.Default.Person,
+                                                            contentDescription = null,
+                                                            tint = Color.Gray,
+                                                            modifier = Modifier.size(32.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            // Badge verde de microfone
+                                            Surface(
+                                                shape = CircleShape,
+                                                color = Color(0xFF25D366),
+                                                border = BorderStroke(2.dp, Color.White),
+                                                modifier = Modifier.size(20.dp)
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Icon(
+                                                        Icons.Default.Mic,
+                                                        contentDescription = null,
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(11.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.width(10.dp))
+
+                                        // Botão Play / Pause
+                                        IconButton(
+                                            onClick = {
+                                                try {
+                                                    if (statusMediaPlayer?.isPlaying == true) {
+                                                        statusMediaPlayer?.pause()
+                                                        isAudioPlaying = false
+                                                        isPaused = true
+                                                    } else {
+                                                        statusMediaPlayer?.start()
+                                                        isAudioPlaying = true
+                                                        isPaused = false
+                                                    }
+                                                } catch (e: Exception) {}
+                                            },
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isAudioPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                contentDescription = if (isAudioPlaying) "Pausar" else "Reproduzir",
+                                                tint = Color(0xFF1E88E5),
+                                                modifier = Modifier.size(32.dp)
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(6.dp))
+
+                                        // Progresso e Duração do Áudio de Voz
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            val currentSec = audioCurrentMs / 1000
+                                            val totalSec = (audioDurationMs.coerceAtLeast(1000)) / 1000
+                                            val curStr = "%02d:%02d".format(currentSec / 60, currentSec % 60)
+                                            val totStr = "%02d:%02d".format(totalSec / 60, totalSec % 60)
+
+                                            val ratio = if (audioDurationMs > 0) (audioCurrentMs.toFloat() / audioDurationMs.toFloat()).coerceIn(0f, 1f) else 0f
+                                            LinearProgressIndicator(
+                                                progress = { ratio },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(4.dp)
+                                                    .clip(RoundedCornerShape(2.dp)),
+                                                color = Color(0xFF1E88E5),
+                                                trackColor = Color(0xFFE0E0E0)
+                                            )
+
+                                            Spacer(modifier = Modifier.height(4.dp))
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(curStr, fontSize = 11.sp, color = Color.Gray)
+                                                Text(totStr, fontSize = 11.sp, color = Color.Gray)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                            ) {
+                                // WhatsApp-style Vinyl Record (Disco de Vinil)
                                 Box(
                                     modifier = Modifier
-                                        .size(195.dp)
-                                        .graphicsLayer { rotationZ = activeRotation }
-                                        .background(Color(0xFF161616), CircleShape)
-                                        .border(2.dp, Color(0xFF2C2C2C), CircleShape),
+                                        .size(200.dp)
+                                        .clickable {
+                                            try {
+                                                if (statusMediaPlayer?.isPlaying == true) {
+                                                    statusMediaPlayer?.pause()
+                                                    isAudioPlaying = false
+                                                    isPaused = true
+                                                } else {
+                                                    statusMediaPlayer?.start()
+                                                    isAudioPlaying = true
+                                                    isPaused = false
+                                                }
+                                            } catch (e: Exception) {}
+                                        },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    // Concentric sound grooves
-                                    Box(modifier = Modifier.size(170.dp).border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape))
-                                    Box(modifier = Modifier.size(145.dp).border(1.dp, Color.White.copy(alpha = 0.07f), CircleShape))
-                                    Box(modifier = Modifier.size(120.dp).border(1.dp, Color.White.copy(alpha = 0.06f), CircleShape))
+                                    // Outer Vinyl Shell with grooves & rotation
+                                    Box(
+                                        modifier = Modifier
+                                            .size(195.dp)
+                                            .graphicsLayer { rotationZ = activeRotation }
+                                            .background(Color(0xFF161616), CircleShape)
+                                            .border(2.dp, Color(0xFF2C2C2C), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        // Concentric sound grooves
+                                        Box(modifier = Modifier.size(170.dp).border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape))
+                                        Box(modifier = Modifier.size(145.dp).border(1.dp, Color.White.copy(alpha = 0.07f), CircleShape))
+                                        Box(modifier = Modifier.size(120.dp).border(1.dp, Color.White.copy(alpha = 0.06f), CircleShape))
 
-                                    // Center Album Art Disc
+                                        // Center Album Art Disc
+                                        Surface(
+                                            shape = CircleShape,
+                                            modifier = Modifier.size(88.dp),
+                                            border = BorderStroke(2.dp, Color(0xFF25D366))
+                                        ) {
+                                            if (albumArt.isNotBlank()) {
+                                                AsyncImage(
+                                                    model = albumArt,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentScale = ContentScale.Crop
+                                                )
+                                            } else {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .background(Color(0xFF075E54)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.MusicNote,
+                                                        contentDescription = null,
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(40.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        // Spindle Hole
+                                        Box(
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .background(Color.Black, CircleShape)
+                                                .border(1.5.dp, Color.LightGray.copy(alpha = 0.8f), CircleShape)
+                                        )
+                                    }
+
+                                    // Center Play/Pause Glass Icon
                                     Surface(
                                         shape = CircleShape,
-                                        modifier = Modifier.size(88.dp),
-                                        border = BorderStroke(2.dp, Color(0xFF25D366))
+                                        color = Color.Black.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(52.dp)
                                     ) {
-                                        if (albumArt.isNotBlank()) {
-                                            AsyncImage(
-                                                model = albumArt,
-                                                contentDescription = null,
-                                                modifier = Modifier.fillMaxSize(),
-                                                contentScale = ContentScale.Crop
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = if (isAudioPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                contentDescription = if (isAudioPlaying) "Pausar" else "Reproduzir",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(30.dp)
                                             )
-                                        } else {
-                                            Box(
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(18.dp))
+
+                                // WhatsApp Music Card
+                                Surface(
+                                    shape = RoundedCornerShape(22.dp),
+                                    color = Color.Black.copy(alpha = 0.58f),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 6.dp)
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+                                    ) {
+                                        // Badge "Música no Flash"
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier
+                                                .background(Color(0xFF25D366).copy(alpha = 0.18f), RoundedCornerShape(12.dp))
+                                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.MusicNote,
+                                                contentDescription = null,
+                                                tint = Color(0xFF25D366),
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = if (musicArtist.isNotBlank()) "Música no Flash" else "Áudio do Flash",
+                                                color = Color(0xFF25D366),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        Text(
+                                            text = musicTitle,
+                                            color = Color.White,
+                                            fontSize = 19.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+
+                                        if (musicArtist.isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = musicArtist,
+                                                color = Color.White.copy(alpha = 0.85f),
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                textAlign = TextAlign.Center,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.height(14.dp))
+
+                                        // Audio Scrubber & Timers
+                                        val currentSec = audioCurrentMs / 1000
+                                        val totalSec = (audioDurationMs.coerceAtLeast(1000)) / 1000
+                                        val curStr = "%02d:%02d".format(currentSec / 60, currentSec % 60)
+                                        val totStr = "%02d:%02d".format(totalSec / 60, totalSec % 60)
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(text = curStr, color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp)
+                                            val ratio = if (audioDurationMs > 0) (audioCurrentMs.toFloat() / audioDurationMs.toFloat()).coerceIn(0f, 1f) else 0f
+                                            LinearProgressIndicator(
+                                                progress = { ratio },
                                                 modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .background(Color(0xFF075E54)),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.MusicNote,
-                                                    contentDescription = null,
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(40.dp)
+                                                    .weight(1f)
+                                                    .padding(horizontal = 10.dp)
+                                                    .height(4.dp)
+                                                    .clip(RoundedCornerShape(2.dp)),
+                                                color = Color(0xFF25D366),
+                                                trackColor = Color.White.copy(alpha = 0.25f)
+                                            )
+                                            Text(text = totStr, color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp)
+                                        }
+
+                                        Spacer(modifier = Modifier.height(14.dp))
+
+                                        // Dancing Equalizer Visualizer (16 bars)
+                                        Row(
+                                            modifier = Modifier.height(26.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            val timeTick = audioCurrentMs / 100
+                                            for (i in 0 until 16) {
+                                                val barH = if (isAudioPlaying && !isPaused) {
+                                                    val wave = kotlin.math.sin((timeTick + i * 1.4).toDouble())
+                                                    (8 + kotlin.math.abs(wave) * 16).dp
+                                                } else {
+                                                    7.dp
+                                                }
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(3.dp)
+                                                        .height(barH)
+                                                        .clip(RoundedCornerShape(2.dp))
+                                                        .background(if (i % 2 == 0) Color(0xFF25D366) else Color.White.copy(alpha = 0.85f))
                                                 )
                                             }
                                         }
                                     }
-
-                                    // Spindle Hole
-                                    Box(
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .background(Color.Black, CircleShape)
-                                            .border(1.5.dp, Color.LightGray.copy(alpha = 0.8f), CircleShape)
-                                    )
                                 }
 
-                                // Center Play/Pause Glass Icon
-                                Surface(
-                                    shape = CircleShape,
-                                    color = Color.Black.copy(alpha = 0.5f),
-                                    modifier = Modifier.size(52.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = if (isAudioPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                            contentDescription = if (isAudioPlaying) "Pausar" else "Reproduzir",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(30.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(18.dp))
-
-                            // WhatsApp Music Card
-                            Surface(
-                                shape = RoundedCornerShape(22.dp),
-                                color = Color.Black.copy(alpha = 0.58f),
-                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 6.dp)
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
-                                ) {
-                                    // Badge "Música no Flash"
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier
-                                            .background(Color(0xFF25D366).copy(alpha = 0.18f), RoundedCornerShape(12.dp))
-                                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                                if (userCaption.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(14.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = Color.Black.copy(alpha = 0.45f),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
                                     ) {
-                                        Icon(
-                                            Icons.Default.MusicNote,
-                                            contentDescription = null,
-                                            tint = Color(0xFF25D366),
-                                            modifier = Modifier.size(13.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = if (musicArtist.isNotBlank()) "Música no Flash" else "Áudio do Flash",
-                                            color = Color(0xFF25D366),
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.height(10.dp))
-
-                                    Text(
-                                        text = musicTitle,
-                                        color = Color.White,
-                                        fontSize = 19.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-
-                                    if (musicArtist.isNotBlank()) {
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = musicArtist,
-                                            color = Color.White.copy(alpha = 0.85f),
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Medium,
+                                            text = userCaption,
+                                            color = Color.White,
+                                            fontSize = 15.sp,
                                             textAlign = TextAlign.Center,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                         )
                                     }
-
-                                    Spacer(modifier = Modifier.height(14.dp))
-
-                                    // Audio Scrubber & Timers
-                                    val currentSec = audioCurrentMs / 1000
-                                    val totalSec = (audioDurationMs.coerceAtLeast(1000)) / 1000
-                                    val curStr = "%02d:%02d".format(currentSec / 60, currentSec % 60)
-                                    val totStr = "%02d:%02d".format(totalSec / 60, totalSec % 60)
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(text = curStr, color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp)
-                                        val ratio = if (audioDurationMs > 0) (audioCurrentMs.toFloat() / audioDurationMs.toFloat()).coerceIn(0f, 1f) else 0f
-                                        LinearProgressIndicator(
-                                            progress = { ratio },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .padding(horizontal = 10.dp)
-                                                .height(4.dp)
-                                                .clip(RoundedCornerShape(2.dp)),
-                                            color = Color(0xFF25D366),
-                                            trackColor = Color.White.copy(alpha = 0.25f)
-                                        )
-                                        Text(text = totStr, color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp)
-                                    }
-
-                                    Spacer(modifier = Modifier.height(14.dp))
-
-                                    // Dancing Equalizer Visualizer (16 bars)
-                                    Row(
-                                        modifier = Modifier.height(26.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        val timeTick = audioCurrentMs / 100
-                                        for (i in 0 until 16) {
-                                            val barH = if (isAudioPlaying && !isPaused) {
-                                                val wave = kotlin.math.sin((timeTick + i * 1.4).toDouble())
-                                                (8 + kotlin.math.abs(wave) * 16).dp
-                                            } else {
-                                                7.dp
-                                            }
-                                            Box(
-                                                modifier = Modifier
-                                                    .width(3.dp)
-                                                    .height(barH)
-                                                    .clip(RoundedCornerShape(2.dp))
-                                                    .background(if (i % 2 == 0) Color(0xFF25D366) else Color.White.copy(alpha = 0.85f))
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (userCaption.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(14.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = Color.Black.copy(alpha = 0.45f),
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
-                                ) {
-                                    Text(
-                                        text = userCaption,
-                                        color = Color.White,
-                                        fontSize = 15.sp,
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                    )
                                 }
                             }
                         }
