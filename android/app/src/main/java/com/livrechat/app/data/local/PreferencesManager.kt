@@ -5,7 +5,7 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
-class PreferencesManager(context: Context) {
+class PreferencesManager(private val context: Context) {
     private val prefs: SharedPreferences = try {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -161,6 +161,16 @@ class PreferencesManager(context: Context) {
             .remove(KEY_USER_BIO)
             .remove(KEY_USER_AVATAR)
             .apply()
+
+        try {
+            val appFilesDir = context.filesDir
+            java.io.File(appFilesDir, "avatar_current.jpg").delete()
+            appFilesDir.listFiles()?.forEach { f ->
+                if (f.name.startsWith("avatar_")) {
+                    f.delete()
+                }
+            }
+        } catch (e: Exception) {}
     }
 
     companion object {

@@ -64,6 +64,17 @@ class AuthViewModel : ViewModel() {
                     prefs.currentUserId = body.user.id
                     prefs.currentUsername = body.user.username
                     prefs.currentDisplayName = body.user.displayName
+                    prefs.userAvatarUrl = body.user.avatarUrl
+                    prefs.userBio = "Disponível no LivreChat"
+
+                    try {
+                        java.io.File(app.filesDir, "avatar_current.jpg").delete()
+                        app.filesDir.listFiles()?.forEach { f ->
+                            if (f.name.startsWith("avatar_")) {
+                                f.delete()
+                            }
+                        }
+                    } catch (e: Exception) {}
 
                     // Save in local Room database
                     val userEntity = UserEntity(
@@ -121,6 +132,14 @@ class AuthViewModel : ViewModel() {
                     prefs.currentUserId = body.user.id
                     prefs.currentUsername = body.user.username
                     prefs.currentDisplayName = body.user.displayName
+                    prefs.userAvatarUrl = body.user.avatarUrl
+
+                    if (body.user.avatarUrl.isNullOrBlank()) {
+                        try {
+                            java.io.File(app.filesDir, "avatar_current.jpg").delete()
+                            java.io.File(app.filesDir, "avatar_${body.user.id}.jpg").delete()
+                        } catch (e: Exception) {}
+                    }
 
                     val userEntity = UserEntity(
                         id = body.user.id,
@@ -241,6 +260,14 @@ class AuthViewModel : ViewModel() {
                     prefs.currentUserId = body.user.id
                     prefs.currentUsername = body.user.username
                     prefs.currentDisplayName = body.user.displayName
+                    prefs.userAvatarUrl = body.user.avatarUrl
+
+                    if (body.user.avatarUrl.isNullOrBlank()) {
+                        try {
+                            java.io.File(app.filesDir, "avatar_current.jpg").delete()
+                            java.io.File(app.filesDir, "avatar_${body.user.id}.jpg").delete()
+                        } catch (e: Exception) {}
+                    }
 
                     val userEntity = UserEntity(
                         id = body.user.id,

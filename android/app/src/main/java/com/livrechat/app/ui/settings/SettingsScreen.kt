@@ -118,22 +118,72 @@ fun SettingsScreen(
             userRecoveryPhrase = user?.recoveryKey
             userPublicKey = user?.publicKey ?: "Chave segura RSA-2048 ativa"
 
-            val localFile = File(context.filesDir, "avatar_current.jpg")
-            if (localFile.exists()) {
-                val bmp = BitmapFactory.decodeFile(localFile.absolutePath)
-                if (bmp != null) {
-                    withContext(Dispatchers.Main) {
-                        currentAvatarBitmap = bmp
-                    }
-                }
-            } else if (!userAvatarUrl.isNullOrBlank() && userAvatarUrl.startsWith("data:image/")) {
+            // 1. Sync with server profile if online
+            if (userId.isNotBlank()) {
                 try {
-                    val cleanBase64 = if (userAvatarUrl.contains(",")) userAvatarUrl.substringAfter(",") else userAvatarUrl
-                    val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
-                    val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                    withContext(Dispatchers.Main) {
-                        currentAvatarBitmap = bmp
+                    val profileRes = apiService.getUserProfile(userId)
+                    if (profileRes.isSuccessful && profileRes.body() != null) {
+                        val profile = profileRes.body()!!
+                        withContext(Dispatchers.Main) {
+                            if (!profile.displayName.isNullOrBlank()) {
+                                displayName = profile.displayName
+                                prefs.currentDisplayName = profile.displayName
+                            }
+                            if (!profile.bio.isNullOrBlank()) {
+                                userBio = profile.bio
+                                prefs.userBio = profile.bio
+                            }
+                            if (!profile.avatarUrl.isNullOrBlank()) {
+                                userAvatarUrl = profile.avatarUrl
+                                prefs.userAvatarUrl = profile.avatarUrl
+                            } else {
+                                userAvatarUrl = ""
+                                prefs.userAvatarUrl = null
+                                currentAvatarBitmap = null
+                                File(context.filesDir, "avatar_current.jpg").delete()
+                                File(context.filesDir, "avatar_${userId}.jpg").delete()
+                            }
+                        }
                     }
+                } catch (e: Exception) {}
+            }
+
+            // 2. Load avatar bitmap if user has an avatar
+            val effectiveAvatar = prefs.userAvatarUrl ?: userAvatarUrl
+            if (!effectiveAvatar.isNullOrBlank()) {
+                val userFile = File(context.filesDir, "avatar_${userId}.jpg")
+                val legacyFile = File(context.filesDir, "avatar_current.jpg")
+                if (userFile.exists()) {
+                    val bmp = BitmapFactory.decodeFile(userFile.absolutePath)
+                    if (bmp != null) {
+                        withContext(Dispatchers.Main) {
+                            currentAvatarBitmap = bmp
+                        }
+                    }
+                } else if (legacyFile.exists()) {
+                    val bmp = BitmapFactory.decodeFile(legacyFile.absolutePath)
+                    if (bmp != null) {
+                        withContext(Dispatchers.Main) {
+                            currentAvatarBitmap = bmp
+                        }
+                    }
+                } else if (effectiveAvatar.startsWith("data:image/")) {
+                    try {
+                        val cleanBase64 = if (effectiveAvatar.contains(",")) effectiveAvatar.substringAfter(",") else effectiveAvatar
+                        val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
+                        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        withContext(Dispatchers.Main) {
+                            currentAvatarBitmap = bmp
+                        }
+                    } catch (e: Exception) {}
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    currentAvatarBitmap = null
+                }
+                try {
+                    File(context.filesDir, "avatar_current.jpg").delete()
+                    File(context.filesDir, "avatar_${userId}.jpg").delete()
                 } catch (e: Exception) {}
             }
         }
@@ -254,7 +304,11 @@ fun SettingsScreen(
                 scope.launch(Dispatchers.IO) {
                     try {
                         // 1. Save local file
+                        val localUserFile = File(context.filesDir, "avatar_${userId}.jpg")
                         val localFile = File(context.filesDir, "avatar_current.jpg")
+                        FileOutputStream(localUserFile).use { fos ->
+                            croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 85, fos)
+                        }
                         FileOutputStream(localFile).use { fos ->
                             croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 85, fos)
                         }
@@ -386,6 +440,8 @@ fun SettingsScreen(
                                     customWebUrlInput = ""
                                     val f = File(context.filesDir, "avatar_current.jpg")
                                     if (f.exists()) f.delete()
+                                    val userF = File(context.filesDir, "avatar_${userId}.jpg")
+                                    if (userF.exists()) userF.delete()
                                 }
                             ) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remover Foto", tint = DangerRed, modifier = Modifier.size(20.dp))
@@ -503,6 +559,13 @@ fun SettingsScreen(
                             prefs.userBio = trimmedBio
                             userAvatarUrl = trimmedAvatar
                             prefs.userAvatarUrl = if (trimmedAvatar.isNotBlank()) trimmedAvatar else null
+                            if (trimmedAvatar.isBlank()) {
+                                currentAvatarBitmap = null
+                                try {
+                                    File(context.filesDir, "avatar_current.jpg").delete()
+                                    File(context.filesDir, "avatar_${userId}.jpg").delete()
+                                } catch (e: Exception) {}
+                            }
                             showEditProfileDialog = false
 
                             scope.launch(Dispatchers.IO) {
