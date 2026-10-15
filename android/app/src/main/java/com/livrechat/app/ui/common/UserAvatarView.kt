@@ -38,6 +38,10 @@ import java.io.File
  * 4. Remote HTTP/HTTPS URLs
  * 5. Fallback Initial letter badge with primary accent
  */
+private object AvatarBitmapCache {
+    val cache = android.util.LruCache<String, Bitmap>(50)
+}
+
 @Composable
 fun UserAvatarView(
     avatarBitmap: Bitmap? = null,
@@ -50,24 +54,37 @@ fun UserAvatarView(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var decodedBitmap by remember(avatarUrl) { mutableStateOf<Bitmap?>(null) }
+    var decodedBitmap by remember(avatarUrl) { 
+        val cached = if (!avatarUrl.isNullOrBlank() && avatarUrl.startsWith("data:image/")) {
+            AvatarBitmapCache.cache.get(avatarUrl)
+        } else null
+        mutableStateOf<Bitmap?>(cached) 
+    }
 
     LaunchedEffect(avatarUrl) {
         if (!avatarUrl.isNullOrBlank() && avatarUrl.startsWith("data:image/")) {
-            withContext(Dispatchers.IO) {
-                try {
-                    val cleanBase64 = if (avatarUrl.contains(",")) {
-                        avatarUrl.substringAfter(",")
-                    } else {
-                        avatarUrl
+            val cached = AvatarBitmapCache.cache.get(avatarUrl)
+            if (cached != null) {
+                decodedBitmap = cached
+            } else {
+                withContext(Dispatchers.IO) {
+                    try {
+                        val cleanBase64 = if (avatarUrl.contains(",")) {
+                            avatarUrl.substringAfter(",")
+                        } else {
+                            avatarUrl
+                        }
+                        val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
+                        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        if (bmp != null) {
+                            AvatarBitmapCache.cache.put(avatarUrl, bmp)
+                            withContext(Dispatchers.Main) {
+                                decodedBitmap = bmp
+                            }
+                        }
+                    } catch (e: Exception) {
+                        decodedBitmap = null
                     }
-                    val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
-                    val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                    withContext(Dispatchers.Main) {
-                        decodedBitmap = bmp
-                    }
-                } catch (e: Exception) {
-                    decodedBitmap = null
                 }
             }
         } else {
@@ -99,17 +116,9 @@ fun UserAvatarView(
                     modifier = Modifier.fillMaxSize().clip(CircleShape)
                 )
             }
-            !avatarUrl.isNullOrBlank() && (avatarUrl.startsWith("http://") || avatarUrl.startsWith("https://")) -> {
+            !avatarUrl.isNullOrBlank() && (avatarUrl.startsWith("http://") || avatarUrl.startsWith("https://") || avatarUrl.startsWith("/") || avatarUrl.startsWith("file:")) -> {
                 AsyncImage(
                     model = avatarUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().clip(CircleShape)
-                )
-            }
-            !avatarUrl.isNullOrBlank() && File(avatarUrl).exists() -> {
-                AsyncImage(
-                    model = File(avatarUrl),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize().clip(CircleShape)

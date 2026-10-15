@@ -20,8 +20,26 @@ export class MessagesController {
       const userId = req.user!.userId;
       const { targetUserId } = req.body;
 
-      if (!targetUserId || targetUserId === userId) {
+      if (!targetUserId) {
         return res.status(400).json({ error: 'Usuário de destino inválido.' });
+      }
+
+      // Self-chat support ("Mensagens para mim / Note to Self")
+      if (targetUserId === userId) {
+        const conversationId = await db.getOrCreateDirectConversation(userId, userId);
+        const meUser = await db.findUserById(userId);
+        const meProfile = await db.getProfile(userId);
+
+        return res.status(200).json({
+          conversationId,
+          otherUser: {
+            id: userId,
+            username: meUser ? meUser.username : '',
+            displayName: (meProfile?.display_name || meUser?.username || 'Você') + ' (Você)',
+            avatarUrl: meProfile?.avatar_url || null,
+            publicKey: meProfile?.public_key || null
+          }
+        });
       }
 
       const isBlocked = await db.isBlocked(userId, targetUserId);

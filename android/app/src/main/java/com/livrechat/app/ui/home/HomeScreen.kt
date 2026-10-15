@@ -16,6 +16,7 @@ import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
 import android.media.MediaPlayer
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -24,7 +25,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -581,91 +584,218 @@ fun HomeScreen(
         }
     }
 
-    // DIALOG: Criar Status de Texto
+    // FULLSCREEN DIALOG: Criar Status de Texto (Estilo WhatsApp Imersivo)
     if (showCreateTextStatusDialog) {
-        val colorOptions = listOf("#075E54", "#128C7E", "#7B1FA2", "#D81B60", "#1E88E5", "#263238")
-        AlertDialog(
+        val colorOptions = listOf(
+            "#075E54", "#128C7E", "#263238", "#7B1FA2", "#AD1457",
+            "#D81B60", "#E65100", "#1565C0", "#2E7D32", "#37474F", "#3E2723"
+        )
+        val fontOptions = listOf(
+            FontFamily.Default to "Padrão",
+            FontFamily.Serif to "Elegante",
+            FontFamily.Monospace to "Máquina",
+            FontFamily.Cursive to "Manuscrito"
+        )
+        var selectedFontIndex by remember { mutableStateOf(0) }
+        val currentFont = fontOptions[selectedFontIndex].first
+
+        val parsedBgColor = remember(newStatusBgColor) {
+            try { Color(android.graphics.Color.parseColor(newStatusBgColor)) } catch (e: Exception) { Color(0xFF075E54) }
+        }
+        val animatedBgColor by animateColorAsState(targetValue = parsedBgColor, label = "statusBgColor")
+
+        Dialog(
             onDismissRequest = { if (!isPostingStatus) showCreateTextStatusDialog = false },
-            title = { Text("Novo Status de Texto", fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    OutlinedTextField(
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(animatedBgColor)
+                    .systemBarsPadding()
+            ) {
+                // Barra de Ações Superior
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .align(Alignment.TopCenter),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = { if (!isPostingStatus) showCreateTextStatusDialog = false },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(Color.Black.copy(alpha = 0.25f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White)
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Alternar Estilo de Fonte (T)
+                        IconButton(
+                            onClick = {
+                                selectedFontIndex = (selectedFontIndex + 1) % fontOptions.size
+                            },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .background(Color.Black.copy(alpha = 0.25f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.TextFields, contentDescription = "Fonte", tint = Color.White)
+                        }
+
+                        // Alternar Cor de Fundo (Paleta rápida)
+                        IconButton(
+                            onClick = {
+                                val curIdx = colorOptions.indexOf(newStatusBgColor)
+                                val nextIdx = if (curIdx == -1 || curIdx == colorOptions.size - 1) 0 else curIdx + 1
+                                newStatusBgColor = colorOptions[nextIdx]
+                            },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .background(Color.Black.copy(alpha = 0.25f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Palette, contentDescription = "Cor de fundo", tint = Color.White)
+                        }
+                    }
+                }
+
+                // Editor de Texto Central Imersivo
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 28.dp, vertical = 90.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    BasicTextField(
                         value = newTextStatusContent,
-                        onValueChange = { newTextStatusContent = it },
-                        placeholder = { Text("Digite o que está pensando...") },
-                        maxLines = 6,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        onValueChange = { if (it.length <= 500) newTextStatusContent = it },
+                        textStyle = TextStyle(
+                            color = Color.White,
+                            fontSize = if (newTextStatusContent.length > 100) 24.sp else 32.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            fontFamily = currentFont
+                        ),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { innerTextField ->
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (newTextStatusContent.isEmpty()) {
+                                    Text(
+                                        text = "Digite seu status...",
+                                        color = Color.White.copy(alpha = 0.55f),
+                                        fontSize = 32.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center,
+                                        fontFamily = currentFont
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
                     )
+                }
 
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Text("Cor de fundo:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        colorOptions.forEach { hex ->
+                // Barra Inferior: Seletor de Paleta Horizontal + Botão Flutuante de Envio
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 24.dp)
+                ) {
+                    // Carrossel horizontal de cores
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        items(colorOptions) { hex ->
                             val color = try { Color(android.graphics.Color.parseColor(hex)) } catch (e: Exception) { Color.Black }
+                            val isSelected = newStatusBgColor == hex
                             Surface(
                                 shape = CircleShape,
                                 color = color,
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(if (isSelected) 38.dp else 30.dp)
                                     .border(
-                                        width = if (newStatusBgColor == hex) 3.dp else 0.dp,
-                                        color = if (newStatusBgColor == hex) Color.White else Color.Transparent,
+                                        width = if (isSelected) 3.dp else 1.5.dp,
+                                        color = if (isSelected) Color.White else Color.White.copy(alpha = 0.4f),
                                         shape = CircleShape
                                     )
                                     .clickable { newStatusBgColor = hex }
                             ) {}
                         }
                     }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val trimmed = newTextStatusContent.trim()
-                        if (trimmed.isNotBlank()) {
-                            scope.launch {
-                                isPostingStatus = true
-                                try {
-                                    val res = apiService.createStatus(
-                                        mapOf(
-                                            "contentType" to "text",
-                                            "content" to trimmed,
-                                            "backgroundColor" to newStatusBgColor,
-                                            "avatarUrl" to (prefs.userAvatarUrl ?: ""),
-                                            "displayName" to (prefs.currentDisplayName ?: prefs.currentUsername ?: "Usuário")
-                                        )
-                                    )
-                                    if (res.isSuccessful) {
-                                        showCreateTextStatusDialog = false
-                                        newTextStatusContent = ""
-                                        Toast.makeText(context, "Status publicado!", Toast.LENGTH_SHORT).show()
-                                        loadStatuses()
-                                    } else {
-                                        Toast.makeText(context, "Falha ao publicar status", Toast.LENGTH_SHORT).show()
+
+                    // Linha inferior com contador e botão flutuante de envio
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${newTextStatusContent.length}/500",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        FloatingActionButton(
+                            onClick = {
+                                val trimmed = newTextStatusContent.trim()
+                                if (trimmed.isNotBlank() && !isPostingStatus) {
+                                    scope.launch {
+                                        isPostingStatus = true
+                                        try {
+                                            val res = apiService.createStatus(
+                                                mapOf(
+                                                    "contentType" to "text",
+                                                    "content" to trimmed,
+                                                    "backgroundColor" to newStatusBgColor,
+                                                    "avatarUrl" to (prefs.userAvatarUrl ?: ""),
+                                                    "displayName" to (prefs.currentDisplayName ?: prefs.currentUsername ?: "Usuário")
+                                                )
+                                            )
+                                            if (res.isSuccessful) {
+                                                showCreateTextStatusDialog = false
+                                                newTextStatusContent = ""
+                                                Toast.makeText(context, "Status publicado!", Toast.LENGTH_SHORT).show()
+                                                loadStatuses()
+                                            } else {
+                                                Toast.makeText(context, "Falha ao publicar status", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                        } finally {
+                                            isPostingStatus = false
+                                        }
                                     }
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                                } finally {
-                                    isPostingStatus = false
                                 }
+                            },
+                            containerColor = Color(0xFF25D366),
+                            contentColor = Color.White,
+                            shape = CircleShape,
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            if (isPostingStatus) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.5.dp)
+                            } else {
+                                Icon(Icons.Default.Send, contentDescription = "Publicar Status", modifier = Modifier.size(26.dp))
                             }
                         }
-                    },
-                    enabled = newTextStatusContent.isNotBlank() && !isPostingStatus,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
-                ) {
-                    Text(if (isPostingStatus) "Publicando..." else "Compartilhar", color = Color.White)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCreateTextStatusDialog = false }) {
-                    Text("Cancelar")
+                    }
                 }
             }
-        )
+        }
     }
 
     // DIALOG: Preview e Legenda de Foto do Status
@@ -1251,7 +1381,7 @@ fun HomeScreen(
                     onClick = { selectedTab = 1 },
                     text = {
                         Text(
-                            text = "Atualizações",
+                            text = "Flash",
                             fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
                         )
                     }
@@ -1455,7 +1585,7 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Atualizações recentes",
+                                text = "Status Flash recentes",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant

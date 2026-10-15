@@ -1,6 +1,10 @@
 package com.livrechat.app.ui.navigation
 
 import android.content.Intent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -99,7 +103,31 @@ fun LivreChatNavGraph(
 
     NavHost(
         navController = navController,
-        startDestination = startDestination
+        startDestination = startDestination,
+        enterTransition = {
+            slideIntoContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                animationSpec = tween(240)
+            ) + fadeIn(animationSpec = tween(200))
+        },
+        exitTransition = {
+            slideOutOfContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                animationSpec = tween(240)
+            ) + fadeOut(animationSpec = tween(200))
+        },
+        popEnterTransition = {
+            slideIntoContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.End,
+                animationSpec = tween(240)
+            ) + fadeIn(animationSpec = tween(200))
+        },
+        popExitTransition = {
+            slideOutOfContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.End,
+                animationSpec = tween(240)
+            ) + fadeOut(animationSpec = tween(200))
+        }
     ) {
         composable(Routes.WELCOME) {
             WelcomeScreen(

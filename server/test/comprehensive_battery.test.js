@@ -148,6 +148,12 @@ test('LivreChat Comprehensive System & Feature Test Battery', async (t) => {
 
   // 4. MESSAGING (1:1 & GROUP), REACTIONS, RECEIPTS, AND DELETION
   await t.test('9. Send, Receive, React, and Delete Messages', async () => {
+    // Self conversation ("Mensagens para mim")
+    const selfConvId = await db.getOrCreateDirectConversation(u1.user.id, u1.user.id);
+    assert.ok(selfConvId);
+    const sameSelfConvId = await db.getOrCreateDirectConversation(u1.user.id, u1.user.id);
+    assert.strictEqual(selfConvId, sameSelfConvId);
+
     // 1:1 conversation
     const directConvId = await db.getOrCreateDirectConversation(u1.user.id, u2.user.id);
     assert.ok(directConvId);

@@ -794,43 +794,69 @@ class DatabaseService {
   }
 
   public async getOrCreateDirectConversation(userId1: string, userId2: string): Promise<string> {
+    const isSelf = userId1 === userId2;
+
     // 1. Check PostgreSQL first if connected
     if (this.pgPool) {
       try {
         await this.ensureUserExists(userId1);
-        await this.ensureUserExists(userId2);
+        if (!isSelf) {
+          await this.ensureUserExists(userId2);
+        }
 
-        const res = await this.pgPool.query(`
+        const query = isSelf ? `
+          SELECT m1.conversation_id
+          FROM conversation_members m1
+          JOIN conversations c ON c.id = m1.conversation_id
+          WHERE m1.user_id = $1 AND (c.is_group IS FALSE OR c.is_group IS NULL)
+          GROUP BY m1.conversation_id
+          HAVING COUNT(*) = 1
+          LIMIT 1
+        ` : `
           SELECT m1.conversation_id
           FROM conversation_members m1
           JOIN conversation_members m2 ON m1.conversation_id = m2.conversation_id
-          WHERE m1.user_id = $1 AND m2.user_id = $2
+          JOIN conversations c ON c.id = m1.conversation_id
+          WHERE m1.user_id = $1 AND m2.user_id = $2 AND (c.is_group IS FALSE OR c.is_group IS NULL)
           LIMIT 1
-        `, [userId1, userId2]);
+        `;
+        const params = isSelf ? [userId1] : [userId1, userId2];
+        const res = await this.pgPool.query(query, params);
 
         if (res.rows.length > 0) {
           const foundId = res.rows[0].conversation_id;
           // Synchronize memory store
           await this.ensureConversationMember(foundId, userId1);
-          await this.ensureConversationMember(foundId, userId2);
+          if (!isSelf) {
+            await this.ensureConversationMember(foundId, userId2);
+          }
           return foundId;
         }
 
         const newId = `conv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
         await this.pgPool.query(`
-          INSERT INTO conversations (id, created_at, updated_at)
-          VALUES ($1, NOW(), NOW())
+          INSERT INTO conversations (id, is_group, created_at, updated_at)
+          VALUES ($1, false, NOW(), NOW())
           ON CONFLICT (id) DO NOTHING
         `, [newId]);
 
-        await this.pgPool.query(`
-          INSERT INTO conversation_members (conversation_id, user_id)
-          VALUES ($1, $2), ($1, $3)
-          ON CONFLICT (conversation_id, user_id) DO NOTHING
-        `, [newId, userId1, userId2]);
+        if (isSelf) {
+          await this.pgPool.query(`
+            INSERT INTO conversation_members (conversation_id, user_id)
+            VALUES ($1, $2)
+            ON CONFLICT (conversation_id, user_id) DO NOTHING
+          `, [newId, userId1]);
+          await this.ensureConversationMember(newId, userId1);
+        } else {
+          await this.pgPool.query(`
+            INSERT INTO conversation_members (conversation_id, user_id)
+            VALUES ($1, $2), ($1, $3)
+            ON CONFLICT (conversation_id, user_id) DO NOTHING
+          `, [newId, userId1, userId2]);
+          await this.ensureConversationMember(newId, userId1);
+          await this.ensureConversationMember(newId, userId2);
+        }
 
-        await this.ensureConversationMember(newId, userId1);
-        await this.ensureConversationMember(newId, userId2);
         return newId;
       } catch (e) {
         console.warn('[Database] Erro PG getOrCreateDirectConversation:', e);
@@ -838,9 +864,38 @@ class DatabaseService {
     }
 
     // 2. Memory store fallback
+    if (isSelf) {
+      const existingSelf = this.memoryStore.conversations.find(c => {
+        const members = this.memoryStore.conversation_members.filter(m => m.conversation_id === c.id);
+        return members.length === 1 && members[0].user_id === userId1 && !c.is_group;
+      });
+      if (existingSelf) return existingSelf.id;
+
+      const newId = `conv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const now = new Date().toISOString();
+      this.memoryStore.conversations.push({
+        id: newId,
+        is_group: false,
+        created_at: now,
+        updated_at: now
+      });
+      this.memoryStore.conversation_members.push({
+        conversation_id: newId,
+        user_id: userId1,
+        is_pinned: false,
+        is_archived: false,
+        is_muted: false
+      });
+      this.saveToLocal();
+      return newId;
+    }
+
     const convs1 = this.memoryStore.conversation_members.filter(m => m.user_id === userId1).map(m => m.conversation_id);
     const convs2 = this.memoryStore.conversation_members.filter(m => m.user_id === userId2).map(m => m.conversation_id);
-    const common = convs1.find(c => convs2.includes(c));
+    const common = convs1.find(c => {
+      const conv = this.memoryStore.conversations.find(cv => cv.id === c);
+      return !conv?.is_group && convs2.includes(c);
+    });
 
     if (common) {
       return common;
@@ -850,6 +905,7 @@ class DatabaseService {
     const now = new Date().toISOString();
     this.memoryStore.conversations.push({
       id: newId,
+      is_group: false,
       created_at: now,
       updated_at: now
     });

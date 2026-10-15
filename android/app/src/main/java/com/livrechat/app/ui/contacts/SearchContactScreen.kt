@@ -148,10 +148,16 @@ fun SearchContactScreen(
                     }
                     onNavigateToChat(conv.conversationId, targetUserId, targetDisplayName)
                 } else {
-                    Toast.makeText(context, "Não foi possível abrir a conversa", Toast.LENGTH_SHORT).show()
+                    val err = res.errorBody()?.string() ?: "Não foi possível abrir a conversa"
+                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                val errorMsg = if (e is java.net.SocketTimeoutException) {
+                    "Servidor iniciando... Tente novamente em instantes"
+                } else {
+                    "Erro: ${e.localizedMessage}"
+                }
+                Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
             } finally {
                 isLoading = false
             }
@@ -453,10 +459,16 @@ fun SearchContactScreen(
                                     Toast.makeText(context, "Grupo criado com sucesso!", Toast.LENGTH_SHORT).show()
                                     onNavigateToChat(dto.conversationId, dto.title ?: title, dto.title ?: title)
                                 } else {
-                                    Toast.makeText(context, "Erro ao criar grupo", Toast.LENGTH_SHORT).show()
+                                    val err = res.errorBody()?.string() ?: "Erro ao criar grupo"
+                                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
                                 }
                             } catch (e: Exception) {
-                                Toast.makeText(context, "Falha de conexão ao criar grupo", Toast.LENGTH_SHORT).show()
+                                val errorMsg = if (e is java.net.SocketTimeoutException) {
+                                    "Servidor iniciando... Tente novamente em instantes"
+                                } else {
+                                    e.localizedMessage ?: "Falha ao criar grupo"
+                                }
+                                Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
                             } finally {
                                 isCreatingGroup = false
                             }
