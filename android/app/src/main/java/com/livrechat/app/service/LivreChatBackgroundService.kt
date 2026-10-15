@@ -59,9 +59,19 @@ class LivreChatBackgroundService : Service() {
         val prefs = LivreChatApp.instance.preferencesManager
         if (prefs.isLoggedIn()) {
             LivreChatApp.instance.connectionManager.connect()
+            BackgroundAlarmReceiver.scheduleWatchdog(applicationContext, 10 * 60 * 1000L)
         }
 
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        val prefs = LivreChatApp.instance.preferencesManager
+        if (prefs.isLoggedIn()) {
+            // Immediate revive via AlarmManager when task is swiped away from recents
+            BackgroundAlarmReceiver.scheduleImmediate(applicationContext)
+        }
     }
 
     override fun onDestroy() {
@@ -72,6 +82,7 @@ class LivreChatBackgroundService : Service() {
         val prefs = LivreChatApp.instance.preferencesManager
         if (prefs.isLoggedIn()) {
             // Auto-restart service to ensure continuous message delivery
+            BackgroundAlarmReceiver.scheduleImmediate(applicationContext)
             start(applicationContext)
         }
     }
