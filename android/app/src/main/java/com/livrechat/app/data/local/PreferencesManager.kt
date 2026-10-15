@@ -45,6 +45,10 @@ class PreferencesManager(private val context: Context) {
         get() = prefs.getString(KEY_DISPLAY_NAME, null)
         set(value) = prefs.edit().putString(KEY_DISPLAY_NAME, value).apply()
 
+    var currentUserPhone: String?
+        get() = prefs.getString("current_user_phone", null)
+        set(value) = prefs.edit().putString("current_user_phone", value).apply()
+
     var backupPassphrase: String?
         get() = prefs.getString(KEY_BACKUP_PASSPHRASE, null)
         set(value) = prefs.edit().putString(KEY_BACKUP_PASSPHRASE, value).apply()

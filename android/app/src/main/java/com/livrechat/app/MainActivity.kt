@@ -64,8 +64,10 @@ class MainActivity : FragmentActivity() {
             isAppUnlockedState.value = true
         }
 
+        processIncomingIntent(intent)
         pendingIntentFlow.value = intent
         checkAndRequestPermissions()
+        com.livrechat.app.sync.ContactSyncHelper.getOrCreateAccount(this)
 
         try {
             val nm = getSystemService(NotificationManager::class.java)
@@ -187,7 +189,47 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
+        processIncomingIntent(intent)
         pendingIntentFlow.value = intent
+    }
+
+    private fun processIncomingIntent(intent: Intent?) {
+        if (intent == null) return
+        val uri = intent.data
+        if (intent.action == Intent.ACTION_VIEW && uri != null) {
+            val type = intent.type ?: try { contentResolver.getType(uri) } catch (e: Exception) { null }
+            val isChat = type == com.livrechat.app.sync.ContactSyncHelper.MIME_CHAT
+            val isCall = type == com.livrechat.app.sync.ContactSyncHelper.MIME_CALL
+            if (isChat || isCall) {
+                try {
+                    contentResolver.query(
+                        uri,
+                        arrayOf(
+                            android.provider.ContactsContract.Data.DATA1,
+                            android.provider.ContactsContract.Data.DATA2
+                        ),
+                        null,
+                        null,
+                        null
+                    )?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val userId = cursor.getString(0)
+                            val summary = cursor.getString(1) ?: "Contato"
+                            val name = summary.removePrefix("Mensagem para ").trim()
+                            if (!userId.isNullOrBlank()) {
+                                intent.putExtra("targetUserId", userId)
+                                intent.putExtra("targetDisplayName", name)
+                                if (isCall) {
+                                    intent.putExtra("isVoiceCall", true)
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivity", "Erro lendo contato de intent: ${e.message}")
+                }
+            }
+        }
     }
 
     private fun checkAndRequestPermissions() {
@@ -199,6 +241,14 @@ class MainActivity : FragmentActivity() {
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             permissionsToRequest.add(Manifest.permission.CAMERA)
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.READ_CONTACTS)
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.WRITE_CONTACTS)
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

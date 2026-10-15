@@ -4,6 +4,45 @@ import { db } from '../../db/database';
 import { v4 as uuidv4 } from 'uuid';
 import { WebSocketManager } from '../../websocket/ws.server';
 
+function extractPhoneVariants(raw: string): string[] {
+  if (!raw) return [];
+  const digits = raw.replace(/\D/g, '');
+  if (!digits || digits.length < 8) return [];
+
+  const variants = new Set<string>();
+  variants.add(digits);
+
+  // If starts with 0 (e.g. 011987654321)
+  if (digits.startsWith('0') && digits.length > 9) {
+    variants.add(digits.substring(1));
+  }
+
+  // Brazilian numbers:
+  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
+    const without55 = digits.substring(2);
+    variants.add(without55);
+    if (without55.length === 11 && without55[2] === '9') {
+      const without9 = without55.substring(0, 2) + without55.substring(3);
+      variants.add(without9);
+      variants.add('55' + without9);
+    }
+  } else if (digits.length === 11) {
+    variants.add('55' + digits);
+    if (digits[2] === '9') {
+      const without9 = digits.substring(0, 2) + digits.substring(3);
+      variants.add(without9);
+      variants.add('55' + without9);
+    }
+  } else if (digits.length === 10) {
+    variants.add('55' + digits);
+    const with9 = digits.substring(0, 2) + '9' + digits.substring(2);
+    variants.add(with9);
+    variants.add('55' + with9);
+  }
+
+  return Array.from(variants);
+}
+
 export class UsersController {
   public static async getProfile(req: AuthRequest, res: Response) {
     try {
@@ -24,6 +63,7 @@ export class UsersController {
         avatarUrl: profile?.avatar_url || null,
         bio: profile?.bio || '',
         publicKey: profile?.public_key || null,
+        phoneNumber: profile?.phone_number || null,
         createdAt: user.created_at
       });
     } catch (e: any) {
@@ -34,7 +74,7 @@ export class UsersController {
   public static async updateProfile(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.userId;
-      const { displayName, bio, avatarUrl, publicKey } = req.body;
+      const { displayName, bio, avatarUrl, publicKey, phoneNumber } = req.body;
 
       const profile = await db.upsertProfile({
         user_id: userId,
@@ -42,10 +82,14 @@ export class UsersController {
         bio: bio || '',
         avatar_url: avatarUrl,
         public_key: publicKey,
+        phone_number: phoneNumber,
         updated_at: new Date().toISOString()
       });
 
-      return res.status(200).json(profile);
+      return res.status(200).json({
+        ...profile,
+        phoneNumber: profile.phone_number
+      });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -125,6 +169,135 @@ export class UsersController {
 
       return res.status(200).json(detailed);
     } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  public static async syncContacts(req: AuthRequest, res: Response) {
+    try {
+      const currentUserId = req.user!.userId;
+      const rawContacts = req.body.contacts || [];
+      const rawPhones = req.body.phones || [];
+
+      const inputItems: Array<{ name: string; phones: string[] }> = [];
+
+      if (Array.isArray(rawContacts)) {
+        for (const item of rawContacts) {
+          if (typeof item === 'string') {
+            inputItems.push({ name: '', phones: [item] });
+          } else if (item && typeof item === 'object') {
+            const name = (item.name || item.displayName || '').toString().trim();
+            const phones = Array.isArray(item.phones)
+              ? item.phones.map((p: any) => String(p).trim()).filter(Boolean)
+              : (item.phone || item.phoneNumber ? [String(item.phone || item.phoneNumber).trim()] : []);
+            if (phones.length > 0 || name.length > 0) {
+              inputItems.push({ name, phones });
+            }
+          }
+        }
+      }
+
+      if (Array.isArray(rawPhones)) {
+        for (const p of rawPhones) {
+          if (typeof p === 'string' && p.trim()) {
+            inputItems.push({ name: '', phones: [p.trim()] });
+          }
+        }
+      }
+
+      if (inputItems.length === 0) {
+        return res.status(200).json({ matchedCount: 0, contacts: [] });
+      }
+
+      const allUsers = await db.getAllUsersWithProfiles();
+      const existingContacts = await db.getContacts(currentUserId);
+      const existingContactIds = new Set(existingContacts.map(c => c.contact_user_id));
+
+      const matchedResults: any[] = [];
+      const matchedUserIds = new Set<string>();
+
+      for (const item of inputItems) {
+        const contactVariants = new Set<string>();
+        for (const ph of item.phones) {
+          extractPhoneVariants(ph).forEach(v => contactVariants.add(v));
+        }
+
+        for (const { user, profile } of allUsers) {
+          if (user.id === currentUserId) continue;
+          if (matchedUserIds.has(user.id)) continue;
+
+          const blocked = await db.isBlocked(currentUserId, user.id);
+          if (blocked) continue;
+
+          let isMatch = false;
+          let matchedPhone: string | undefined = undefined;
+
+          // 1. Match by user profile phone number
+          if (profile?.phone_number) {
+            const profileVariants = extractPhoneVariants(profile.phone_number);
+            for (const pv of profileVariants) {
+              if (contactVariants.has(pv)) {
+                isMatch = true;
+                matchedPhone = profile.phone_number;
+                break;
+              }
+            }
+          }
+
+          // 2. Match by username (if digits or username matches phone)
+          if (!isMatch) {
+            const uVariants = extractPhoneVariants(user.username);
+            for (const uv of uVariants) {
+              if (contactVariants.has(uv)) {
+                isMatch = true;
+                matchedPhone = user.username;
+                break;
+              }
+            }
+          }
+
+          // 3. Match by contact name == username
+          if (!isMatch && item.name && item.name.length >= 3) {
+            if (item.name.toLowerCase() === user.username.toLowerCase()) {
+              isMatch = true;
+            }
+          }
+
+          if (isMatch) {
+            matchedUserIds.add(user.id);
+            const chosenNickname = item.name || profile?.display_name || user.username;
+
+            if (!existingContactIds.has(user.id)) {
+              await db.addContact({
+                id: uuidv4(),
+                user_id: currentUserId,
+                contact_user_id: user.id,
+                nickname: chosenNickname,
+                created_at: new Date().toISOString()
+              });
+              existingContactIds.add(user.id);
+            }
+
+            matchedResults.push({
+              contactUserId: user.id,
+              username: user.username,
+              displayName: chosenNickname,
+              avatarUrl: profile?.avatar_url || null,
+              publicKey: profile?.public_key || null,
+              bio: profile?.bio || '',
+              phoneNumber: profile?.phone_number || null,
+              matchedPhone: matchedPhone || (item.phones.length > 0 ? item.phones[0] : null)
+            });
+          }
+        }
+      }
+
+      return res.status(200).json({
+        matchedCount: matchedResults.length,
+        contacts: matchedResults
+      });
+    } catch (e: any) {
+      console.error('[UsersController] Erro syncContacts:', e);
       return res.status(500).json({ error: e.message });
     }
   }

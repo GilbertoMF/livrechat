@@ -21,8 +21,10 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     avatar_url TEXT,
     bio VARCHAR(255) DEFAULT '',
     public_key TEXT, -- For E2E encryption identity
+    phone_number VARCHAR(50),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_user_profiles_phone ON user_profiles(phone_number);
 
 -- 3. User Sessions (Active tokens, device info, revoke capability)
 CREATE TABLE IF NOT EXISTS user_sessions (

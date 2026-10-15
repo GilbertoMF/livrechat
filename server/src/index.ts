@@ -58,6 +58,7 @@ app.get('/api/users/search', authenticateToken, UsersController.searchUsers);
 // Contacts
 app.get('/api/users/contacts', authenticateToken, UsersController.getContacts);
 app.post('/api/users/contacts', authenticateToken, UsersController.addContact);
+app.post('/api/users/sync-contacts', authenticateToken, UsersController.syncContacts);
 app.put('/api/users/contacts/:contactUserId', authenticateToken, UsersController.updateContact);
 app.delete('/api/users/contacts/:contactUserId', authenticateToken, UsersController.removeContact);
 

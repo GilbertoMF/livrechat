@@ -19,6 +19,7 @@ export interface UserProfile {
   avatar_url?: string;
   bio?: string;
   public_key?: string;
+  phone_number?: string;
   updated_at: string;
 }
 
@@ -258,6 +259,8 @@ class DatabaseService {
           await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS created_by VARCHAR(36);').catch(() => {});
           await client.query('ALTER TABLE statuses ADD COLUMN IF NOT EXISTS reactions JSONB DEFAULT \'[]\'::jsonb;').catch(() => {});
           await client.query('ALTER TABLE statuses ADD COLUMN IF NOT EXISTS views JSONB DEFAULT \'[]\'::jsonb;').catch(() => {});
+          await client.query('ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS phone_number VARCHAR(50);').catch(() => {});
+          await client.query('CREATE INDEX IF NOT EXISTS idx_user_profiles_phone ON user_profiles(phone_number);').catch(() => {});
           console.log(`[Database] PostgreSQL (${CONFIG.DATABASE_URL.includes('neon.tech') ? 'Neon.tech' : 'Cloud'}) conectado e tabelas migradas com sucesso.`);
         } else {
           console.log('[Database] PostgreSQL conectado.');
@@ -457,6 +460,7 @@ class DatabaseService {
             avatar_url: row.avatar_url || undefined,
             bio: row.bio || undefined,
             public_key: row.public_key || undefined,
+            phone_number: row.phone_number || undefined,
             updated_at: row.updated_at?.toISOString?.() || row.updated_at
           };
         }
@@ -470,7 +474,7 @@ class DatabaseService {
   public async upsertProfile(profile: UserProfile): Promise<UserProfile> {
     const idx = this.memoryStore.profiles.findIndex(p => p.user_id === profile.user_id);
     if (idx >= 0) {
-      this.memoryStore.profiles[idx] = profile;
+      this.memoryStore.profiles[idx] = { ...this.memoryStore.profiles[idx], ...profile };
     } else {
       this.memoryStore.profiles.push(profile);
     }
@@ -480,20 +484,67 @@ class DatabaseService {
       try {
         await this.ensureUserExists(profile.user_id, profile.display_name);
         await this.pgPool.query(`
-          INSERT INTO user_profiles (user_id, display_name, avatar_url, bio, public_key, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6)
+          INSERT INTO user_profiles (user_id, display_name, avatar_url, bio, public_key, phone_number, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
           ON CONFLICT (user_id) DO UPDATE SET
             display_name = EXCLUDED.display_name,
             avatar_url = EXCLUDED.avatar_url,
             bio = EXCLUDED.bio,
             public_key = EXCLUDED.public_key,
+            phone_number = COALESCE(EXCLUDED.phone_number, user_profiles.phone_number),
             updated_at = EXCLUDED.updated_at
-        `, [profile.user_id, profile.display_name, profile.avatar_url || null, profile.bio || null, profile.public_key || null, profile.updated_at]);
+        `, [
+          profile.user_id,
+          profile.display_name,
+          profile.avatar_url || null,
+          profile.bio || null,
+          profile.public_key || null,
+          profile.phone_number || null,
+          profile.updated_at
+        ]);
       } catch (e) {
         console.warn('[Database] Erro PG upsertProfile:', e);
       }
     }
     return profile;
+  }
+
+  public async getAllUsersWithProfiles(): Promise<Array<{ user: User; profile: UserProfile | null }>> {
+    if (this.pgPool) {
+      try {
+        const res = await this.pgPool.query(`
+          SELECT u.id, u.username, u.password_hash, u.recovery_hash, u.created_at, u.updated_at,
+                 p.display_name, p.avatar_url, p.bio, p.public_key, p.phone_number, p.updated_at as p_updated_at
+          FROM users u
+          LEFT JOIN user_profiles p ON u.id = p.user_id
+        `);
+        return res.rows.map(r => ({
+          user: {
+            id: r.id,
+            username: r.username,
+            password_hash: r.password_hash,
+            recovery_hash: r.recovery_hash,
+            created_at: r.created_at?.toISOString?.() || r.created_at,
+            updated_at: r.updated_at?.toISOString?.() || r.updated_at
+          },
+          profile: r.display_name ? {
+            user_id: r.id,
+            display_name: r.display_name,
+            avatar_url: r.avatar_url || undefined,
+            bio: r.bio || undefined,
+            public_key: r.public_key || undefined,
+            phone_number: r.phone_number || undefined,
+            updated_at: r.p_updated_at?.toISOString?.() || r.p_updated_at
+          } : null
+        }));
+      } catch (e) {
+        console.warn('[Database] Erro PG getAllUsersWithProfiles:', e);
+      }
+    }
+    return this.memoryStore.users.map(u => ({
+      user: u,
+      profile: this.memoryStore.profiles.find(p => p.user_id === u.id) || null
+    }));
   }
 
   // ==========================================

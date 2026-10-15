@@ -1,6 +1,10 @@
 package com.livrechat.app.ui.contacts
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,12 +24,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.livrechat.app.LivreChatApp
 import com.livrechat.app.data.local.entity.ConversationEntity
 import com.livrechat.app.data.remote.model.AddContactRequest
 import com.livrechat.app.data.remote.model.CreateGroupRequest
 import com.livrechat.app.data.remote.model.UserDto
+import com.livrechat.app.sync.ContactSyncHelper
 import com.livrechat.app.ui.common.UserAvatarView
 import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
@@ -72,11 +78,20 @@ fun SearchContactScreen(
     var newGroupTitle by remember { mutableStateOf("") }
     var selectedGroupMembers by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isCreatingGroup by remember { mutableStateOf(false) }
+    var isSyncingPhoneContacts by remember { mutableStateOf(false) }
+    var pendingSyncTrigger by remember { mutableStateOf(0) }
 
     fun loadContacts() {
         scope.launch {
             isLoading = true
             try {
+                // Background sync device contacts if permission is already granted
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+                    try {
+                        ContactSyncHelper.syncDeviceContacts(context)
+                    } catch (syncEx: Exception) {}
+                }
+
                 val currentUserId = prefs.currentUserId
                 val list = mutableListOf<ContactUiModel>()
 
@@ -123,8 +138,53 @@ fun SearchContactScreen(
         }
     }
 
+    val contactPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { perms ->
+        val readGranted = perms[Manifest.permission.READ_CONTACTS] == true
+        if (readGranted) {
+            pendingSyncTrigger++
+        } else {
+            Toast.makeText(context, "Permissão para ler contatos necessária para sincronizar a agenda.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun syncPhoneContacts() {
+        val hasRead = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+        val hasWrite = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED
+        if (!hasRead || !hasWrite) {
+            contactPermissionLauncher.launch(
+                arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)
+            )
+            return
+        }
+
+        isSyncingPhoneContacts = true
+        scope.launch {
+            try {
+                val (count, _) = ContactSyncHelper.syncDeviceContacts(context)
+                if (count > 0) {
+                    Toast.makeText(context, "$count contato(s) da agenda sincronizado(s) com sucesso!", Toast.LENGTH_SHORT).show()
+                    loadContacts()
+                } else {
+                    Toast.makeText(context, "Nenhum novo contato encontrado na agenda.", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Erro ao sincronizar contatos: ${e.message}", Toast.LENGTH_SHORT).show()
+            } finally {
+                isSyncingPhoneContacts = false
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         loadContacts()
+    }
+
+    LaunchedEffect(pendingSyncTrigger) {
+        if (pendingSyncTrigger > 0) {
+            syncPhoneContacts()
+        }
     }
 
     fun startChatWithUser(targetUserId: String, targetDisplayName: String, targetUsername: String = "", avatarUrl: String? = null) {
@@ -564,7 +624,24 @@ fun SearchContactScreen(
                                 onDismissRequest = { showMenu = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Atualizar") },
+                                    text = { Text("Sincronizar agenda") },
+                                    leadingIcon = { Icon(Icons.Default.Sync, contentDescription = null, tint = BluePrimary) },
+                                    onClick = {
+                                        showMenu = false
+                                        syncPhoneContacts()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Salvar na agenda") },
+                                    leadingIcon = { Icon(Icons.Default.ContactPhone, contentDescription = null, tint = Color(0xFF1565C0)) },
+                                    onClick = {
+                                        showMenu = false
+                                        ContactSyncHelper.openAddContactInPhoneBook(context)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Atualizar lista") },
+                                    leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
                                     onClick = {
                                         showMenu = false
                                         loadContacts()
@@ -573,6 +650,7 @@ fun SearchContactScreen(
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Convidar amigos") },
+                                    leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
                                     onClick = {
                                         showMenu = false
                                         Toast.makeText(context, "Compartilhe o LivreChat com seus amigos!", Toast.LENGTH_SHORT).show()
@@ -653,6 +731,30 @@ fun SearchContactScreen(
                                             startChatWithUser(selfContact.userId, selfContact.displayName, selfContact.username, null)
                                         }
                                     }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                LivreActionCard(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Default.Sync,
+                                    iconTint = Color(0xFF2E7D32),
+                                    title = "Sincronizar",
+                                    subtitle = if (isSyncingPhoneContacts) "Puxando contatos..." else "Agenda do Celular",
+                                    onClick = { syncPhoneContacts() }
+                                )
+                                LivreActionCard(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Default.ContactPhone,
+                                    iconTint = Color(0xFF1565C0),
+                                    title = "Nova Agenda",
+                                    subtitle = "Salvar no Celular",
+                                    onClick = { ContactSyncHelper.openAddContactInPhoneBook(context) }
                                 )
                             }
                         }

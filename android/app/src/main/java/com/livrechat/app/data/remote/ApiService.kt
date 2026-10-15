@@ -75,6 +75,9 @@ interface ApiService {
     @POST("api/users/contacts")
     suspend fun addContact(@Body request: AddContactRequest): Response<ContactDto>
 
+    @POST("api/users/sync-contacts")
+    suspend fun syncContacts(@Body request: SyncContactsRequest): Response<SyncContactsResponse>
+
     @GET("api/calls/ice-servers")
     suspend fun getIceServers(): Response<IceServersResponse>
 

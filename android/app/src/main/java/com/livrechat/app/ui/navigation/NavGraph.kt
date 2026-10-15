@@ -16,6 +16,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.livrechat.app.LivreChatApp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.livrechat.app.ui.auth.AuthViewModel
 import com.livrechat.app.ui.auth.LoginScreen
 import com.livrechat.app.ui.auth.RecoveryScreen
@@ -67,14 +69,34 @@ fun LivreChatNavGraph(
     val callState by callViewModel.callState.collectAsState()
     val callInfo by callViewModel.callInfo.collectAsState()
 
-    // Handle background notification click or incoming call intent
+    // Handle background notification click, incoming call intent, or contact shortcut
     LaunchedEffect(pendingIntent) {
         if (pendingIntent != null) {
             val isIncomingCall = pendingIntent.getBooleanExtra("incomingCall", false)
+            val targetUserId = pendingIntent.getStringExtra("targetUserId")
+            val targetDisplayName = pendingIntent.getStringExtra("targetDisplayName") ?: "Contato"
+            val isVoiceCall = pendingIntent.getBooleanExtra("isVoiceCall", false)
+
             if (isIncomingCall) {
                 val currentRoute = navController.currentBackStackEntry?.destination?.route
                 if (currentRoute != Routes.INCOMING_CALL && currentRoute != Routes.ACTIVE_CALL) {
                     navController.navigate(Routes.INCOMING_CALL)
+                }
+                onIntentHandled()
+            } else if (!targetUserId.isNullOrEmpty()) {
+                if (isVoiceCall) {
+                    callViewModel.startOutgoingCall(targetUserId, targetDisplayName, "", null)
+                    navController.navigate(Routes.ACTIVE_CALL)
+                } else {
+                    try {
+                        val res = withContext(Dispatchers.IO) {
+                            LivreChatApp.instance.apiClient.apiService.getOrCreateConversation(mapOf("targetUserId" to targetUserId))
+                        }
+                        if (res.isSuccessful && res.body() != null) {
+                            val conv = res.body()!!
+                            navController.navigate("chat/${conv.conversationId}/$targetUserId/$targetDisplayName")
+                        }
+                    } catch (e: Exception) {}
                 }
                 onIntentHandled()
             } else {

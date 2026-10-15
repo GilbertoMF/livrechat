@@ -54,6 +54,7 @@ data class UserDto(
     val avatarUrl: String? = null,
     val publicKey: String? = null,
     val bio: String? = null,
+    val phoneNumber: String? = null,
     val createdAt: String? = null
 )
 
@@ -144,6 +145,31 @@ data class ContactDto(
     val avatarUrl: String? = null,
     val publicKey: String? = null,
     val bio: String = ""
+)
+
+data class DeviceContactPayload(
+    val name: String? = null,
+    val phones: List<String> = emptyList()
+)
+
+data class SyncContactsRequest(
+    val contacts: List<DeviceContactPayload>
+)
+
+data class MatchedContactDto(
+    val contactUserId: String,
+    val username: String,
+    val displayName: String,
+    val avatarUrl: String? = null,
+    val publicKey: String? = null,
+    val bio: String = "",
+    val phoneNumber: String? = null,
+    val matchedPhone: String? = null
+)
+
+data class SyncContactsResponse(
+    val matchedCount: Int,
+    val contacts: List<MatchedContactDto>
 )
 
 data class StatusReactionDto(

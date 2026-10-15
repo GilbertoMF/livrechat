@@ -103,8 +103,10 @@ fun SettingsScreen(
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     // Edit profile state
+    var userPhone by remember { mutableStateOf(prefs.currentUserPhone ?: "") }
     var newDisplayNameInput by remember { mutableStateOf(displayName) }
     var newBioInput by remember { mutableStateOf(userBio) }
+    var newPhoneInput by remember { mutableStateOf(userPhone) }
     var newAvatarUrlInput by remember { mutableStateOf(userAvatarUrl) }
     var customWebUrlInput by remember { mutableStateOf(if (userAvatarUrl.startsWith("http")) userAvatarUrl else "") }
     var userRecoveryPhrase by remember { mutableStateOf<String?>(null) }
@@ -135,6 +137,11 @@ fun SettingsScreen(
                             if (!profile.bio.isNullOrBlank()) {
                                 userBio = profile.bio
                                 prefs.userBio = profile.bio
+                            }
+                            if (!profile.phoneNumber.isNullOrBlank()) {
+                                userPhone = profile.phoneNumber
+                                prefs.currentUserPhone = profile.phoneNumber
+                                newPhoneInput = profile.phoneNumber
                             }
                             if (!profile.avatarUrl.isNullOrBlank()) {
                                 userAvatarUrl = profile.avatarUrl
@@ -546,6 +553,19 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = newPhoneInput,
+                        onValueChange = { newPhoneInput = it },
+                        label = { Text("Número de Telefone (Para sincronizar agenda)") },
+                        placeholder = { Text("Ex: +55 (11) 98765-4321") },
+                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Row(
@@ -602,6 +622,7 @@ fun SettingsScreen(
                     onClick = {
                         val trimmedName = newDisplayNameInput.trim()
                         val trimmedBio = newBioInput.trim()
+                        val trimmedPhone = newPhoneInput.trim()
                         val trimmedAvatar = newAvatarUrlInput.trim()
 
                         if (trimmedName.isNotBlank()) {
@@ -609,6 +630,8 @@ fun SettingsScreen(
                             prefs.currentDisplayName = trimmedName
                             userBio = trimmedBio
                             prefs.userBio = trimmedBio
+                            userPhone = trimmedPhone
+                            prefs.currentUserPhone = trimmedPhone
                             userAvatarUrl = trimmedAvatar
                             prefs.userAvatarUrl = if (trimmedAvatar.isNotBlank()) trimmedAvatar else null
                             if (trimmedAvatar.isBlank()) {
@@ -626,6 +649,7 @@ fun SettingsScreen(
                                         mapOf(
                                             "displayName" to trimmedName,
                                             "bio" to trimmedBio,
+                                            "phoneNumber" to trimmedPhone,
                                             "avatarUrl" to trimmedAvatar
                                         )
                                     )
@@ -1554,29 +1578,55 @@ fun SettingsScreen(
 
                                 Spacer(modifier = Modifier.height(6.dp))
 
-                                // ID Virtual de 8 Dígitos (Badge Destacado)
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                    modifier = Modifier.clickable {
-                                        val cb = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        cb.setPrimaryClip(ClipData.newPlainText("ID Virtual", username))
-                                        Toast.makeText(context, "ID Virtual copiado!", Toast.LENGTH_SHORT).show()
-                                    }
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                    // ID Virtual de 8 Dígitos (Badge Destacado)
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        modifier = Modifier.clickable {
+                                            val cb = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            cb.setPrimaryClip(ClipData.newPlainText("ID Virtual", username))
+                                            Toast.makeText(context, "ID Virtual copiado!", Toast.LENGTH_SHORT).show()
+                                        }
                                     ) {
-                                        Icon(Icons.Default.Fingerprint, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(13.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "ID: $username",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontFamily = FontFamily.Monospace
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.Fingerprint, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(13.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "ID: $username",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                        }
+                                    }
+
+                                    if (userPhone.isNotBlank()) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(Icons.Default.Phone, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(13.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = userPhone,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.secondary
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1589,6 +1639,7 @@ fun SettingsScreen(
                             onClick = {
                                 newDisplayNameInput = displayName
                                 newBioInput = userBio
+                                newPhoneInput = userPhone
                                 newAvatarUrlInput = userAvatarUrl
                                 customWebUrlInput = if (userAvatarUrl.startsWith("http")) userAvatarUrl else ""
                                 showEditProfileDialog = true
