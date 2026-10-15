@@ -339,7 +339,33 @@ fun ChatScreen(
     var replyingToMessage by remember { mutableStateOf<MessageEntity?>(null) }
     var showCameraDialog by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
-    val inputFocusRequester = remember { FocusRequester() }
+    var editTextRef by remember { mutableStateOf<EditText?>(null) }
+    val showKeyboardAndFocusInput = {
+        try {
+            val et = editTextRef
+            if (et != null) {
+                et.requestFocus()
+                val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+                imm?.showSoftInput(et, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+            } else {
+                keyboardController?.show()
+            }
+        } catch (e: Exception) {
+            keyboardController?.show()
+        }
+    }
+    val hideKeyboard = {
+        try {
+            val et = editTextRef
+            if (et != null) {
+                val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+                imm?.hideSoftInputFromWindow(et.windowToken, 0)
+            }
+            keyboardController?.hide()
+        } catch (e: Exception) {
+            keyboardController?.hide()
+        }
+    }
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var viewingImageBase64 by remember { mutableStateOf<String?>(null) }
     var viewingVideoMessage by remember { mutableStateOf<MessageEntity?>(null) }
@@ -1280,10 +1306,9 @@ fun ChatScreen(
                                 IconButton(onClick = {
                                     if (showEmojiStickerSheet) {
                                         showEmojiStickerSheet = false
-                                        inputFocusRequester.requestFocus()
-                                        keyboardController?.show()
+                                        showKeyboardAndFocusInput()
                                     } else {
-                                        keyboardController?.hide()
+                                        hideKeyboard()
                                         showEmojiStickerSheet = true
                                     }
                                 }) {
@@ -1297,6 +1322,7 @@ fun ChatScreen(
                                 AndroidView(
                                     factory = { ctx ->
                                         val et = EditText(ctx)
+                                        editTextRef = et
                                         et.background = null
                                         et.hint = "Mensagem"
                                         et.setHintTextColor(hintColorArgb)
@@ -1378,6 +1404,7 @@ fun ChatScreen(
                                         et
                                     },
                                     update = { et: EditText ->
+                                        editTextRef = et
                                         if (et.text.toString() != textInput) {
                                             et.setText(textInput)
                                             et.setSelection(et.text?.length ?: 0)
@@ -1564,8 +1591,7 @@ fun ChatScreen(
                         onLongPress = { messageActionTarget = it },
                         onSwipeToReply = {
                             replyingToMessage = it
-                            inputFocusRequester.requestFocus()
-                            keyboardController?.show()
+                            showKeyboardAndFocusInput()
                         },
                         onReactionClick = { viewModel.toggleReaction(it.id, "❤️") },
                         onImageClick = { viewingImageBase64 = it },
