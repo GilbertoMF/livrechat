@@ -182,18 +182,22 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     }
 
     private fun cleanupCall() {
-        playCallEndedTone()
+        if (_callState.value != CallState.IDLE && _callInfo.value != null) {
+            playCallEndedTone()
+        }
         LivreChatNotificationManager.cancelCallNotification(app)
         timerJob?.cancel()
         CallForegroundService.stop(app)
-        _callState.value = CallState.ENDED
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(200)
-            _callState.value = CallState.IDLE
-            _callInfo.value = null
-            _isMuted.value = false
-            _isSpeaker.value = false
-            callStartTimeMs = 0L
+        if (_callState.value != CallState.IDLE) {
+            _callState.value = CallState.ENDED
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(200)
+                _callState.value = CallState.IDLE
+                _callInfo.value = null
+                _isMuted.value = false
+                _isSpeaker.value = false
+                callStartTimeMs = 0L
+            }
         }
     }
 
@@ -216,11 +220,14 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
 
     // WebRTCCallback
     override fun onCallStateChanged(state: CallState) {
+        val previousState = _callState.value
         _callState.value = state
         if (state == CallState.CONNECTED) {
             startTimer()
         } else if (state == CallState.ENDED) {
-            cleanupCall()
+            if (previousState != CallState.IDLE) {
+                cleanupCall()
+            }
         }
     }
 
@@ -327,6 +334,8 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     override fun onCleared() {
         super.onCleared()
         connectionManager.unregisterListener(this)
-        webRTCManager?.endCall()
+        if (_callState.value != CallState.IDLE || _callInfo.value != null) {
+            webRTCManager?.endCall()
+        }
     }
 }

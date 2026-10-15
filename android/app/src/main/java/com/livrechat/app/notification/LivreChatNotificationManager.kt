@@ -118,15 +118,35 @@ object LivreChatNotificationManager {
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(senderName)
                 .setContentText(content)
-                .setAutoCancel(true)
-                .setSound(soundUri)
+                .setAutoCancel(!isPlayingAudio)
+                .setOnlyAlertOnce(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setContentIntent(pendingIntent)
                 .addAction(replyAction)
 
+            if (!isPlayingAudio) {
+                builder.setSound(soundUri)
+            } else {
+                builder.setSound(null)
+            }
+
             // Suporte para ouvir áudio diretamente na notificação
             if (messageType == "audio" && messageId != null) {
+                val dismissIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+                    action = NotificationActionReceiver.ACTION_STOP_AUDIO
+                    putExtra(NotificationActionReceiver.EXTRA_CONVERSATION_ID, conversationId)
+                    putExtra(NotificationActionReceiver.EXTRA_SENDER_NAME, senderName)
+                    putExtra(NotificationActionReceiver.EXTRA_MESSAGE_ID, messageId)
+                }
+                val dismissPendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    (conversationId + "_dismiss").hashCode(),
+                    dismissIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                builder.setDeleteIntent(dismissPendingIntent)
+
                 if (isPlayingAudio) {
                     val stopIntent = Intent(context, NotificationActionReceiver::class.java).apply {
                         action = NotificationActionReceiver.ACTION_STOP_AUDIO

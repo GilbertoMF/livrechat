@@ -465,9 +465,12 @@ class WebRTCManager(
 
     fun endCall() {
         try {
+            val hadActiveCall = peerConnection != null
             cleanupCurrentCall()
             resetAudioMode()
-            callback.onCallStateChanged(CallState.ENDED)
+            if (hadActiveCall) {
+                callback.onCallStateChanged(CallState.ENDED)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Erro ao encerrar chamada WebRTC", e)
         }

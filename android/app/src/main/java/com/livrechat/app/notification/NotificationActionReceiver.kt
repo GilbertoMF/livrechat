@@ -12,9 +12,11 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
 import com.livrechat.app.LivreChatApp
+import android.os.PowerManager
 import com.livrechat.app.R
 import com.livrechat.app.data.local.entity.MessageEntity
 import com.livrechat.app.data.remote.model.SendMessageRequest
+import com.livrechat.app.util.MediaFileManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -219,6 +221,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 withContext(Dispatchers.Main) {
                     try {
                         val mp = MediaPlayer().apply {
+                            setWakeMode(context.applicationContext, PowerManager.PARTIAL_WAKE_LOCK)
                             setAudioAttributes(
                                 AudioAttributes.Builder()
                                     .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -230,7 +233,8 @@ class NotificationActionReceiver : BroadcastReceiver() {
                                 stopAudioPlayback()
                                 resetAudioNotification(context, conversationId, senderName, messageId)
                             }
-                            setOnErrorListener { _, _, _ ->
+                            setOnErrorListener { _, what, extra ->
+                                Log.e(TAG, "MediaPlayer error na notificação: what=$what, extra=$extra")
                                 stopAudioPlayback()
                                 resetAudioNotification(context, conversationId, senderName, messageId)
                                 true
@@ -283,21 +287,58 @@ class NotificationActionReceiver : BroadcastReceiver() {
     }
 
     private fun getOrCreateAudioFile(context: Context, messageId: String, content: String): File? {
-        val file = File(context.cacheDir, "audio_msg_$messageId.m4a")
-        if (file.exists() && file.length() > 0) return file
-
-        return try {
-            val base64Data = if (content.contains(",")) {
-                content.substringAfter(",")
-            } else {
-                content
+        // 1. Direct local file check if content is a valid local file path
+        if (MediaFileManager.isLocalFilePath(content)) {
+            val local = MediaFileManager.getLocalFile(content)
+            if (local != null && local.exists() && local.length() > 0) {
+                return local
             }
-            val decoded = Base64.decode(base64Data, Base64.DEFAULT)
-            FileOutputStream(file).use { it.write(decoded) }
-            file
-        } catch (e: Exception) {
-            Log.e(TAG, "Falha ao decodificar áudio", e)
-            null
+            val rawFile = File(content)
+            if (rawFile.exists() && rawFile.length() > 0) {
+                return rawFile
+            }
         }
+
+        // 2. Check if cache file already exists
+        val cacheFile = File(context.cacheDir, "audio_msg_$messageId.m4a")
+        if (cacheFile.exists() && cacheFile.length() > 0) {
+            return cacheFile
+        }
+
+        // 3. Search in app media directory for received or sent file matching messageId
+        try {
+            val mediaDir = MediaFileManager.getMediaDir(context)
+            val matchedFile = mediaDir.listFiles { _, name ->
+                name.contains(messageId)
+            }?.firstOrNull { it.exists() && it.length() > 0 }
+            if (matchedFile != null) {
+                return matchedFile
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Erro ao buscar áudio no diretório de mídia: ${e.message}")
+        }
+
+        // 4. If content is a base64 string or data uri, decode and save to cache
+        if (content.isNotBlank() && !content.startsWith("/")) {
+            return try {
+                val base64Data = if (content.contains(",")) {
+                    content.substringAfter(",")
+                } else {
+                    content
+                }
+                val decoded = Base64.decode(base64Data, Base64.DEFAULT)
+                if (decoded != null && decoded.isNotEmpty()) {
+                    FileOutputStream(cacheFile).use { it.write(decoded) }
+                    cacheFile
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Falha ao decodificar áudio base64 para mensagem $messageId", e)
+                null
+            }
+        }
+
+        return null
     }
 }
