@@ -556,18 +556,13 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         )
     }
 
+    fun sendStickerMessage(conversationId: String, stickerContent: String, targetUserId: String? = null) {
+        sendSticker(conversationId, stickerContent, targetUserId)
+    }
+
     fun sendStatusReaction(statusId: String, authorId: String, emoji: String) {
         viewModelScope.launch(Dispatchers.IO) {
             connectionManager.getClient().sendStatusReaction(statusId, authorId, emoji)
-            val myId = prefs.currentUserId
-            if (myId != null && authorId.isNotBlank() && myId != authorId) {
-                val convId = if (myId < authorId) "conv_${myId}_${authorId}" else "conv_${authorId}_${myId}"
-                sendMessage(
-                    conversationId = convId,
-                    text = "Reagiu ao seu Flash: $emoji",
-                    targetUserId = authorId
-                )
-            }
         }
     }
 

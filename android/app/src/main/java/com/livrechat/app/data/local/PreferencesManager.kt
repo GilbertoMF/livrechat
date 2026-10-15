@@ -168,6 +168,22 @@ class PreferencesManager(private val context: Context) {
         prefs.edit().putStringSet(KEY_LOCKED_CONVERSATIONS, current).apply()
     }
 
+    var callRingtoneUri: String?
+        get() = prefs.getString(KEY_CALL_RINGTONE_URI, null)
+        set(value) = prefs.edit().putString(KEY_CALL_RINGTONE_URI, value).apply()
+
+    var callRingtoneName: String
+        get() = prefs.getString(KEY_CALL_RINGTONE_NAME, "Padrão do Sistema") ?: "Padrão do Sistema"
+        set(value) = prefs.edit().putString(KEY_CALL_RINGTONE_NAME, value).apply()
+
+    var notificationRingtoneUri: String?
+        get() = prefs.getString(KEY_NOTIF_RINGTONE_URI, null)
+        set(value) = prefs.edit().putString(KEY_NOTIF_RINGTONE_URI, value).apply()
+
+    var notificationRingtoneName: String
+        get() = prefs.getString(KEY_NOTIF_RINGTONE_NAME, "Padrão do Sistema") ?: "Padrão do Sistema"
+        set(value) = prefs.edit().putString(KEY_NOTIF_RINGTONE_NAME, value).apply()
+
     fun isLoggedIn(): Boolean {
         return !accessToken.isNullOrEmpty() && !currentUserId.isNullOrEmpty()
     }
@@ -241,5 +257,9 @@ class PreferencesManager(private val context: Context) {
         private const val KEY_USER_BIO = "user_bio"
         private const val KEY_USER_AVATAR = "user_avatar"
         private const val KEY_LOCKED_CONVERSATIONS = "locked_conversations"
+        private const val KEY_CALL_RINGTONE_URI = "call_ringtone_uri"
+        private const val KEY_CALL_RINGTONE_NAME = "call_ringtone_name"
+        private const val KEY_NOTIF_RINGTONE_URI = "notif_ringtone_uri"
+        private const val KEY_NOTIF_RINGTONE_NAME = "notif_ringtone_name"
     }
 }

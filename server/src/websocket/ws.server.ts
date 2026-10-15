@@ -340,8 +340,14 @@ export class WebSocketManager {
         };
         await db.addStatusReaction(statusId, reaction);
 
-        if (authorId) {
-          this.sendToUser(authorId, {
+        let targetAuthorId = authorId;
+        if (!targetAuthorId) {
+          const s = await db.getStatusById(statusId);
+          targetAuthorId = s?.user_id;
+        }
+
+        if (targetAuthorId && targetAuthorId !== senderId) {
+          this.sendToUser(targetAuthorId, {
             type: 'status:reaction',
             statusId,
             fromUserId: senderId,
@@ -368,8 +374,14 @@ export class WebSocketManager {
         };
         await db.addStatusView(statusId, view);
 
-        if (authorId && authorId !== senderId) {
-          this.sendToUser(authorId, {
+        let targetAuthorId = authorId;
+        if (!targetAuthorId) {
+          const s = await db.getStatusById(statusId);
+          targetAuthorId = s?.user_id;
+        }
+
+        if (targetAuthorId && targetAuthorId !== senderId) {
+          this.sendToUser(targetAuthorId, {
             type: 'status:view',
             statusId,
             fromUserId: senderId,

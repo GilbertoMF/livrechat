@@ -73,7 +73,12 @@ object LivreChatNotificationManager {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val customNotifUri = com.livrechat.app.LivreChatApp.instance.preferencesManager.notificationRingtoneUri
+            val soundUri = if (!customNotifUri.isNullOrBlank()) {
+                android.net.Uri.parse(customNotifUri)
+            } else {
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            }
 
             // Direct Reply via RemoteInput
             val remoteInput = androidx.core.app.RemoteInput.Builder(NotificationActionReceiver.KEY_TEXT_REPLY)
@@ -170,6 +175,38 @@ object LivreChatNotificationManager {
         }
     }
 
+    private var activeRingtonePlayer: android.media.Ringtone? = null
+
+    fun playIncomingRingtone(context: Context) {
+        try {
+            stopIncomingRingtone()
+            val customCallUri = com.livrechat.app.LivreChatApp.instance.preferencesManager.callRingtoneUri
+            val soundUri = if (!customCallUri.isNullOrBlank()) {
+                android.net.Uri.parse(customCallUri)
+            } else {
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            }
+            val r = RingtoneManager.getRingtone(context, soundUri)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                r.isLooping = true
+            }
+            val audioAttributes = android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            r.audioAttributes = audioAttributes
+            r.play()
+            activeRingtonePlayer = r
+        } catch (e: Exception) {}
+    }
+
+    fun stopIncomingRingtone() {
+        try {
+            activeRingtonePlayer?.stop()
+            activeRingtonePlayer = null
+        } catch (e: Exception) {}
+    }
+
     fun showIncomingCallNotification(
         context: Context,
         callerId: String,
@@ -177,6 +214,8 @@ object LivreChatNotificationManager {
         callerUsername: String
     ) {
         try {
+            playIncomingRingtone(context)
+
             val fullScreenIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra("incomingCall", true)
@@ -191,12 +230,44 @@ object LivreChatNotificationManager {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            val ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            // Answer action
+            val answerIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("incomingCall", true)
+                putExtra("autoAnswer", true)
+                putExtra("callerId", callerId)
+                putExtra("callerName", callerDisplayName)
+            }
+            val answerPendingIntent = PendingIntent.getActivity(
+                context,
+                CALL_NOTIFICATION_ID + 1,
+                answerIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            // Reject action
+            val rejectIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+                action = "com.livrechat.app.ACTION_REJECT_CALL"
+                putExtra("callerId", callerId)
+            }
+            val rejectPendingIntent = PendingIntent.getBroadcast(
+                context,
+                CALL_NOTIFICATION_ID + 2,
+                rejectIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val customCallUri = com.livrechat.app.LivreChatApp.instance.preferencesManager.callRingtoneUri
+            val ringtoneUri = if (!customCallUri.isNullOrBlank()) {
+                android.net.Uri.parse(customCallUri)
+            } else {
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            }
 
             val notification = NotificationCompat.Builder(context, CHANNEL_CALLS)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("Chamada de Voz LivreChat")
-                .setContentText("$callerDisplayName (@$callerUsername) está ligando...")
+                .setContentText("$callerDisplayName (@$callerUsername) está chamando...")
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -205,6 +276,8 @@ object LivreChatNotificationManager {
                 .setAutoCancel(false)
                 .setFullScreenIntent(fullScreenPendingIntent, true)
                 .setContentIntent(fullScreenPendingIntent)
+                .addAction(android.R.drawable.sym_action_call, "Atender", answerPendingIntent)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Recusar", rejectPendingIntent)
                 .build()
 
             NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, notification)
@@ -215,6 +288,7 @@ object LivreChatNotificationManager {
 
     fun cancelCallNotification(context: Context) {
         try {
+            stopIncomingRingtone()
             NotificationManagerCompat.from(context).cancel(CALL_NOTIFICATION_ID)
         } catch (e: Exception) {}
     }

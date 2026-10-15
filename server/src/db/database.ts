@@ -1933,6 +1933,20 @@ class DatabaseService {
     }).sort((a, b) => a.created_at.localeCompare(b.created_at));
   }
 
+  public async getStatusById(statusId: string): Promise<StatusRecord | null> {
+    const mem = this.memoryStore.statuses.find(s => s.id === statusId);
+    if (mem) return mem;
+    if (this.pgPool) {
+      try {
+        const res = await this.pgPool.query('SELECT * FROM statuses WHERE id = $1', [statusId]);
+        if (res.rows.length > 0) return res.rows[0];
+      } catch (e) {
+        console.warn('[Database] Erro PG getStatusById:', e);
+      }
+    }
+    return null;
+  }
+
   public async addStatusReaction(statusId: string, reaction: StatusReactionRecord): Promise<void> {
     const status = this.memoryStore.statuses.find(s => s.id === statusId);
     if (status) {

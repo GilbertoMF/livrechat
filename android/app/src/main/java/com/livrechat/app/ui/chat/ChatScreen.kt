@@ -29,6 +29,9 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -99,7 +102,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ChatScreen(
     conversationId: String,
@@ -231,10 +234,11 @@ fun ChatScreen(
         }
     }
 
+    val isImeVisible = WindowInsets.isImeVisible
     val imeBottom = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current)
-    LaunchedEffect(imeBottom) {
-        if (imeBottom > 0 && messages.isNotEmpty()) {
-            delay(60)
+    LaunchedEffect(isImeVisible, imeBottom > 0) {
+        if ((isImeVisible || imeBottom > 0) && messages.isNotEmpty()) {
+            delay(120)
             listState.animateScrollToItem(messages.size - 1)
             showScrollToBottomButton = false
             unreadBelowCount = 0
@@ -1373,6 +1377,68 @@ fun ChatScreen(
                     context.startActivity(Intent.createChooser(sendIntent, "Encaminhar via"))
                 } catch (e: Exception) {}
             },
+            onPostToFlash = {
+                messageActionTarget = null
+                scope.launch {
+                    try {
+                        val isVideo = target.messageType == "video"
+                        val clean = if (target.content.contains(",")) target.content.substringAfter(",") else target.content
+                        val dataUri = if (isVideo) "data:video/mp4;base64,$clean" else "data:image/jpeg;base64,$clean"
+                        val res = app.apiClient.apiService.createStatus(
+                            mapOf(
+                                "contentType" to if (isVideo) "video" else "image",
+                                "content" to dataUri,
+                                "caption" to (target.iv?.split("|")?.getOrNull(2) ?: ""),
+                                "avatarUrl" to (prefs.userAvatarUrl ?: ""),
+                                "displayName" to (prefs.currentDisplayName ?: prefs.currentUsername ?: "Usuário")
+                            )
+                        )
+                        if (res.isSuccessful) {
+                            Toast.makeText(context, "Publicado no Flash! ⚡", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Erro ao publicar no Flash", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Erro ao publicar no Flash: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onCreateSticker = {
+                messageActionTarget = null
+                viewModel.sendStickerMessage(conversationId, target.content, otherUserId)
+                Toast.makeText(context, "Figurinha criada e enviada! ✨", Toast.LENGTH_SHORT).show()
+            },
+            onSaveMedia = {
+                messageActionTarget = null
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        if (target.messageType == "image") {
+                            val bmp = MediaFileManager.decodeAndCorrectBitmap(context, target.content)
+                            if (bmp != null) {
+                                saveBitmapToGallery(context, bmp)
+                            }
+                        } else {
+                            val parts = target.iv?.split("|") ?: emptyList()
+                            val fName = parts.getOrNull(0)?.ifBlank { null } ?: "midia_${System.currentTimeMillis()}"
+                            val mime = when (target.messageType) {
+                                "video" -> "video/mp4"
+                                "audio" -> "audio/mp4"
+                                else -> "application/octet-stream"
+                            }
+                            openMediaFile(context, target.content, fName, mime)
+                        }
+                    } catch (e: Exception) {}
+                }
+            },
+            onCopy = {
+                messageActionTarget = null
+                try {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Mensagem LivreChat", target.content)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(context, "Copiado para a área de transferência! 📋", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {}
+            },
             onDelete = {
                 selectedMessageForAction = target
                 messageActionTarget = null
@@ -1393,9 +1459,39 @@ fun ChatScreen(
     }
 
     if (viewingImageBase64 != null) {
+        val imgToView = viewingImageBase64!!
         FullscreenImageViewerDialog(
-            base64Content = viewingImageBase64!!,
-            onDismiss = { viewingImageBase64 = null }
+            base64Content = imgToView,
+            onDismiss = { viewingImageBase64 = null },
+            onPostToFlash = { b64 ->
+                scope.launch {
+                    try {
+                        val clean = if (b64.contains(",")) b64.substringAfter(",") else b64
+                        val dataUri = "data:image/jpeg;base64,$clean"
+                        val res = app.apiClient.apiService.createStatus(
+                            mapOf(
+                                "contentType" to "image",
+                                "content" to dataUri,
+                                "caption" to "",
+                                "avatarUrl" to (prefs.userAvatarUrl ?: ""),
+                                "displayName" to (prefs.currentDisplayName ?: prefs.currentUsername ?: "Usuário")
+                            )
+                        )
+                        if (res.isSuccessful) {
+                            Toast.makeText(context, "Publicado no Flash! ⚡", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Erro ao publicar no Flash", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onCreateSticker = { b64 ->
+                viewModel.sendStickerMessage(conversationId, b64, otherUserId)
+                Toast.makeText(context, "Figurinha criada e enviada! ✨", Toast.LENGTH_SHORT).show()
+                viewingImageBase64 = null
+            }
         )
     }
 
@@ -1431,26 +1527,26 @@ fun MessageBubble(
         label = "swipe_reply"
     )
 
+    val draggableState = rememberDraggableState { delta ->
+        if (delta > 0 || dragOffset > 0) {
+            dragOffset = (dragOffset + delta * 0.7f).coerceIn(0f, 130f)
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .pointerInput(message.id) {
-                detectHorizontalDragGestures(
-                    onDragEnd = {
-                        if (dragOffset >= 115f) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onSwipeToReply(message)
-                        }
-                        dragOffset = 0f
-                    },
-                    onDragCancel = { dragOffset = 0f },
-                    onHorizontalDrag = { _, dragAmount ->
-                        if (dragAmount > 0 || dragOffset > 0) {
-                            dragOffset = (dragOffset + dragAmount * 0.7f).coerceIn(0f, 130f)
-                        }
+            .draggable(
+                state = draggableState,
+                orientation = Orientation.Horizontal,
+                onDragStopped = {
+                    if (dragOffset >= 115f) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onSwipeToReply(message)
                     }
-                )
-            }
+                    dragOffset = 0f
+                }
+            )
     ) {
         // Reply circle icon appears on left while dragging right
         if (animatedOffset > 8f) {
@@ -2306,11 +2402,12 @@ fun FileMessageBubbleContent(
 @Composable
 fun FullscreenImageViewerDialog(
     base64Content: String,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onPostToFlash: ((String) -> Unit)? = null,
+    onCreateSticker: ((String) -> Unit)? = null
 ) {
     var decodedBitmap by remember(base64Content) { mutableStateOf<Bitmap?>(null) }
     val context = LocalContext.current
-
     var rotationDegrees by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(base64Content) {
@@ -2347,6 +2444,7 @@ fun FullscreenImageViewerDialog(
                 )
             }
 
+            // Top Bar: Back & Options
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2374,7 +2472,114 @@ fun FullscreenImageViewerDialog(
                     }
                 }
             }
+
+            // Bottom Action Bar: WhatsApp-style Action Strip
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                color = Color.Transparent
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 1. Postar no Flash
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable {
+                            onPostToFlash?.invoke(base64Content)
+                            onDismiss()
+                        }
+                    ) {
+                        Icon(Icons.Default.Bolt, contentDescription = "Postar no Flash", tint = Color(0xFF25D366), modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Flash", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    // 2. Criar Figurinha
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable {
+                            onCreateSticker?.invoke(base64Content)
+                            onDismiss()
+                        }
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "Criar Figurinha", tint = Color(0xFF7F66FF), modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Figurinha", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    // 3. Girar
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable {
+                            rotationDegrees = (rotationDegrees + 90f) % 360f
+                        }
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Girar", tint = Color.White, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Girar", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    // 4. Salvar na Galeria
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable {
+                            decodedBitmap?.let { bmp ->
+                                saveBitmapToGallery(context, bmp)
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.SaveAlt, contentDescription = "Salvar na Galeria", tint = Color.White, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Salvar", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    // 5. Compartilhar
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable {
+                            openMediaFile(context, base64Content, "foto_${System.currentTimeMillis()}.jpg", "image/jpeg")
+                        }
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = "Compartilhar", tint = Color.White, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Enviar", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
         }
+    }
+}
+
+fun saveBitmapToGallery(context: Context, bitmap: Bitmap) {
+    try {
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "livrechat_${System.currentTimeMillis()}.jpg")
+            put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/LivreChat")
+                put(android.provider.MediaStore.Images.Media.IS_PENDING, 1)
+            }
+        }
+        val uri = context.contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+        if (uri != null) {
+            context.contentResolver.openOutputStream(uri)?.use { os ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 95, os)
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                values.clear()
+                values.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0)
+                context.contentResolver.update(uri, values, null, null)
+            }
+            Toast.makeText(context, "Imagem salva na Galeria com sucesso!", Toast.LENGTH_SHORT).show()
+        }
+    } catch (e: Exception) {
+        Toast.makeText(context, "Erro ao salvar na Galeria: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }
 

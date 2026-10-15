@@ -12,6 +12,9 @@ import android.media.ExifInterface
 import android.net.Uri
 import android.os.Build
 import android.util.Base64
+import android.app.Activity
+import android.content.Intent
+import android.media.RingtoneManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -288,6 +291,61 @@ fun SettingsScreen(
                         Toast.makeText(context, "Erro ao selecionar imagem", Toast.LENGTH_SHORT).show()
                     }
                 }
+            }
+        }
+    }
+
+    var callRingtoneName by remember { mutableStateOf(prefs.callRingtoneName) }
+    var notifRingtoneName by remember { mutableStateOf(prefs.notificationRingtoneName) }
+
+    val callRingtoneLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            }
+            if (uri != null) {
+                val ringtone = RingtoneManager.getRingtone(context, uri)
+                val title = ringtone?.getTitle(context) ?: "Toque Personalizado"
+                prefs.callRingtoneUri = uri.toString()
+                prefs.callRingtoneName = title
+                callRingtoneName = title
+                Toast.makeText(context, "Toque de chamada: $title", Toast.LENGTH_SHORT).show()
+            } else {
+                prefs.callRingtoneUri = null
+                prefs.callRingtoneName = "Padrão do Sistema"
+                callRingtoneName = "Padrão do Sistema"
+                Toast.makeText(context, "Toque de chamada restaurado para padrão", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    val notifRingtoneLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            }
+            if (uri != null) {
+                val ringtone = RingtoneManager.getRingtone(context, uri)
+                val title = ringtone?.getTitle(context) ?: "Som Personalizado"
+                prefs.notificationRingtoneUri = uri.toString()
+                prefs.notificationRingtoneName = title
+                notifRingtoneName = title
+                Toast.makeText(context, "Som de mensagem: $title", Toast.LENGTH_SHORT).show()
+            } else {
+                prefs.notificationRingtoneUri = null
+                prefs.notificationRingtoneName = "Padrão do Sistema"
+                notifRingtoneName = "Padrão do Sistema"
+                Toast.makeText(context, "Som de mensagem restaurado para padrão", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -945,6 +1003,76 @@ fun SettingsScreen(
                                 prefs.conversationSounds = it
                             }
                         )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+
+                    // Toque de Chamada
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                try {
+                                    val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                                        putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_RINGTONE)
+                                        putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Selecione o toque de chamada")
+                                        putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                                        putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                                        val existingUri = prefs.callRingtoneUri?.let { Uri.parse(it) }
+                                            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                                        putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, existingUri)
+                                    }
+                                    callRingtoneLauncher.launch(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Não foi possível abrir o seletor de toques: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Toque de Chamada", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(callRingtoneName, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+
+                    // Som de Notificação
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                try {
+                                    val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                                        putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION)
+                                        putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Selecione o som de notificação")
+                                        putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                                        putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
+                                        val existingUri = prefs.notificationRingtoneUri?.let { Uri.parse(it) }
+                                            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                                        putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, existingUri)
+                                    }
+                                    notifRingtoneLauncher.launch(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Não foi possível abrir o seletor de sons: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.MusicNote, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Som de Notificação de Mensagens", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(notifRingtoneName, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             },

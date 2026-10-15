@@ -54,6 +54,20 @@ class NotificationActionReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
+
+        if (action == "com.livrechat.app.ACTION_REJECT_CALL") {
+            val callerId = intent.getStringExtra("callerId")
+            LivreChatNotificationManager.cancelCallNotification(context)
+            if (!callerId.isNullOrBlank()) {
+                receiverScope.launch {
+                    try {
+                        LivreChatApp.instance.connectionManager.getClient().sendCallReject(callerId, "Chamada recusada")
+                    } catch (e: Exception) {}
+                }
+            }
+            return
+        }
+
         val conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID) ?: return
         val senderName = intent.getStringExtra(EXTRA_SENDER_NAME) ?: "LivreChat"
         val messageId = intent.getStringExtra(EXTRA_MESSAGE_ID)

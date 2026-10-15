@@ -32,6 +32,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -140,7 +145,12 @@ fun HomeScreen(
             try {
                 val res = apiService.getStatuses()
                 if (res.isSuccessful && res.body() != null) {
-                    statusesList = res.body()!!
+                    val freshList = res.body()!!
+                    statusesList = freshList
+                    if (activeStatusViewerList != null) {
+                        val currentActiveIds = activeStatusViewerList!!.map { it.id }.toSet()
+                        activeStatusViewerList = freshList.filter { it.id in currentActiveIds }
+                    }
                 }
             } catch (e: Exception) {}
         }
@@ -158,7 +168,16 @@ fun HomeScreen(
         if (selectedTab == 1) {
             loadStatuses()
             while (isActive) {
-                delay(15000L)
+                delay(10000L)
+                loadStatuses()
+            }
+        }
+    }
+
+    LaunchedEffect(activeStatusViewerList != null) {
+        if (activeStatusViewerList != null) {
+            while (isActive) {
+                delay(4000L)
                 loadStatuses()
             }
         }
@@ -1926,17 +1945,24 @@ fun FullScreenStatusViewer(
     var progress by remember { mutableStateOf(0f) }
     var isPaused by remember { mutableStateOf(false) }
     var showViewersSheet by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+    var imageScale by remember(currentIndex) { mutableFloatStateOf(1f) }
+    var imageOffset by remember(currentIndex) { mutableStateOf(Offset.Zero) }
+    var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
 
     val currentStatus = statuses.getOrNull(currentIndex) ?: run {
         onDismiss()
         return
     }
 
-    LaunchedEffect(showViewersSheet) {
-        isPaused = showViewersSheet
+    LaunchedEffect(showViewersSheet, showDeleteConfirmDialog) {
+        isPaused = showViewersSheet || showDeleteConfirmDialog
     }
 
     LaunchedEffect(currentStatus.id) {
+        imageScale = 1f
+        imageOffset = Offset.Zero
         if (currentStatus.userId != currentUserId) {
             onRecordStatusView?.invoke(currentStatus.id, currentStatus.userId)
         }
@@ -1964,6 +1990,26 @@ fun FullScreenStatusViewer(
             audioCurrentMs = statusMediaPlayer?.currentPosition ?: 0
             delay(100)
         }
+    }
+
+    LaunchedEffect(isPaused) {
+        try {
+            if (isPaused) {
+                if (videoViewRef?.isPlaying == true) {
+                    videoViewRef?.pause()
+                }
+                if (statusMediaPlayer?.isPlaying == true) {
+                    statusMediaPlayer?.pause()
+                }
+            } else {
+                if (videoViewRef != null && !videoViewRef!!.isPlaying) {
+                    videoViewRef?.start()
+                }
+                if (isAudioPlaying && statusMediaPlayer?.isPlaying == false) {
+                    statusMediaPlayer?.start()
+                }
+            }
+        } catch (e: Exception) {}
     }
 
     DisposableEffect(currentStatus) {
@@ -2050,32 +2096,6 @@ fun FullScreenStatusViewer(
                 .fillMaxSize()
                 .background(backgroundColor)
         ) {
-            // Tap area: Left half previous, Right half next
-            Row(modifier = Modifier.fillMaxSize()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .clickable {
-                            if (currentIndex > 0) {
-                                currentIndex--
-                            }
-                        }
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .clickable {
-                            if (currentIndex < statuses.size - 1) {
-                                currentIndex++
-                            } else {
-                                onDismiss()
-                            }
-                        }
-                )
-            }
-
             // Main Content Centered
             Box(
                 modifier = Modifier
@@ -2110,18 +2130,38 @@ fun FullScreenStatusViewer(
                             }
                         }
 
+                        val transformState = rememberTransformableState { zoomChange, panChange, _ ->
+                            imageScale = (imageScale * zoomChange).coerceIn(1f, 4.5f)
+                            if (imageScale > 1.05f) {
+                                imageOffset += panChange
+                                isPaused = true
+                            } else {
+                                imageOffset = Offset.Zero
+                            }
+                        }
+
+                        val zoomModifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                scaleX = imageScale
+                                scaleY = imageScale
+                                translationX = imageOffset.x
+                                translationY = imageOffset.y
+                            }
+                            .transformable(transformState)
+
                         if (decodedBitmap != null) {
                             Image(
                                 bitmap = decodedBitmap.asImageBitmap(),
                                 contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = zoomModifier,
                                 contentScale = ContentScale.Fit
                             )
                         } else {
                             AsyncImage(
                                 model = imageContent,
                                 contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = zoomModifier,
                                 contentScale = ContentScale.Fit
                             )
                         }
@@ -2157,6 +2197,7 @@ fun FullScreenStatusViewer(
                                             mp.isLooping = true
                                             start()
                                         }
+                                        videoViewRef = this
                                     }
                                 },
                                 modifier = Modifier.fillMaxSize()
@@ -2421,6 +2462,52 @@ fun FullScreenStatusViewer(
                     }
                 }
             }
+
+            // Interactive Gesture Overlay (Tap Left = Previous, Tap Right = Next, Hold = Pause, DoubleTap = Zoom Reset)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 90.dp, bottom = if (currentStatus.userId != currentUserId) 90.dp else 50.dp)
+                    .pointerInput(currentIndex) {
+                        detectTapGestures(
+                            onPress = {
+                                isPaused = true
+                                try {
+                                    tryAwaitRelease()
+                                } finally {
+                                    isPaused = false
+                                }
+                            },
+                            onTap = { tapOffset ->
+                                if (imageScale > 1.05f) {
+                                    imageScale = 1f
+                                    imageOffset = Offset.Zero
+                                    return@detectTapGestures
+                                }
+                                val screenWidth = size.width
+                                if (tapOffset.x < screenWidth * 0.35f) {
+                                    if (currentIndex > 0) {
+                                        currentIndex--
+                                    }
+                                } else {
+                                    if (currentIndex < statuses.size - 1) {
+                                        currentIndex++
+                                    } else {
+                                        onDismiss()
+                                    }
+                                }
+                            },
+                            onDoubleTap = {
+                                if (imageScale > 1f) {
+                                    imageScale = 1f
+                                    imageOffset = Offset.Zero
+                                } else if (currentStatus.contentType == "image") {
+                                    imageScale = 2.2f
+                                }
+                            }
+                        )
+                    }
+            )
 
             // Image/Video Caption at bottom
             if ((currentStatus.contentType == "image" || currentStatus.contentType == "video") && !currentStatus.caption.isNullOrBlank()) {
@@ -2863,11 +2950,50 @@ fun FullScreenStatusViewer(
                     }
 
                     if (currentStatus.userId == currentUserId) {
-                        IconButton(onClick = { onDeleteStatus(currentStatus.id) }) {
+                        IconButton(onClick = {
+                            isPaused = true
+                            showDeleteConfirmDialog = true
+                        }) {
                             Icon(Icons.Default.Delete, contentDescription = "Apagar Flash", tint = DangerRed)
                         }
                     }
                 }
+            }
+
+            if (showDeleteConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showDeleteConfirmDialog = false
+                        isPaused = false
+                    },
+                    title = {
+                        Text("Excluir este Flash?", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    },
+                    text = {
+                        Text("Esta atualização do Flash será apagada para todos os seus contatos.")
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                showDeleteConfirmDialog = false
+                                onDeleteStatus(currentStatus.id)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = DangerRed)
+                        ) {
+                            Text("Excluir", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                showDeleteConfirmDialog = false
+                                isPaused = false
+                            }
+                        ) {
+                            Text("Cancelar")
+                        }
+                    }
+                )
             }
         }
     }

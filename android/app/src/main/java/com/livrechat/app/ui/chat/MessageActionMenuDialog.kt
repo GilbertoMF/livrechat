@@ -36,7 +36,11 @@ fun MessageActionMenuDialog(
     onDelete: () -> Unit,
     onStar: () -> Unit,
     onPin: () -> Unit,
-    onInfo: () -> Unit
+    onInfo: () -> Unit,
+    onPostToFlash: (() -> Unit)? = null,
+    onCreateSticker: (() -> Unit)? = null,
+    onSaveMedia: (() -> Unit)? = null,
+    onCopy: (() -> Unit)? = null
 ) {
     val quickReactions = listOf("👍", "❤️", "😂", "😮", "😢", "🙏", "👏")
     var showMoreEmojis by remember { mutableStateOf(false) }
@@ -148,7 +152,7 @@ fun MessageActionMenuDialog(
                     color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 6.dp,
                     shadowElevation = 8.dp,
-                    modifier = Modifier.width(220.dp)
+                    modifier = Modifier.width(230.dp)
                 ) {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
                         ActionMenuItem(
@@ -159,6 +163,50 @@ fun MessageActionMenuDialog(
                                 onDismiss()
                             }
                         )
+
+                        if (onPostToFlash != null && (message.messageType == "image" || message.messageType == "video")) {
+                            ActionMenuItem(
+                                icon = Icons.Default.Bolt,
+                                text = "Postar no Flash",
+                                onClick = {
+                                    onPostToFlash()
+                                    onDismiss()
+                                }
+                            )
+                        }
+
+                        if (onCreateSticker != null && message.messageType == "image") {
+                            ActionMenuItem(
+                                icon = Icons.Default.AutoAwesome,
+                                text = "Criar Figurinha",
+                                onClick = {
+                                    onCreateSticker()
+                                    onDismiss()
+                                }
+                            )
+                        }
+
+                        if (onSaveMedia != null && (message.messageType == "image" || message.messageType == "video" || message.messageType == "audio" || message.messageType == "file")) {
+                            ActionMenuItem(
+                                icon = Icons.Default.SaveAlt,
+                                text = "Salvar no Dispositivo",
+                                onClick = {
+                                    onSaveMedia()
+                                    onDismiss()
+                                }
+                            )
+                        }
+
+                        if (onCopy != null) {
+                            ActionMenuItem(
+                                icon = Icons.Default.ContentCopy,
+                                text = "Copiar",
+                                onClick = {
+                                    onCopy()
+                                    onDismiss()
+                                }
+                            )
+                        }
 
                         ActionMenuItem(
                             icon = Icons.Default.Share,

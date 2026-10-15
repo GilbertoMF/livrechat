@@ -118,6 +118,22 @@ export class StatusController {
       };
       await db.addStatusView(statusId, view);
 
+      try {
+        const status = await db.getStatusById(statusId);
+        const authorId = status?.user_id;
+        if (authorId && authorId !== userId) {
+          wsManager.sendToUser(authorId, {
+            type: 'status:view',
+            statusId,
+            fromUserId: userId,
+            fromUsername: view.username,
+            displayName: view.display_name,
+            avatarUrl: view.avatar_url,
+            view
+          });
+        }
+      } catch (wsErr) {}
+
       res.status(200).json({ success: true, view });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -142,6 +158,23 @@ export class StatusController {
         created_at: new Date().toISOString()
       };
       await db.addStatusReaction(statusId, reaction);
+
+      try {
+        const status = await db.getStatusById(statusId);
+        const authorId = status?.user_id;
+        if (authorId && authorId !== userId) {
+          wsManager.sendToUser(authorId, {
+            type: 'status:reaction',
+            statusId,
+            fromUserId: userId,
+            fromUsername: reaction.username,
+            displayName: reaction.display_name,
+            avatarUrl: reaction.avatar_url,
+            emoji,
+            reaction
+          });
+        }
+      } catch (wsErr) {}
 
       res.status(200).json({ success: true, reaction });
     } catch (e: any) {
