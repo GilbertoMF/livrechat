@@ -61,6 +61,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     private var timerJob: Job? = null
     private var webRTCManager: WebRTCManager? = null
     private val connectionManager = app.connectionManager
+    private var callStartTimeMs: Long = 0L
 
     init {
         webRTCManager = WebRTCManager(app, this)
@@ -146,17 +147,42 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
         _isSpeaker.value = webRTCManager?.toggleSpeaker() ?: false
     }
 
+    fun playCallEndedTone() {
+        try {
+            val toneGen = android.media.ToneGenerator(android.media.AudioManager.STREAM_VOICE_CALL, 90)
+            toneGen.startTone(android.media.ToneGenerator.TONE_PROP_PROMPT, 300)
+            viewModelScope.launch(Dispatchers.IO) {
+                delay(400)
+                try { toneGen.release() } catch (t: Throwable) {}
+            }
+        } catch (e: Throwable) {
+            try {
+                val toneGen = android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, 90)
+                toneGen.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 300)
+                viewModelScope.launch(Dispatchers.IO) {
+                    delay(400)
+                    try { toneGen.release() } catch (t: Throwable) {}
+                }
+            } catch (t: Throwable) {}
+        }
+    }
+
     private fun startTimer() {
+        if (callStartTimeMs == 0L) {
+            callStartTimeMs = System.currentTimeMillis()
+        }
         if (timerJob?.isActive == true) return
         timerJob = viewModelScope.launch {
             while (_callState.value == CallState.CONNECTED || _callState.value == CallState.RECONNECTING) {
-                delay(1000)
-                _durationSeconds.value++
+                val elapsed = ((System.currentTimeMillis() - callStartTimeMs) / 1000).toInt()
+                _durationSeconds.value = maxOf(0, elapsed)
+                delay(500)
             }
         }
     }
 
     private fun cleanupCall() {
+        playCallEndedTone()
         LivreChatNotificationManager.cancelCallNotification(app)
         timerJob?.cancel()
         CallForegroundService.stop(app)
@@ -167,6 +193,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
             _callInfo.value = null
             _isMuted.value = false
             _isSpeaker.value = false
+            callStartTimeMs = 0L
         }
     }
 
@@ -202,7 +229,8 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
         if (info.isOutgoing) {
             connectionManager.getClient().sendCallOffer(info.contactUserId, sdp.description)
         } else {
-            connectionManager.getClient().sendCallAnswer(info.contactUserId, sdp.description)
+            val startTs = if (callStartTimeMs > 0L) callStartTimeMs else System.currentTimeMillis().also { callStartTimeMs = it }
+            connectionManager.getClient().sendCallAnswer(info.contactUserId, sdp.description, startTs)
         }
     }
 
@@ -238,6 +266,13 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     }
 
     override fun onCallAnswered(calleeId: String, sdp: String) {
+        onCallAnswered(calleeId, sdp, 0L)
+    }
+
+    override fun onCallAnswered(calleeId: String, sdp: String, startedAt: Long) {
+        if (startedAt > 0L) {
+            callStartTimeMs = startedAt
+        }
         webRTCManager?.onRemoteAnswerReceived(sdp)
     }
 

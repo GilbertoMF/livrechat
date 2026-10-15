@@ -233,7 +233,17 @@ fun LivreChatNavGraph(
         composable(Routes.ACTIVE_CALL) {
             ActiveCallScreen(
                 viewModel = callViewModel,
-                onCallFinished = { navController.popBackStack() }
+                onCallFinished = {
+                    val currentRoute = navController.currentBackStackEntry?.destination?.route
+                    if (currentRoute == Routes.ACTIVE_CALL) {
+                        val popped = navController.popBackStack()
+                        if (!popped || navController.currentBackStackEntry == null) {
+                            navController.navigate(Routes.HOME) {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        }
+                    }
+                }
             )
         }
 
@@ -245,7 +255,17 @@ fun LivreChatNavGraph(
                         popUpTo(Routes.INCOMING_CALL) { inclusive = true }
                     }
                 },
-                onCallRejected = { navController.popBackStack() }
+                onCallRejected = {
+                    val currentRoute = navController.currentBackStackEntry?.destination?.route
+                    if (currentRoute == Routes.INCOMING_CALL) {
+                        val popped = navController.popBackStack()
+                        if (!popped || navController.currentBackStackEntry == null) {
+                            navController.navigate(Routes.HOME) {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        }
+                    }
+                }
             )
         }
 

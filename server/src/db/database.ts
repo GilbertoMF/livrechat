@@ -1364,6 +1364,11 @@ class DatabaseService {
               SELECT 1 FROM message_receipts r
               WHERE r.message_id = m.id AND r.user_id = $1 AND r.status IN ('delivered', 'read')
             )
+            AND NOT EXISTS (
+              SELECT 1 FROM blocked_users b
+              WHERE (b.blocker_id = $1 AND b.blocked_id = m.sender_id)
+                 OR (b.blocker_id = m.sender_id AND b.blocked_id = $1)
+            )
           ORDER BY m.created_at ASC
           LIMIT 100
         `;
@@ -1389,6 +1394,10 @@ class DatabaseService {
     const userConvs = this.memoryStore.conversation_members.filter(cm => cm.user_id === userId).map(cm => cm.conversation_id);
     return this.memoryStore.messages.filter(m => {
       if (!userConvs.includes(m.conversation_id) || m.sender_id === userId || m.is_deleted) return false;
+      if (this.memoryStore.blocked_users.some(b => 
+        (b.blocker_id === userId && b.blocked_id === m.sender_id) ||
+        (b.blocker_id === m.sender_id && b.blocked_id === userId)
+      )) return false;
       const hasReceipt = this.memoryStore.message_receipts.some(r => r.message_id === m.id && r.user_id === userId && (r.status === 'delivered' || r.status === 'read'));
       return !hasReceipt;
     });

@@ -29,6 +29,9 @@ interface WebSocketEventsListener {
     // WebRTC Signaling
     fun onIncomingCall(callerId: String, callerUsername: String, callerDisplayName: String, callerAvatarUrl: String?, sdp: String)
     fun onCallAnswered(calleeId: String, sdp: String)
+    fun onCallAnswered(calleeId: String, sdp: String, startedAt: Long) {
+        onCallAnswered(calleeId, sdp)
+    }
     fun onIceCandidateReceived(fromUserId: String, candidate: JsonObject)
     fun onCallRinging(fromUserId: String)
     fun onCallRejected(fromUserId: String, reason: String)
@@ -200,7 +203,8 @@ class WebSocketClient(
                         "call:answered" -> {
                             val calleeId = json.get("calleeId").asStringOrDefault()
                             val sdp = json.get("sdp").asStringOrDefault()
-                            listener.onCallAnswered(calleeId, sdp)
+                            val startedAt = if (json.has("startedAt") && !json.get("startedAt").isJsonNull) json.get("startedAt").asLong else 0L
+                            listener.onCallAnswered(calleeId, sdp, startedAt)
                         }
                         "call:ice_candidate" -> {
                             val fromUserId = json.get("fromUserId").asStringOrDefault()
@@ -345,11 +349,12 @@ class WebSocketClient(
         return sendPayload(payload)
     }
 
-    fun sendCallAnswer(callerId: String, sdp: String): Boolean {
+    fun sendCallAnswer(callerId: String, sdp: String, startedAt: Long = System.currentTimeMillis()): Boolean {
         val payload = JsonObject().apply {
             addProperty("type", "call:answer")
             addProperty("callerId", callerId)
             addProperty("sdp", sdp)
+            addProperty("startedAt", startedAt)
         }
         return sendPayload(payload)
     }

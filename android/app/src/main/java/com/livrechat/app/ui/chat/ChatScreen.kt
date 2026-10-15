@@ -5,9 +5,12 @@ import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -187,12 +190,24 @@ fun ChatScreen(
     val prefs = remember { app.preferencesManager }
     val onlineUsers by app.connectionManager.onlineUsers.collectAsState()
     val lastSeenUsers by app.connectionManager.lastSeenUsers.collectAsState()
-    val isContactOnline = onlineUsers[otherUserId] == true
-    val contactLastSeen = lastSeenUsers[otherUserId]
+    var isContactBlocked by remember(otherUserId) { mutableStateOf(prefs.isUserBlocked(otherUserId)) }
+    val isContactOnline = if (isContactBlocked) false else (onlineUsers[otherUserId] == true)
+    val contactLastSeen = if (isContactBlocked) null else lastSeenUsers[otherUserId]
 
     LaunchedEffect(otherUserId) {
         if (otherUserId.isNotBlank()) {
-            app.connectionManager.queryUserStatus(otherUserId)
+            isContactBlocked = prefs.isUserBlocked(otherUserId)
+            try {
+                val blockedRes = app.apiClient.apiService.getBlockedUsers()
+                if (blockedRes.isSuccessful && blockedRes.body() != null) {
+                    val isBlockedOnServer = blockedRes.body()!!.any { it.id == otherUserId }
+                    prefs.setUserBlocked(otherUserId, isBlockedOnServer)
+                    isContactBlocked = isBlockedOnServer
+                }
+            } catch (e: Exception) {}
+            if (!isContactBlocked) {
+                app.connectionManager.queryUserStatus(otherUserId)
+            }
         }
     }
 
@@ -328,6 +343,39 @@ fun ChatScreen(
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var viewingImageBase64 by remember { mutableStateOf<String?>(null) }
     var viewingVideoMessage by remember { mutableStateOf<MessageEntity?>(null) }
+    var showWallpaperDialog by remember { mutableStateOf(false) }
+    var showUnblockDialog by remember { mutableStateOf(false) }
+    var currentWallpaper by remember(conversationId) {
+        mutableStateOf(prefs.getChatWallpaper(conversationId))
+    }
+
+    val wallpaperPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val wpDir = File(context.filesDir, "wallpapers").apply { mkdirs() }
+                    val destFile = File(wpDir, "wp_${conversationId}_${System.currentTimeMillis()}.jpg")
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        FileOutputStream(destFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    val path = destFile.absolutePath
+                    prefs.setChatWallpaper(conversationId, path)
+                    withContext(Dispatchers.Main) {
+                        currentWallpaper = path
+                        Toast.makeText(context, "Papel de parede atualizado!", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Erro ao carregar imagem", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -508,6 +556,177 @@ fun ChatScreen(
         )
     }
 
+    if (showUnblockDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnblockDialog = false },
+            title = { Text("Desbloquear contato?", fontWeight = FontWeight.Bold) },
+            text = { Text("Deseja desbloquear este contato para voltar a trocar mensagens e fazer chamadas?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnblockDialog = false
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            app.apiClient.apiService.unblockUser(otherUserId)
+                            prefs.setUserBlocked(otherUserId, false)
+                            withContext(Dispatchers.Main) {
+                                isContactBlocked = false
+                                Toast.makeText(context, "Contato desbloqueado", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "Erro ao desbloquear contato", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }) {
+                    Text("Desbloquear", color = BluePrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnblockDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (showWallpaperDialog) {
+        var applyToAll by remember { mutableStateOf(false) }
+        val presetColors = listOf(
+            "#0b141a" to "WhatsApp Escuro",
+            "#111b21" to "Carvão",
+            "#0f172a" to "Ardósia",
+            "#1e1b4b" to "Índigo",
+            "#064e3b" to "Verde Floresta",
+            "#450a0a" to "Vinho",
+            "#efeae2" to "WhatsApp Claro",
+            "#f1f5f9" to "Neve",
+            "#e0f2fe" to "Azul Suave"
+        )
+
+        AlertDialog(
+            onDismissRequest = { showWallpaperDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Palette, contentDescription = null, tint = BluePrimary, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text("Papel de Parede", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Personalize o fundo das conversas com uma foto da galeria ou uma cor sólida:",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            showWallpaperDialog = false
+                            wallpaperPickerLauncher.launch("image/*")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BluePrimary)
+                    ) {
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Escolher da Galeria")
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Cores Sólidas:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        for ((hex, _) in presetColors) {
+                            val c = try { Color(android.graphics.Color.parseColor(hex)) } catch (e: Exception) { Color.Gray }
+                            val isSelected = currentWallpaper == hex
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(c)
+                                    .border(
+                                        width = if (isSelected) 3.dp else 1.dp,
+                                        color = if (isSelected) BluePrimary else Color.White.copy(alpha = 0.5f),
+                                        shape = CircleShape
+                                    )
+                                    .clickable {
+                                        if (applyToAll) {
+                                            prefs.setChatWallpaper(null, hex)
+                                        }
+                                        prefs.setChatWallpaper(conversationId, hex)
+                                        currentWallpaper = hex
+                                        showWallpaperDialog = false
+                                        Toast.makeText(context, "Cor aplicada!", Toast.LENGTH_SHORT).show()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isSelected) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = if (hex.startsWith("#e") || hex.startsWith("#f")) Color.Black else Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { applyToAll = !applyToAll },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = applyToAll,
+                            onCheckedChange = { applyToAll = it }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Aplicar a todas as conversas", fontSize = 13.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (!currentWallpaper.isNullOrBlank()) {
+                        TextButton(
+                            onClick = {
+                                if (applyToAll) {
+                                    prefs.setChatWallpaper(null, null)
+                                }
+                                prefs.setChatWallpaper(conversationId, null)
+                                currentWallpaper = null
+                                showWallpaperDialog = false
+                                Toast.makeText(context, "Fundo padrão restaurado", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, tint = DangerRed, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Restaurar Padrão", color = DangerRed)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showWallpaperDialog = false }) {
+                    Text("Fechar")
+                }
+            }
+        )
+    }
+
     if (selectedMessageForAction != null) {
         val msg = selectedMessageForAction!!
         AlertDialog(
@@ -634,6 +853,10 @@ fun ChatScreen(
                 },
                 actions = {
                     IconButton(onClick = {
+                        if (isContactBlocked) {
+                            Toast.makeText(context, "Desbloqueie o contato para fazer chamadas", Toast.LENGTH_SHORT).show()
+                            return@IconButton
+                        }
                         onStartCall(
                             otherUserId,
                             otherDisplayName,
@@ -664,6 +887,16 @@ fun ChatScreen(
                                 },
                                 leadingIcon = {
                                     Icon(Icons.Default.Person, contentDescription = null, tint = BluePrimary)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Papel de parede") },
+                                onClick = {
+                                    showMenu = false
+                                    showWallpaperDialog = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Palette, contentDescription = null, tint = BluePrimary)
                                 }
                             )
                             DropdownMenuItem(
@@ -712,13 +945,45 @@ fun ChatScreen(
             )
         },
         bottomBar = {
-            // Chat Input Bar
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 8.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
+            if (isContactBlocked) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shadowElevation = 4.dp,
+                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showUnblockDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 18.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Block,
+                            contentDescription = null,
+                            tint = DangerRed,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Você bloqueou este contato. Toque para desbloquear.",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            } else {
+                // Chat Input Bar
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 8.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                     // Quoted message preview if replying
                     if (replyingToMessage != null) {
                         Surface(
@@ -1185,13 +1450,56 @@ fun ChatScreen(
                 }
             }
         }
-        }
+    }
+}
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // Custom chat wallpaper
+            if (!currentWallpaper.isNullOrBlank()) {
+                if (currentWallpaper!!.startsWith("#")) {
+                    val color = try {
+                        Color(android.graphics.Color.parseColor(currentWallpaper))
+                    } catch (e: Exception) {
+                        null
+                    }
+                    if (color != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(color)
+                        )
+                    }
+                } else {
+                    val file = File(currentWallpaper!!)
+                    if (file.exists() && file.length() > 0L) {
+                        val bitmap = remember(currentWallpaper) {
+                            try {
+                                BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                        if (bitmap != null) {
+                            Image(
+                                bitmap = bitmap,
+                                contentDescription = "Papel de parede",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.2f))
+                            )
+                        }
+                    }
+                }
+            }
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier

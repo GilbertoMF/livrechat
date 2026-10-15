@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../../middleware/auth';
 import { db } from '../../db/database';
 import { v4 as uuidv4 } from 'uuid';
+import { WebSocketManager } from '../../websocket/ws.server';
 
 export class UsersController {
   public static async getProfile(req: AuthRequest, res: Response) {
@@ -187,6 +188,23 @@ export class UsersController {
         return res.status(400).json({ error: 'ID do usuário a ser bloqueado é obrigatório.' });
       }
       const result = await db.blockUser(userId, blockedUserId);
+      try {
+        const wsManager = WebSocketManager.getInstance();
+        if (wsManager) {
+          wsManager.sendToUser(blockedUserId, {
+            type: 'user:status',
+            userId: userId,
+            status: 'offline',
+            timestamp: ''
+          });
+          wsManager.sendToUser(userId, {
+            type: 'user:status',
+            userId: blockedUserId,
+            status: 'offline',
+            timestamp: ''
+          });
+        }
+      } catch (wsErr) {}
       return res.status(200).json(result);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -198,6 +216,27 @@ export class UsersController {
       const userId = req.user!.userId;
       const { blockedUserId } = req.params;
       await db.unblockUser(userId, blockedUserId);
+      try {
+        const wsManager = WebSocketManager.getInstance();
+        if (wsManager) {
+          if (wsManager.isUserOnline(userId)) {
+            wsManager.sendToUser(blockedUserId, {
+              type: 'user:status',
+              userId: userId,
+              status: 'online',
+              timestamp: new Date().toISOString()
+            });
+          }
+          if (wsManager.isUserOnline(blockedUserId)) {
+            wsManager.sendToUser(userId, {
+              type: 'user:status',
+              userId: blockedUserId,
+              status: 'online',
+              timestamp: new Date().toISOString()
+            });
+          }
+        }
+      } catch (wsErr) {}
       return res.status(200).json({ success: true });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });

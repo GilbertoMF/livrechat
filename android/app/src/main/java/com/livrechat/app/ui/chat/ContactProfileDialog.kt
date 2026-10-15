@@ -76,14 +76,25 @@ fun ContactProfileDialog(
     var showClearConfirmDialog by remember { mutableStateOf(false) }
     var showEditNicknameDialog by remember { mutableStateOf(false) }
     var editNicknameInput by remember { mutableStateOf("") }
+    var isContactBlocked by remember { mutableStateOf(app.preferencesManager.isUserBlocked(otherUserId)) }
 
-    // Carrega perfil enriquecido do contato
+    // Carrega perfil enriquecido do contato e status de bloqueio
     LaunchedEffect(otherUserId) {
         withContext(Dispatchers.IO) {
             try {
                 val res = app.apiClient.apiService.getUserProfile(otherUserId)
                 if (res.isSuccessful && res.body() != null) {
                     userProfile = res.body()
+                }
+            } catch (e: Exception) {}
+            try {
+                val blockedRes = app.apiClient.apiService.getBlockedUsers()
+                if (blockedRes.isSuccessful && blockedRes.body() != null) {
+                    val isBlockedOnServer = blockedRes.body()!!.any { it.id == otherUserId }
+                    app.preferencesManager.setUserBlocked(otherUserId, isBlockedOnServer)
+                    withContext(Dispatchers.Main) {
+                        isContactBlocked = isBlockedOnServer
+                    }
                 }
             } catch (e: Exception) {}
         }
@@ -706,7 +717,7 @@ fun ContactProfileDialog(
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                             )
 
-                            // Bloquear Contato
+                            // Bloquear ou Desbloquear Contato
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -715,17 +726,17 @@ fun ContactProfileDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    Icons.Default.Block,
+                                    imageVector = if (isContactBlocked) Icons.Default.LockOpen else Icons.Default.Block,
                                     contentDescription = null,
-                                    tint = DangerRed,
+                                    tint = if (isContactBlocked) BluePrimary else DangerRed,
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Spacer(modifier = Modifier.width(14.dp))
                                 Text(
-                                    text = "Bloquear $displayTitle",
+                                    text = if (isContactBlocked) "Desbloquear $displayTitle" else "Bloquear $displayTitle",
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = DangerRed
+                                    color = if (isContactBlocked) BluePrimary else DangerRed
                                 )
                             }
                         }
@@ -792,19 +803,53 @@ fun ContactProfileDialog(
         )
     }
 
-    // Confirmação de Bloquear Contato
+    // Confirmação de Bloquear / Desbloquear Contato
     if (showBlockConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showBlockConfirmDialog = false },
-            title = { Text("Bloquear $displayTitle?", fontWeight = FontWeight.Bold) },
-            text = { Text("Contatos bloqueados não podem enviar mensagens nem fazer chamadas para você.") },
+            title = { Text(if (isContactBlocked) "Desbloquear $displayTitle?" else "Bloquear $displayTitle?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    if (isContactBlocked)
+                        "Ao desbloquear, vocês poderão conversar e fazer chamadas normalmente."
+                    else
+                        "Contatos bloqueados não podem enviar mensagens nem fazer chamadas para você."
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     showBlockConfirmDialog = false
-                    onBlockContact()
+                    val currentlyBlocked = isContactBlocked
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            if (currentlyBlocked) {
+                                app.apiClient.apiService.unblockUser(otherUserId)
+                                app.preferencesManager.setUserBlocked(otherUserId, false)
+                                withContext(Dispatchers.Main) {
+                                    isContactBlocked = false
+                                    Toast.makeText(context, "Contato desbloqueado", Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                app.apiClient.apiService.blockUser(mapOf("blockedUserId" to otherUserId, "targetUserId" to otherUserId))
+                                app.preferencesManager.setUserBlocked(otherUserId, true)
+                                withContext(Dispatchers.Main) {
+                                    isContactBlocked = true
+                                    Toast.makeText(context, "Contato bloqueado", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "Erro ao alterar bloqueio", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
                     onDismiss()
                 }) {
-                    Text("Bloquear", color = DangerRed, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = if (isContactBlocked) "Desbloquear" else "Bloquear",
+                        color = if (isContactBlocked) BluePrimary else DangerRed,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             },
             dismissButton = {

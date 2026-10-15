@@ -2001,7 +2001,7 @@ fun FullScreenStatusViewer(
         } catch (e: Exception) {}
     }
 
-    DisposableEffect(currentStatus) {
+    DisposableEffect(currentStatus.id) {
         audioCurrentMs = 0
         if (currentStatus.contentType == "audio" && currentStatus.content.isNotBlank()) {
             try {

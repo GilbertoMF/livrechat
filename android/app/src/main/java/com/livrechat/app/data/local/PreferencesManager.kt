@@ -118,9 +118,15 @@ class PreferencesManager(private val context: Context) {
         get() = prefs.getString(KEY_SELF_DESTRUCT_TIMER, "off") ?: "off"
         set(value) = prefs.edit().putString(KEY_SELF_DESTRUCT_TIMER, value).apply()
 
+    private val _blockScreenshotsFlow = kotlinx.coroutines.flow.MutableStateFlow(prefs.getBoolean(KEY_BLOCK_SCREENSHOTS, false))
+    val blockScreenshotsFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _blockScreenshotsFlow
+
     var blockScreenshots: Boolean
         get() = prefs.getBoolean(KEY_BLOCK_SCREENSHOTS, false)
-        set(value) = prefs.edit().putBoolean(KEY_BLOCK_SCREENSHOTS, value).apply()
+        set(value) {
+            prefs.edit().putBoolean(KEY_BLOCK_SCREENSHOTS, value).apply()
+            _blockScreenshotsFlow.value = value
+        }
 
     var readReceiptsEnabled: Boolean
         get() = prefs.getBoolean(KEY_READ_RECEIPTS, true)
@@ -230,7 +236,51 @@ class PreferencesManager(private val context: Context) {
         return if (name.isNullOrBlank()) null else name.trim()
     }
 
+    fun getChatWallpaper(conversationId: String?): String? {
+        if (!conversationId.isNullOrBlank()) {
+            val convWp = prefs.getString("chat_wallpaper_$conversationId", null)
+            if (!convWp.isNullOrBlank()) return convWp
+        }
+        return prefs.getString(KEY_GLOBAL_WALLPAPER, null)
+    }
+
+    fun setChatWallpaper(conversationId: String?, value: String?) {
+        if (!conversationId.isNullOrBlank()) {
+            if (value == null) {
+                prefs.edit().remove("chat_wallpaper_$conversationId").apply()
+            } else {
+                prefs.edit().putString("chat_wallpaper_$conversationId", value).apply()
+            }
+        } else {
+            if (value == null) {
+                prefs.edit().remove(KEY_GLOBAL_WALLPAPER).apply()
+            } else {
+                prefs.edit().putString(KEY_GLOBAL_WALLPAPER, value).apply()
+            }
+        }
+    }
+
+    fun isUserBlocked(userId: String): Boolean {
+        val currentBlocked = prefs.getStringSet("blocked_users_set", emptySet()) ?: emptySet()
+        return currentBlocked.contains(userId)
+    }
+
+    fun setUserBlocked(userId: String, blocked: Boolean) {
+        val currentBlocked = (prefs.getStringSet("blocked_users_set", emptySet()) ?: emptySet()).toMutableSet()
+        if (blocked) {
+            currentBlocked.add(userId)
+        } else {
+            currentBlocked.remove(userId)
+        }
+        prefs.edit().putStringSet("blocked_users_set", currentBlocked).apply()
+    }
+
+    fun getBlockedUserIds(): Set<String> {
+        return prefs.getStringSet("blocked_users_set", emptySet()) ?: emptySet()
+    }
+
     companion object {
+        private const val KEY_GLOBAL_WALLPAPER = "chat_wallpaper_global"
         private const val KEY_SERVER_URL = "server_url"
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_REFRESH_TOKEN = "refresh_token"

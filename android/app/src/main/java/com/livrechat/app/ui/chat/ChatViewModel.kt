@@ -206,6 +206,13 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             }
                         }
 
+                        val parsedCreatedAt = try {
+                            java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).parse(dto.createdAt.take(19))?.time ?: System.currentTimeMillis()
+                        } catch (e: Exception) {
+                            System.currentTimeMillis()
+                        }
+                        val msgCreatedAt = existing?.createdAt ?: parsedCreatedAt
+
                         MessageEntity(
                             id = dto.id,
                             conversationId = dto.conversationId,
@@ -218,7 +225,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             isOutgoing = dto.senderId == myId,
                             isEdited = dto.isEdited,
                             isDeleted = dto.isDeleted,
-                            createdAt = System.currentTimeMillis()
+                            createdAt = msgCreatedAt
                         )
                     }
                     db.messageDao().insertAll(entities)

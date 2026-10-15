@@ -75,7 +75,22 @@ class MainActivity : FragmentActivity() {
             }
         } catch (e: Exception) {}
 
+        if (prefs.blockScreenshots) {
+            window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+
         setContent {
+            val blockScreenshots by LivreChatApp.instance.preferencesManager.blockScreenshotsFlow.collectAsState()
+            LaunchedEffect(blockScreenshots) {
+                if (blockScreenshots) {
+                    window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                }
+            }
+
             val themeMode by LivreChatApp.instance.preferencesManager.themeFlow.collectAsState()
             val colorPalette by LivreChatApp.instance.preferencesManager.paletteFlow.collectAsState()
             val isDarkTheme = when (themeMode) {
@@ -145,6 +160,11 @@ class MainActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         val prefs = LivreChatApp.instance.preferencesManager
+        if (prefs.blockScreenshots) {
+            window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
         if (prefs.isBiometricEnabled && prefs.accessToken != null && !prefs.currentUserId.isNullOrBlank() && !isAppUnlockedState.value) {
             triggerBiometricUnlock()
         }

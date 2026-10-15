@@ -339,9 +339,13 @@ class ConnectionManager(
     }
 
     override fun onCallAnswered(calleeId: String, sdp: String) {
+        onCallAnswered(calleeId, sdp, 0L)
+    }
+
+    override fun onCallAnswered(calleeId: String, sdp: String, startedAt: Long) {
         LivreChatNotificationManager.cancelCallNotification(context)
         synchronized(listeners) {
-            listeners.forEach { it.onCallAnswered(calleeId, sdp) }
+            listeners.forEach { it.onCallAnswered(calleeId, sdp, startedAt) }
         }
     }
 

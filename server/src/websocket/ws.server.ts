@@ -52,12 +52,7 @@ export class WebSocketManager {
         this.userSockets.get(ws.userId)!.add(ws);
 
         if (isFirstConnection && ws.userId) {
-          this.broadcast({
-            type: 'user:status',
-            userId: ws.userId,
-            status: 'online',
-            timestamp: new Date().toISOString()
-          });
+          this.broadcastUserStatus(ws.userId, 'online').catch(() => {});
         }
 
         console.log(`[WS] Usuário conectado: ${ws.username} (${ws.userId})`);
@@ -127,12 +122,7 @@ export class WebSocketManager {
             set.delete(ws);
             if (set.size === 0) {
               this.userSockets.delete(ws.userId);
-              this.broadcast({
-                type: 'user:status',
-                userId: ws.userId,
-                status: 'offline',
-                timestamp: new Date().toISOString()
-              });
+              this.broadcastUserStatus(ws.userId, 'offline').catch(() => {});
             }
           }
           console.log(`[WS] Usuário desconectado: ${ws.username}`);
@@ -201,6 +191,11 @@ export class WebSocketManager {
 
           for (const memberId of members) {
             if (memberId !== senderId) {
+              const blocked = await db.isBlocked(senderId, memberId);
+              if (blocked) {
+                continue;
+              }
+
               const delivered = this.sendToUser(memberId, {
                 type: 'chat:message',
                 message: messageRecord
@@ -231,6 +226,10 @@ export class WebSocketManager {
 
         // 3. Persist to database in background
         (async () => {
+          if (targetUserId) {
+            const blocked = await db.isBlocked(senderId, targetUserId);
+            if (blocked) return;
+          }
           await db.ensureUserExists(senderId, senderWs.username || 'usuario');
           await db.ensureConversationMember(conversationId, senderId);
           if (targetUserId) {
@@ -269,6 +268,8 @@ export class WebSocketManager {
         }
         for (const memberId of members) {
           if (memberId !== senderId) {
+            const blocked = await db.isBlocked(senderId, memberId);
+            if (blocked) continue;
             this.sendToUser(memberId, {
               type: 'chat:typing',
               conversationId,
@@ -441,10 +442,12 @@ export class WebSocketManager {
 
       case 'call:answer': {
         const { callerId, sdp } = event;
+        const startedAt = Number(event.startedAt) || Date.now();
         this.sendToUser(callerId, {
           type: 'call:answered',
           calleeId: senderId,
-          sdp
+          sdp,
+          startedAt
         });
         break;
       }
@@ -513,6 +516,16 @@ export class WebSocketManager {
       case 'user:query_status': {
         const { targetUserId } = event;
         if (targetUserId) {
+          const blocked = await db.isBlocked(senderId, targetUserId);
+          if (blocked) {
+            senderWs.send(JSON.stringify({
+              type: 'user:status',
+              userId: targetUserId,
+              status: 'offline',
+              timestamp: ''
+            }));
+            return;
+          }
           const isOnline = this.isUserOnline(targetUserId);
           senderWs.send(JSON.stringify({
             type: 'user:status',
@@ -532,6 +545,41 @@ export class WebSocketManager {
   public isUserOnline(userId: string): boolean {
     const sockets = this.userSockets.get(userId);
     return !!sockets && sockets.size > 0;
+  }
+
+  public async broadcastUserStatus(userId: string, status: 'online' | 'offline') {
+    const onlinePayload = JSON.stringify({
+      type: 'user:status',
+      userId: userId,
+      status: status,
+      timestamp: status === 'online' ? new Date().toISOString() : ''
+    });
+
+    const offlinePayload = JSON.stringify({
+      type: 'user:status',
+      userId: userId,
+      status: 'offline',
+      timestamp: ''
+    });
+
+    for (const [targetUserId, sockets] of this.userSockets.entries()) {
+      if (targetUserId === userId) continue;
+      try {
+        const blocked = await db.isBlocked(userId, targetUserId);
+        const messageToSend = blocked ? offlinePayload : onlinePayload;
+        for (const ws of sockets) {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(messageToSend);
+          }
+        }
+      } catch (e) {
+        for (const ws of sockets) {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(onlinePayload);
+          }
+        }
+      }
+    }
   }
 
   public sendToUser(userId: string, payload: any): boolean {

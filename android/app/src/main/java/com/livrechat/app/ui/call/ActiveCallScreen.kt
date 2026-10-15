@@ -29,8 +29,11 @@ fun ActiveCallScreen(
     val isSpeaker by viewModel.isSpeaker.collectAsState()
     val durationSeconds by viewModel.durationSeconds.collectAsState()
 
+    var hasFinished by remember { mutableStateOf(false) }
+
     LaunchedEffect(callState) {
-        if (callState == CallState.ENDED || callState == CallState.IDLE) {
+        if (!hasFinished && (callState == CallState.ENDED || callState == CallState.IDLE)) {
+            hasFinished = true
             onCallFinished()
         }
     }
