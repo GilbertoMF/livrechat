@@ -249,25 +249,58 @@ fun ChatScreen(
         }
     }
 
+    val scrollToBottomSmoothly: () -> Unit = {
+        scope.launch {
+            if (messages.isNotEmpty()) {
+                val lastIdx = messages.size - 1
+                listState.scrollToItem(lastIdx)
+                delay(60)
+                listState.animateScrollToItem(lastIdx)
+                delay(120)
+                listState.scrollToItem(lastIdx)
+                delay(150)
+                listState.animateScrollToItem(lastIdx)
+                delay(180)
+                listState.scrollToItem(lastIdx)
+                showScrollToBottomButton = false
+                unreadBelowCount = 0
+            }
+        }
+    }
+
     val isImeVisible = WindowInsets.isImeVisible
     val imeBottom = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current)
     LaunchedEffect(isImeVisible, imeBottom) {
         if ((isImeVisible || imeBottom > 0) && messages.isNotEmpty()) {
-            delay(50)
-            listState.scrollToItem(messages.size - 1)
-            delay(180)
-            listState.animateScrollToItem(messages.size - 1)
+            val lastIdx = messages.size - 1
+            delay(40)
+            listState.scrollToItem(lastIdx)
             delay(120)
-            listState.scrollToItem(messages.size - 1)
+            listState.animateScrollToItem(lastIdx)
+            delay(150)
+            listState.scrollToItem(lastIdx)
+            delay(150)
+            listState.animateScrollToItem(lastIdx)
+            delay(180)
+            listState.scrollToItem(lastIdx)
             showScrollToBottomButton = false
             unreadBelowCount = 0
         }
     }
 
     LaunchedEffect(showEmojiStickerSheet) {
-        if (showEmojiStickerSheet && messages.isNotEmpty()) {
+        if (messages.isNotEmpty()) {
+            val lastIdx = messages.size - 1
+            delay(40)
+            listState.scrollToItem(lastIdx)
             delay(100)
-            listState.animateScrollToItem(messages.size - 1)
+            listState.animateScrollToItem(lastIdx)
+            delay(140)
+            listState.scrollToItem(lastIdx)
+            delay(160)
+            listState.animateScrollToItem(lastIdx)
+            delay(180)
+            listState.scrollToItem(lastIdx)
             showScrollToBottomButton = false
             unreadBelowCount = 0
         }
@@ -353,6 +386,7 @@ fun ChatScreen(
         } catch (e: Exception) {
             keyboardController?.show()
         }
+        scrollToBottomSmoothly()
     }
     val hideKeyboard = {
         try {
@@ -1311,6 +1345,7 @@ fun ChatScreen(
                                         hideKeyboard()
                                         showEmojiStickerSheet = true
                                     }
+                                    scrollToBottomSmoothly()
                                 }) {
                                     Icon(
                                         imageVector = if (showEmojiStickerSheet) Icons.Default.Keyboard else Icons.Default.SentimentSatisfied,
@@ -1361,8 +1396,8 @@ fun ChatScreen(
                                                     if (str.isNotBlank()) {
                                                         val now = System.currentTimeMillis()
                                                         if (now - lastTypingSentTime > 1500L) {
-                                                            lastTypingSentTime = now
-                                                            viewModel.sendTyping(true, otherUserId)
+                                                             lastTypingSentTime = now
+                                                             viewModel.sendTyping(true, otherUserId)
                                                         }
                                                         typingDebounceJob?.cancel()
                                                         typingDebounceJob = scope.launch {
@@ -1385,21 +1420,14 @@ fun ChatScreen(
                                                 if (showEmojiStickerSheet) {
                                                     showEmojiStickerSheet = false
                                                 }
-                                                scope.launch {
-                                                    delay(100)
-                                                    if (messages.isNotEmpty()) listState.scrollToItem(messages.size - 1)
-                                                    delay(220)
-                                                    if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
-                                                }
+                                                scrollToBottomSmoothly()
                                             }
                                         }
                                         et.setOnClickListener {
-                                            scope.launch {
-                                                delay(100)
-                                                if (messages.isNotEmpty()) listState.scrollToItem(messages.size - 1)
-                                                delay(220)
-                                                if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+                                            if (showEmojiStickerSheet) {
+                                                showEmojiStickerSheet = false
                                             }
+                                            scrollToBottomSmoothly()
                                         }
                                         et
                                     },
@@ -1509,12 +1537,17 @@ fun ChatScreen(
                         exit = shrinkVertically()
                     ) {
                         EmojiStickerPanel(
-                            onDismiss = { showEmojiStickerSheet = false },
+                            onDismiss = {
+                                showEmojiStickerSheet = false
+                                scrollToBottomSmoothly()
+                            },
                             onEmojiSelected = { emoji ->
                                 textInput += emoji
+                                scrollToBottomSmoothly()
                             },
                             onSendSticker = { stickerContent ->
                                 viewModel.sendSticker(conversationId, stickerContent, targetUserId = otherUserId)
+                                scrollToBottomSmoothly()
                             },
                             onBackspace = {
                                 if (textInput.isNotEmpty()) {
