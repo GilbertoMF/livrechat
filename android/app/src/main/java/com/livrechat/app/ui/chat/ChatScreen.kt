@@ -133,6 +133,9 @@ fun ChatScreen(
     val currentFlow by viewModel.messagesFlow.collectAsState()
     val messages by currentFlow.collectAsState(initial = emptyList())
     val isTyping by viewModel.isContactTyping.collectAsState()
+    val isContactRecordingAudio by viewModel.isContactRecordingAudio.collectAsState()
+    val recordingAudioMap by viewModel.recordingAudioStatus.collectAsState()
+    val isRecordingAudio = isContactRecordingAudio || (recordingAudioMap[conversationId] == true)
 
     LaunchedEffect(conversationId) {
         viewModel.selectConversation(conversationId, otherUserId)
@@ -158,6 +161,7 @@ fun ChatScreen(
             audioPlayerHelper.stop()
             if (isRecording) {
                 audioRecorderHelper.cancelRecording()
+                viewModel.sendRecordingAudio(false, otherUserId)
                 recordingAmplitudes.clear()
             }
             viewModel.sendTyping(false, otherUserId)
@@ -910,19 +914,48 @@ fun ChatScreen(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            val subtitleText = if (isGroup) "Grupo"
-                                   else if (isTyping) "digitando..."
-                                   else if (isContactOnline) "Online"
-                                   else formatChatLastSeen(contactLastSeen)
-
-                            Text(
-                                text = subtitleText,
-                                fontSize = 12.sp,
-                                color = if (isTyping) BlueAccent
-                                        else if (isContactOnline && !isGroup) Color(0xFF4CAF50)
-                                        else Color.Gray,
-                                fontWeight = if (isTyping) FontWeight.Bold else FontWeight.Normal
-                            )
+                            if (isGroup) {
+                                Text(
+                                    text = "Grupo",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                            } else if (isRecordingAudio) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = null,
+                                        tint = Color(0xFF25D366),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "gravando áudio...",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF25D366),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            } else if (isTyping) {
+                                Text(
+                                    text = "digitando...",
+                                    fontSize = 12.sp,
+                                    color = BlueAccent,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            } else if (isContactOnline) {
+                                Text(
+                                    text = "Online",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF4CAF50)
+                                )
+                            } else {
+                                Text(
+                                    text = formatChatLastSeen(contactLastSeen),
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                            }
                         }
                     }
                 },
@@ -1158,6 +1191,7 @@ fun ChatScreen(
                             onClick = {
                                 recordingJob?.cancel()
                                 audioRecorderHelper.cancelRecording()
+                                viewModel.sendRecordingAudio(false, otherUserId)
                                 isRecording = false
                                 recordingSeconds = 0
                                 recordingAmplitudes.clear()
@@ -1212,6 +1246,7 @@ fun ChatScreen(
                         IconButton(
                             onClick = {
                                 recordingJob?.cancel()
+                                viewModel.sendRecordingAudio(false, otherUserId)
                                 val recordedFile = audioRecorderHelper.stopRecording()
                                 val seconds = recordingSeconds
                                 val amps = recordingAmplitudes.toList()
@@ -1499,6 +1534,7 @@ fun ChatScreen(
                                 onClick = {
                                     val file = audioRecorderHelper.startRecording()
                                     if (file != null) {
+                                        viewModel.sendRecordingAudio(true, otherUserId)
                                         isRecording = true
                                         recordingSeconds = 0
                                         recordingAmplitudes.clear()

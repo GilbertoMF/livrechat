@@ -3,6 +3,8 @@ package com.livrechat.app.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
+import com.google.gson.JsonParser
+import com.google.gson.reflect.TypeToken
 import com.livrechat.app.LivreChatApp
 import com.livrechat.app.crypto.CryptoManager
 import com.livrechat.app.data.local.entity.ContactEntity
@@ -14,6 +16,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -24,7 +28,7 @@ data class BackupContainer(
     val conversations: List<ConversationEntity>,
     val messages: List<MessageEntity>,
     val contacts: List<ContactEntity>,
-    val checksum: String
+    val checksum: String = ""
 )
 
 sealed class BackupUiState {
@@ -47,7 +51,17 @@ class SettingsViewModel : ViewModel() {
     private val _lastBackupDate = MutableStateFlow(formatDate(prefs.lastBackupTimestamp))
     val lastBackupDate: StateFlow<String> = _lastBackupDate.asStateFlow()
 
-    fun createEncryptedBackup(passphrase: String) {
+    val googleDriveAccount: StateFlow<String?> = prefs.googleDriveAccountFlow
+
+    fun setGoogleDriveAccount(account: String?) {
+        prefs.googleDriveAccount = account?.trim()?.ifBlank { null }
+    }
+
+    fun clearBackupState() {
+        _backupState.value = BackupUiState.Idle
+    }
+
+    fun createEncryptedBackup(passphrase: String, outputStream: OutputStream? = null) {
         if (passphrase.isBlank()) {
             _backupState.value = BackupUiState.Error("A senha de backup não pode estar vazia.")
             return
@@ -56,35 +70,56 @@ class SettingsViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             _backupState.value = BackupUiState.InProgress
             try {
-                // 1. Gather all data
-                val convs = db.conversationDao().getConversationById("") // or all
-                // Get all messages from room
-                val allMessages = mutableListOf<MessageEntity>()
-                val allContacts = mutableListOf<ContactEntity>()
+                // 1. Gather all real data from Room database
+                val allConversations = db.conversationDao().getAllConversationsSync()
+                val allMessages = db.messageDao().getAllMessages()
+                val allContacts = db.contactDao().getAllContacts()
 
-                val rawPayload = gson.toJson(mapOf(
+                val backupPayload = mapOf(
+                    "version" to 1,
+                    "app" to "LivreChat",
                     "timestamp" to System.currentTimeMillis(),
-                    "userId" to prefs.currentUserId,
-                    "app" to "LivreChat"
-                ))
+                    "userId" to (prefs.currentUserId ?: ""),
+                    "googleDriveAccount" to (prefs.googleDriveAccount ?: ""),
+                    "conversations" to allConversations,
+                    "messages" to allMessages,
+                    "contacts" to allContacts
+                )
+                val rawPayload = gson.toJson(backupPayload)
 
                 // 2. Derive key from passphrase
                 val salt = "livrechat_backup_salt_2026".toByteArray(Charsets.UTF_8)
                 val derivedKey = cryptoManager.deriveKeyFromPassphrase(passphrase, salt)
 
-                // 3. Encrypt
+                // 3. Encrypt AES-256-GCM
                 val encrypted = cryptoManager.encrypt(rawPayload, derivedKey)
+                val encryptedJson = gson.toJson(encrypted)
 
                 // 4. Save to local app backup folder
                 val backupFile = File(app.filesDir, "livrechat_backup.enc")
-                backupFile.writeText(gson.toJson(encrypted))
+                backupFile.writeText(encryptedJson)
+
+                // 5. If outputStream provided (Google Drive / SAF), stream it
+                if (outputStream != null) {
+                    try {
+                        outputStream.use { os ->
+                            os.write(encryptedJson.toByteArray(Charsets.UTF_8))
+                            os.flush()
+                        }
+                    } catch (e: Exception) {
+                        _backupState.value = BackupUiState.Error("Erro ao gravar no Google Drive: ${e.localizedMessage}")
+                        return@launch
+                    }
+                }
 
                 val now = System.currentTimeMillis()
                 prefs.lastBackupTimestamp = now
                 _lastBackupDate.value = formatDate(now)
 
+                val destText = if (outputStream != null) "no Google Drive / Armazenamento" else "localmente"
+                val sizeKb = (backupFile.length() / 1024).coerceAtLeast(1)
                 _backupState.value = BackupUiState.Success(
-                    "Backup criptografado gerado com sucesso (${backupFile.length() / 1024} KB). Pronto para o Google Drive."
+                    "Backup criptografado salvo $destText com sucesso! (${sizeKb} KB - ${allConversations.size} conversas, ${allMessages.size} mensagens, ${allContacts.size} contatos)."
                 )
             } catch (e: Exception) {
                 _backupState.value = BackupUiState.Error("Falha ao gerar backup: ${e.localizedMessage}")
@@ -92,7 +127,7 @@ class SettingsViewModel : ViewModel() {
         }
     }
 
-    fun restoreEncryptedBackup(passphrase: String) {
+    fun restoreEncryptedBackup(passphrase: String, inputStream: InputStream? = null) {
         if (passphrase.isBlank()) {
             _backupState.value = BackupUiState.Error("Informe a senha de recuperação do backup.")
             return
@@ -101,29 +136,81 @@ class SettingsViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             _backupState.value = BackupUiState.InProgress
             try {
-                val backupFile = File(app.filesDir, "livrechat_backup.enc")
-                if (!backupFile.exists()) {
-                    _backupState.value = BackupUiState.Error("Nenhum arquivo de backup encontrado no aparelho.")
-                    return@launch
+                val fileContent: String = if (inputStream != null) {
+                    try {
+                        inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                    } catch (e: Exception) {
+                        _backupState.value = BackupUiState.Error("Falha ao ler arquivo de backup: ${e.localizedMessage}")
+                        return@launch
+                    }
+                } else {
+                    val backupFile = File(app.filesDir, "livrechat_backup.enc")
+                    if (!backupFile.exists()) {
+                        _backupState.value = BackupUiState.Error("Nenhum arquivo de backup encontrado no aparelho.")
+                        return@launch
+                    }
+                    backupFile.readText()
                 }
 
                 val salt = "livrechat_backup_salt_2026".toByteArray(Charsets.UTF_8)
                 val derivedKey = cryptoManager.deriveKeyFromPassphrase(passphrase, salt)
 
-                val fileContent = backupFile.readText()
                 val payloadMap = gson.fromJson(fileContent, Map::class.java)
+                val cipher = payloadMap["ciphertext"] as? String
+                val iv = payloadMap["iv"] as? String
 
-                val cipher = payloadMap["ciphertext"] as String
-                val iv = payloadMap["iv"] as String
+                if (cipher == null || iv == null) {
+                    _backupState.value = BackupUiState.Error("Formato de backup inválido ou arquivo danificado.")
+                    return@launch
+                }
 
                 val decrypted = cryptoManager.decrypt(cipher, iv, derivedKey)
-                if (decrypted.contains("LivreChat")) {
-                    _backupState.value = BackupUiState.Success("Backup restaurado e verificado com sucesso!")
-                } else {
-                    _backupState.value = BackupUiState.Error("Integridade do arquivo de backup corrompida.")
+                if (!decrypted.contains("LivreChat")) {
+                    _backupState.value = BackupUiState.Error("Integridade do arquivo de backup corrompida ou senha incorreta.")
+                    return@launch
                 }
+
+                // Parse json payload
+                val jsonObject = JsonParser.parseString(decrypted).asJsonObject
+
+                // Restore conversations
+                var restoredConvs = 0
+                if (jsonObject.has("conversations")) {
+                    val convListType = object : TypeToken<List<ConversationEntity>>() {}.type
+                    val convs: List<ConversationEntity> = gson.fromJson(jsonObject.get("conversations"), convListType) ?: emptyList()
+                    if (convs.isNotEmpty()) {
+                        db.conversationDao().insertAll(convs)
+                        restoredConvs = convs.size
+                    }
+                }
+
+                // Restore messages
+                var restoredMsgs = 0
+                if (jsonObject.has("messages")) {
+                    val msgListType = object : TypeToken<List<MessageEntity>>() {}.type
+                    val msgs: List<MessageEntity> = gson.fromJson(jsonObject.get("messages"), msgListType) ?: emptyList()
+                    if (msgs.isNotEmpty()) {
+                        db.messageDao().insertAll(msgs)
+                        restoredMsgs = msgs.size
+                    }
+                }
+
+                // Restore contacts
+                var restoredContacts = 0
+                if (jsonObject.has("contacts")) {
+                    val contactListType = object : TypeToken<List<ContactEntity>>() {}.type
+                    val contacts: List<ContactEntity> = gson.fromJson(jsonObject.get("contacts"), contactListType) ?: emptyList()
+                    if (contacts.isNotEmpty()) {
+                        db.contactDao().insertAll(contacts)
+                        restoredContacts = contacts.size
+                    }
+                }
+
+                _backupState.value = BackupUiState.Success(
+                    "Backup restaurado com sucesso! ($restoredConvs conversas, $restoredMsgs mensagens e $restoredContacts contatos recuperados)."
+                )
             } catch (e: Exception) {
-                _backupState.value = BackupUiState.Error("Senha incorreta ou backup corrompido.")
+                _backupState.value = BackupUiState.Error("Senha incorreta ou arquivo de backup inválido.")
             }
         }
     }

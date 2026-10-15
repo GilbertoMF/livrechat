@@ -36,6 +36,10 @@ class ConnectionManager(
     private val _typingStatus = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val typingStatus: StateFlow<Map<String, Boolean>> = _typingStatus.asStateFlow()
 
+    // Map of conversationId -> isRecordingAudio
+    private val _recordingAudioStatus = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val recordingAudioStatus: StateFlow<Map<String, Boolean>> = _recordingAudioStatus.asStateFlow()
+
     // Map of userId -> isOnline
     private val _onlineUsers = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val onlineUsers: StateFlow<Map<String, Boolean>> = _onlineUsers.asStateFlow()
@@ -220,6 +224,17 @@ class ConnectionManager(
                 }
             }
 
+            // Clear recording audio state immediately when message arrives from sender
+            recordingAudioTimeoutJobs[processedMessage.conversationId]?.cancel()
+            val updatedAudio = _recordingAudioStatus.value.toMutableMap()
+            if (updatedAudio[processedMessage.conversationId] == true) {
+                updatedAudio[processedMessage.conversationId] = false
+                _recordingAudioStatus.value = updatedAudio
+                synchronized(listeners) {
+                    listeners.forEach { it.onRecordingAudio(processedMessage.conversationId, processedMessage.senderId, "", false) }
+                }
+            }
+
             // Sender is actively online
             val onlMap = _onlineUsers.value.toMutableMap()
             onlMap[processedMessage.senderId] = true
@@ -300,6 +315,36 @@ class ConnectionManager(
 
         synchronized(listeners) {
             listeners.forEach { it.onTyping(conversationId, userId, username, isTyping) }
+        }
+    }
+
+    private val recordingAudioTimeoutJobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+
+    override fun onRecordingAudio(conversationId: String, userId: String, username: String, isRecording: Boolean) {
+        recordingAudioTimeoutJobs[conversationId]?.cancel()
+
+        val current = _recordingAudioStatus.value.toMutableMap()
+        current[conversationId] = isRecording
+        _recordingAudioStatus.value = current
+
+        if (isRecording) {
+            val onlMap = _onlineUsers.value.toMutableMap()
+            onlMap[userId] = true
+            _onlineUsers.value = onlMap
+
+            recordingAudioTimeoutJobs[conversationId] = scope.launch {
+                kotlinx.coroutines.delay(6000)
+                val updated = _recordingAudioStatus.value.toMutableMap()
+                updated[conversationId] = false
+                _recordingAudioStatus.value = updated
+                synchronized(listeners) {
+                    listeners.forEach { it.onRecordingAudio(conversationId, userId, username, false) }
+                }
+            }
+        }
+
+        synchronized(listeners) {
+            listeners.forEach { it.onRecordingAudio(conversationId, userId, username, isRecording) }
         }
     }
 

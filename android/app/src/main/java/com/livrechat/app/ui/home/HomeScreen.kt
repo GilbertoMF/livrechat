@@ -106,6 +106,7 @@ fun HomeScreen(
     val callHistory by callViewModel.callHistoryFlow.collectAsState(initial = emptyList())
     val isConnected by chatViewModel.isConnected.collectAsState()
     val typingStatus by chatViewModel.typingStatus.collectAsState()
+    val recordingAudioStatus by chatViewModel.recordingAudioStatus.collectAsState()
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1864,10 +1865,12 @@ fun HomeScreen(
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
                         items(conversations, key = { it.id }) { conv ->
                             val isTyping = typingStatus[conv.id] == true
+                            val isConvRecording = recordingAudioStatus[conv.id] == true
                             val isLocked = prefs.isConversationLocked(conv.id)
                             ConversationItem(
                                 conversation = conv,
                                 isTyping = isTyping,
+                                isRecordingAudio = isConvRecording,
                                 isLocked = isLocked,
                                 onClick = {
                                     if (isLocked) {
@@ -3303,6 +3306,7 @@ fun FullScreenStatusViewer(
 fun ConversationItem(
     conversation: ConversationEntity,
     isTyping: Boolean = false,
+    isRecordingAudio: Boolean = false,
     isLocked: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {}
@@ -3385,7 +3389,27 @@ fun ConversationItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isTyping) {
+                if (isRecordingAudio) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = null,
+                            tint = Color(0xFF25D366),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "gravando áudio...",
+                            fontSize = 14.sp,
+                            color = Color(0xFF25D366),
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1
+                        )
+                    }
+                } else if (isTyping) {
                     Text(
                         text = "digitando...",
                         fontSize = 14.sp,

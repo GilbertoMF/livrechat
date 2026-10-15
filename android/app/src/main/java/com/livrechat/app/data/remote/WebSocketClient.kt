@@ -26,6 +26,7 @@ interface WebSocketEventsListener {
     fun onMessageAck(messageId: String, clientMessageId: String?, status: String)
     fun onMessageReceipt(messageId: String, status: String, userId: String)
     fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean)
+    fun onRecordingAudio(conversationId: String, userId: String, username: String, isRecording: Boolean) {}
     // WebRTC Signaling
     fun onIncomingCall(callerId: String, callerUsername: String, callerDisplayName: String, callerAvatarUrl: String?, sdp: String)
     fun onCallAnswered(calleeId: String, sdp: String)
@@ -198,6 +199,14 @@ class WebSocketClient(
                             val isTyping = json.get("isTyping").asBooleanOrDefault(false)
                             listener.onTyping(convId, userId, username, isTyping)
                         }
+                        "chat:recording_audio" -> {
+                            val convId = json.get("conversationId").asStringOrDefault()
+                            val userId = json.get("userId").asStringOrDefault()
+                            if (preferencesManager.isUserBlocked(userId)) return@launch
+                            val username = json.get("username").asStringOrDefault()
+                            val isRecording = json.get("isRecording").asBooleanOrDefault(false)
+                            listener.onRecordingAudio(convId, userId, username, isRecording)
+                        }
                         "call:incoming" -> {
                             val callerId = json.get("callerId").asStringOrDefault()
                             if (preferencesManager.isUserBlocked(callerId)) {
@@ -346,6 +355,16 @@ class WebSocketClient(
             addProperty("type", "chat:typing")
             addProperty("conversationId", conversationId)
             addProperty("isTyping", isTyping)
+            targetUserId?.let { addProperty("targetUserId", it) }
+        }
+        return sendPayload(payload)
+    }
+
+    fun sendRecordingAudio(conversationId: String, isRecording: Boolean, targetUserId: String? = null): Boolean {
+        val payload = JsonObject().apply {
+            addProperty("type", "chat:recording_audio")
+            addProperty("conversationId", conversationId)
+            addProperty("isRecording", isRecording)
             targetUserId?.let { addProperty("targetUserId", it) }
         }
         return sendPayload(payload)

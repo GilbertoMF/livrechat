@@ -282,6 +282,29 @@ export class WebSocketManager {
         break;
       }
 
+      case 'chat:recording_audio':
+      case 'chat:recording': {
+        const { conversationId, isRecording, targetUserId } = event;
+        let members = await db.getConversationMembers(conversationId);
+        if (targetUserId && !members.includes(targetUserId)) {
+          members.push(targetUserId);
+        }
+        for (const memberId of members) {
+          if (memberId !== senderId) {
+            const blocked = await db.isBlocked(senderId, memberId);
+            if (blocked) continue;
+            this.sendToUser(memberId, {
+              type: 'chat:recording_audio',
+              conversationId,
+              userId: senderId,
+              username: senderWs.username,
+              isRecording: !!isRecording
+            });
+          }
+        }
+        break;
+      }
+
       case 'chat:delete': {
         const { messageId, conversationId, targetUserId } = event;
         await db.deleteMessage(messageId, senderId);

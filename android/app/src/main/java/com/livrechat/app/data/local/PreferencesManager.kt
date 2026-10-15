@@ -65,6 +65,16 @@ class PreferencesManager(private val context: Context) {
         get() = prefs.getLong(KEY_LAST_BACKUP, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_BACKUP, value).apply()
 
+    private val _googleDriveAccountFlow = kotlinx.coroutines.flow.MutableStateFlow(prefs.getString("google_drive_account", null))
+    val googleDriveAccountFlow: kotlinx.coroutines.flow.StateFlow<String?> = _googleDriveAccountFlow
+
+    var googleDriveAccount: String?
+        get() = prefs.getString("google_drive_account", null)
+        set(value) {
+            prefs.edit().putString("google_drive_account", value).apply()
+            _googleDriveAccountFlow.value = value
+        }
+
     private val _themeFlow = kotlinx.coroutines.flow.MutableStateFlow(prefs.getString(KEY_APP_THEME, "system") ?: "system")
     private val _paletteFlow = kotlinx.coroutines.flow.MutableStateFlow(colorPalette)
     val paletteFlow: kotlinx.coroutines.flow.StateFlow<String> = _paletteFlow

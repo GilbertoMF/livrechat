@@ -44,9 +44,13 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
     private val _isContactTyping = MutableStateFlow(false)
     val isContactTyping: StateFlow<Boolean> = _isContactTyping.asStateFlow()
 
+    private val _isContactRecordingAudio = MutableStateFlow(false)
+    val isContactRecordingAudio: StateFlow<Boolean> = _isContactRecordingAudio.asStateFlow()
+
     private val connectionManager = app.connectionManager
     val isConnected: StateFlow<Boolean> = connectionManager.isConnected
     val typingStatus: StateFlow<Map<String, Boolean>> = connectionManager.typingStatus
+    val recordingAudioStatus: StateFlow<Map<String, Boolean>> = connectionManager.recordingAudioStatus
 
     init {
         connectionManager.registerListener(this)
@@ -56,6 +60,10 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
     fun selectConversation(conversationId: String, otherUserId: String? = null) {
         _currentConversationId.value = conversationId
         _currentOtherUserId.value = otherUserId
+        _isContactRecordingAudio.value = false
+        contactRecordingAudioJob?.cancel()
+        _isContactTyping.value = false
+        contactTypingJob?.cancel()
         connectionManager.setActiveConversation(conversationId)
         if (otherUserId != null) {
             connectionManager.queryUserStatus(otherUserId)
@@ -504,6 +512,12 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         connectionManager.getClient().sendTyping(convId, isTyping, target)
     }
 
+    fun sendRecordingAudio(isRecording: Boolean, targetUserId: String? = null) {
+        val convId = _currentConversationId.value ?: return
+        val target = targetUserId ?: _currentOtherUserId.value
+        connectionManager.getClient().sendRecordingAudio(convId, isRecording, target)
+    }
+
     fun markMessageRead(messageId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             connectionManager.getClient().sendReceipt(messageId, "read")
@@ -615,6 +629,8 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         // Handled centrally by ConnectionManager
     }
 
+    private var contactRecordingAudioJob: Job? = null
+
     override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean) {
         if (_currentConversationId.value == conversationId) {
             contactTypingJob?.cancel()
@@ -623,6 +639,19 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                 contactTypingJob = viewModelScope.launch {
                     delay(3500)
                     _isContactTyping.value = false
+                }
+            }
+        }
+    }
+
+    override fun onRecordingAudio(conversationId: String, userId: String, username: String, isRecording: Boolean) {
+        if (_currentConversationId.value == conversationId) {
+            contactRecordingAudioJob?.cancel()
+            _isContactRecordingAudio.value = isRecording
+            if (isRecording) {
+                contactRecordingAudioJob = viewModelScope.launch {
+                    delay(6000)
+                    _isContactRecordingAudio.value = false
                 }
             }
         }

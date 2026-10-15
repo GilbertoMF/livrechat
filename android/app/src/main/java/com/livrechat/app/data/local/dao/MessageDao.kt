@@ -60,4 +60,7 @@ interface MessageDao {
 
     @Query("DELETE FROM messages WHERE conversationId = :convId")
     suspend fun clearConversationMessages(convId: String)
+
+    @Query("SELECT * FROM messages")
+    suspend fun getAllMessages(): List<MessageEntity>
 }

@@ -81,8 +81,54 @@ fun SettingsScreen(
 
     val isConnected by connectionManager.isConnected.collectAsState()
     val conversations by db.conversationDao().getAllConversationsFlow().collectAsState(initial = emptyList())
+    val savedContacts by db.contactDao().getAllContactsFlow().collectAsState(initial = emptyList())
     val activePalette by prefs.paletteFlow.collectAsState()
     val activeTheme by prefs.themeFlow.collectAsState()
+
+    val manageContactsList = remember(conversations, savedContacts, userId) {
+        val myUsername = prefs.currentUsername ?: ""
+        val myDisplayName = prefs.currentDisplayName ?: ""
+        val map = mutableMapOf<String, ManageContactUiItem>()
+
+        // 1. From saved contacts in Room DB
+        savedContacts.forEach { c ->
+            val isSelf = c.contactUserId == userId ||
+                         (c.username.isNotBlank() && c.username.equals(myUsername, ignoreCase = true)) ||
+                         (c.displayName.isNotBlank() && c.displayName.equals(myDisplayName, ignoreCase = true))
+            if (c.contactUserId.isNotBlank() && !isSelf) {
+                val conv = conversations.firstOrNull { it.otherUserId == c.contactUserId && !it.isGroup }
+                map[c.contactUserId] = ManageContactUiItem(
+                    id = c.contactUserId,
+                    userId = c.contactUserId,
+                    displayName = c.displayName,
+                    username = c.username,
+                    avatarUrl = c.avatarUrl,
+                    conversationId = conv?.id
+                )
+            }
+        }
+
+        // 2. From non-group conversations with others
+        conversations.forEach { conv ->
+            val isSelf = conv.otherUserId == userId ||
+                         (conv.otherUsername.isNotBlank() && conv.otherUsername.equals(myUsername, ignoreCase = true)) ||
+                         (conv.otherDisplayName.isNotBlank() && conv.otherDisplayName.equals(myDisplayName, ignoreCase = true))
+            if (!conv.isGroup && conv.otherUserId.isNotBlank() && !isSelf) {
+                if (!map.containsKey(conv.otherUserId)) {
+                    map[conv.otherUserId] = ManageContactUiItem(
+                        id = conv.otherUserId,
+                        userId = conv.otherUserId,
+                        displayName = conv.otherDisplayName,
+                        username = conv.otherUsername,
+                        avatarUrl = conv.otherAvatarUrl,
+                        conversationId = conv.id
+                    )
+                }
+            }
+        }
+
+        map.values.sortedBy { it.displayName.lowercase() }
+    }
 
     // Dialogs state
     var showEditProfileDialog by remember { mutableStateOf(false) }
@@ -122,6 +168,12 @@ fun SettingsScreen(
             val user = db.userDao().getCurrentUser()
             userRecoveryPhrase = user?.recoveryKey
             userPublicKey = user?.publicKey ?: "Chave segura RSA-2048 ativa"
+
+            if (userId.isNotBlank()) {
+                try {
+                    db.contactDao().deleteContact(userId)
+                } catch (e: Exception) {}
+            }
 
             // 1. Sync with server profile if online
             if (userId.isNotBlank()) {
@@ -1326,13 +1378,13 @@ fun SettingsScreen(
                 }
             },
             text = {
-                if (conversations.isEmpty()) {
+                if (manageContactsList.isEmpty()) {
                     Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                         Text("Nenhum contato salvo ainda.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 350.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(conversations, key = { it.id }) { conv ->
+                        items(manageContactsList, key = { it.id }) { contactItem ->
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -1340,20 +1392,20 @@ fun SettingsScreen(
                             ) {
                                 Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                     UserAvatarView(
-                                        avatarUrl = conv.otherAvatarUrl,
-                                        displayName = conv.otherDisplayName,
+                                        avatarUrl = contactItem.avatarUrl,
+                                        displayName = contactItem.displayName,
                                         size = 40.dp,
                                         fontSize = 16.sp
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(conv.otherDisplayName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                        Text("@${conv.otherUsername}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(contactItem.displayName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text("@${contactItem.username}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                     IconButton(
                                         onClick = {
                                             scope.launch(Dispatchers.IO) {
-                                                try { apiService.blockUser(mapOf("blockedUserId" to conv.otherUserId)) } catch (e: Exception) {}
+                                                try { apiService.blockUser(mapOf("blockedUserId" to contactItem.userId)) } catch (e: Exception) {}
                                             }
                                             Toast.makeText(context, "Contato bloqueado", Toast.LENGTH_SHORT).show()
                                         }
@@ -1364,15 +1416,21 @@ fun SettingsScreen(
                                         onClick = {
                                             scope.launch(Dispatchers.IO) {
                                                 try {
-                                                    apiService.removeContact(conv.otherUserId)
-                                                    apiService.deleteConversation(conv.id)
-                                                    apiService.clearConversation(conv.id)
+                                                    apiService.removeContact(contactItem.userId)
                                                 } catch (e: Exception) {}
                                                 try {
-                                                    db.contactDao().deleteContact(conv.otherUserId)
-                                                    db.conversationDao().deleteConversation(conv.id)
-                                                    db.messageDao().clearConversationMessages(conv.id)
+                                                    db.contactDao().deleteContact(contactItem.userId)
                                                 } catch (e: Exception) {}
+                                                if (contactItem.conversationId != null) {
+                                                    try {
+                                                        apiService.deleteConversation(contactItem.conversationId)
+                                                        apiService.clearConversation(contactItem.conversationId)
+                                                    } catch (e: Exception) {}
+                                                    try {
+                                                        db.conversationDao().deleteConversation(contactItem.conversationId)
+                                                        db.messageDao().clearConversationMessages(contactItem.conversationId)
+                                                    } catch (e: Exception) {}
+                                                }
                                             }
                                             Toast.makeText(context, "Contato excluído", Toast.LENGTH_SHORT).show()
                                         }
@@ -1832,3 +1890,12 @@ fun SettingsRowItem(
         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.size(20.dp))
     }
 }
+
+private data class ManageContactUiItem(
+    val id: String,
+    val userId: String,
+    val displayName: String,
+    val username: String,
+    val avatarUrl: String?,
+    val conversationId: String? = null
+)
