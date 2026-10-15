@@ -123,6 +123,7 @@ fun HomeScreen(
     // Status State
     var statusesList by remember { mutableStateOf<List<StatusDto>>(emptyList()) }
     var activeStatusViewerList by remember { mutableStateOf<List<StatusDto>?>(null) }
+    var showMyFlashActionDialog by remember { mutableStateOf(false) }
     var showStatusOptionsDialog by remember { mutableStateOf(false) }
     var showStatusCameraDialog by remember { mutableStateOf(false) }
     var showCreateTextStatusDialog by remember { mutableStateOf(false) }
@@ -141,16 +142,25 @@ fun HomeScreen(
     var newMusicStatusBgColor by remember { mutableStateOf("#075E54") }
     var isPostingStatus by remember { mutableStateOf(false) }
 
+    val myStatuses = remember(statusesList, currentUserId) {
+        statusesList.filter { it.userId == currentUserId }
+    }
+    val contactsStatuses = remember(statusesList, currentUserId) {
+        statusesList.filter { it.userId != currentUserId }
+    }
+
     fun loadStatuses() {
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             try {
                 val res = apiService.getStatuses()
                 if (res.isSuccessful && res.body() != null) {
                     val freshList = res.body()!!
-                    statusesList = freshList
-                    if (activeStatusViewerList != null) {
-                        val currentActiveIds = activeStatusViewerList!!.map { it.id }.toSet()
-                        activeStatusViewerList = freshList.filter { it.id in currentActiveIds }
+                    withContext(Dispatchers.Main) {
+                        statusesList = freshList
+                        if (activeStatusViewerList != null) {
+                            val currentActiveIds = activeStatusViewerList!!.map { it.id }.toSet()
+                            activeStatusViewerList = freshList.filter { it.id in currentActiveIds }
+                        }
                     }
                 }
             } catch (e: Exception) {}
@@ -158,7 +168,12 @@ fun HomeScreen(
     }
 
     LaunchedEffect(Unit) {
-        loadStatuses()
+        if (selectedTab == 1) {
+            loadStatuses()
+        } else {
+            delay(600)
+            loadStatuses()
+        }
     }
 
     LaunchedEffect(isConnected) {
@@ -376,57 +391,239 @@ fun HomeScreen(
     if (selectedConvForAction != null) {
         val conv = selectedConvForAction!!
         val isLocked = prefs.isConversationLocked(conv.id)
+        val isContactBlocked = prefs.isUserBlocked(conv.otherUserId)
         AlertDialog(
             onDismissRequest = { selectedConvForAction = null },
-            title = { Text(conv.otherDisplayName, fontWeight = FontWeight.Bold) },
-            text = { Text("Selecione uma ação para esta conversa:") },
-            confirmButton = {
-                TextButton(onClick = {
-                    val newLocked = !isLocked
-                    prefs.setConversationLocked(conv.id, newLocked)
-                    selectedConvForAction = null
-                    Toast.makeText(
-                        context,
-                        if (newLocked) "Conversa bloqueada com biometria" else "Conversa desbloqueada",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }) {
-                    Text(if (isLocked) "Desbloquear com Digital" else "Bloquear com Digital", fontWeight = FontWeight.Bold)
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    UserAvatarView(
+                        avatarUrl = conv.otherAvatarUrl,
+                        displayName = conv.otherDisplayName,
+                        size = 42.dp,
+                        fontSize = 16.sp
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(conv.otherDisplayName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(
+                            text = if (conv.isGroup) "Grupo" else "@${conv.otherUsername}",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = {
-                        val toDel = conv
-                        selectedConvForAction = null
-                        scope.launch(Dispatchers.IO) {
-                            try {
-                                apiService.deleteConversation(toDel.id)
-                                apiService.removeContact(toDel.otherUserId)
-                                apiService.clearConversation(toDel.id)
-                            } catch (e: Exception) {}
-                            try {
-                                db.contactDao().deleteContact(toDel.otherUserId)
-                                db.conversationDao().deleteConversation(toDel.id)
-                                db.messageDao().clearConversationMessages(toDel.id)
-                            } catch (e: Exception) {}
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(context, "Conversa apagada", Toast.LENGTH_SHORT).show()
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // 1. Bloquear / Desbloquear com Digital (Biometria)
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val newLocked = !isLocked
+                                prefs.setConversationLocked(conv.id, newLocked)
+                                selectedConvForAction = null
+                                Toast.makeText(
+                                    context,
+                                    if (newLocked) "Conversa protegida com digital" else "Conversa desbloqueada",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (isLocked) Icons.Default.LockOpen else Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = BluePrimary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = if (isLocked) "Desbloquear com Digital" else "Bloquear com Digital",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = "Exigir biometria para abrir o chat",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
-                    }) {
-                        Text("Apagar conversa", color = DangerRed, fontWeight = FontWeight.Bold)
                     }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    TextButton(onClick = {
-                        showClearConvDialog = conv
-                        selectedConvForAction = null
-                    }) {
-                        Text("Limpar", color = DangerRed)
+
+                    // 2. Bloquear / Desbloquear Contato
+                    if (!conv.isGroup) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isContactBlocked) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f) else DangerRed.copy(alpha = 0.08f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val newBlocked = !isContactBlocked
+                                    prefs.setUserBlocked(conv.otherUserId, newBlocked)
+                                    selectedConvForAction = null
+                                    scope.launch(Dispatchers.IO) {
+                                        try {
+                                            if (newBlocked) {
+                                                apiService.blockUser(mapOf("blockedUserId" to conv.otherUserId, "targetUserId" to conv.otherUserId))
+                                            } else {
+                                                apiService.unblockUser(conv.otherUserId)
+                                            }
+                                        } catch (e: Exception) {}
+                                    }
+                                    Toast.makeText(
+                                        context,
+                                        if (newBlocked) "Contato bloqueado com sucesso" else "Contato desbloqueado",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isContactBlocked) Icons.Default.CheckCircle else Icons.Default.Block,
+                                    contentDescription = null,
+                                    tint = if (isContactBlocked) BluePrimary else DangerRed,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = if (isContactBlocked) "Desbloquear Contato" else "Bloquear Contato",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 14.sp,
+                                        color = if (isContactBlocked) MaterialTheme.colorScheme.onSurface else DangerRed
+                                    )
+                                    Text(
+                                        text = if (isContactBlocked) "Permitir mensagens e chamadas" else "Impedir mensagens, chamadas e status",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
                     }
-                    TextButton(onClick = { selectedConvForAction = null }) {
-                        Text("Cancelar")
+
+                    // 3. Limpar Conversa
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showClearConvDialog = conv
+                                selectedConvForAction = null
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteSweep,
+                                contentDescription = null,
+                                tint = DangerRed.copy(alpha = 0.8f),
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Limpar Mensagens",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = "Apagar todo o histórico de mensagens",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
+
+                    // 4. Apagar Conversa
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = DangerRed.copy(alpha = 0.08f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val toDel = conv
+                                selectedConvForAction = null
+                                scope.launch(Dispatchers.IO) {
+                                    try {
+                                        apiService.deleteConversation(toDel.id)
+                                        apiService.removeContact(toDel.otherUserId)
+                                        apiService.clearConversation(toDel.id)
+                                    } catch (e: Exception) {}
+                                    try {
+                                        db.contactDao().deleteContact(toDel.otherUserId)
+                                        db.conversationDao().deleteConversation(toDel.id)
+                                        db.messageDao().clearConversationMessages(toDel.id)
+                                    } catch (e: Exception) {}
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "Conversa apagada", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = DangerRed,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Apagar Conversa",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp,
+                                    color = DangerRed
+                                )
+                                Text(
+                                    text = "Remover da lista de conversas",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(
+                    onClick = { selectedConvForAction = null },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Cancelar",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         )
@@ -451,6 +648,88 @@ fun HomeScreen(
             dismissButton = {
                 TextButton(onClick = { showClearConvDialog = null }) {
                     Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // DIALOG: Ações do Meu Flash (quando já tem publicações ativas)
+    if (showMyFlashActionDialog) {
+        AlertDialog(
+            onDismissRequest = { showMyFlashActionDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Bolt,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Meu Flash", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Opção 1: Visualizar Flashs ativos
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showMyFlashActionDialog = false
+                                activeStatusViewerList = myStatuses
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Visibility, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Visualizar meus Flashs", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("${myStatuses.size} publicação(ões) ativa(s)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+
+                    // Opção 2: Adicionar novo Flash
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showMyFlashActionDialog = false
+                                showStatusOptionsDialog = true
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.AddCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Adicionar Novo Flash", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                                Text("Foto, vídeo, música, voz ou texto", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(
+                    onClick = { showMyFlashActionDialog = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Cancelar", fontWeight = FontWeight.Bold)
                 }
             }
         )
@@ -1435,12 +1714,6 @@ fun HomeScreen(
         )
     }
 
-    val myStatuses = remember(statusesList, currentUserId) {
-        statusesList.filter { it.userId == currentUserId }
-    }
-    val contactsStatuses = remember(statusesList, currentUserId) {
-        statusesList.filter { it.userId != currentUserId }
-    }
 
     Scaffold(
         topBar = {
@@ -1502,12 +1775,12 @@ fun HomeScreen(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         FloatingActionButton(
-                            onClick = { showStatusCameraDialog = true },
-                            containerColor = Color(0xFF25D366),
+                            onClick = { showStatusOptionsDialog = true },
+                            containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = Color.White,
                             shape = RoundedCornerShape(16.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.CameraAlt, contentDescription = "Novo Flash")
+                            Icon(imageVector = Icons.Default.Add, contentDescription = "Novo Flash")
                         }
                     }
                 }
@@ -1661,7 +1934,7 @@ fun HomeScreen(
                                 .fillMaxWidth()
                                 .clickable {
                                     if (myStatuses.isNotEmpty()) {
-                                        activeStatusViewerList = myStatuses
+                                        showMyFlashActionDialog = true
                                     } else {
                                         showStatusOptionsDialog = true
                                     }
@@ -1686,6 +1959,13 @@ fun HomeScreen(
                                                 if (myStatuses.isNotEmpty()) Modifier.border(2.5.dp, Color(0xFF25D366), CircleShape).padding(2.5.dp)
                                                 else Modifier
                                             )
+                                            .clickable {
+                                                if (myStatuses.isNotEmpty()) {
+                                                    activeStatusViewerList = myStatuses
+                                                } else {
+                                                    showStatusOptionsDialog = true
+                                                }
+                                            }
                                     ) {
                                         UserAvatarView(
                                             avatarUrl = myStatuses.lastOrNull()?.avatarUrl ?: prefs.userAvatarUrl,
@@ -1719,13 +1999,21 @@ fun HomeScreen(
                                     Text("Meu Flash", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = if (myStatuses.isNotEmpty()) "${myStatuses.size} Flash(s) ativo(s)" else "Toque para adicionar um Flash",
+                                        text = if (myStatuses.isNotEmpty()) "${myStatuses.size} Flash(s) ativo(s) • Toque para ver ou adicionar" else "Toque para adicionar um Flash",
                                         fontSize = 13.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
 
-                                Row {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { showStatusOptionsDialog = true }) {
+                                        Icon(
+                                            imageVector = Icons.Default.AddCircle,
+                                            contentDescription = "Adicionar Flash",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(26.dp)
+                                        )
+                                    }
                                     IconButton(onClick = { showCreateTextStatusDialog = true }) {
                                         Icon(Icons.Default.Edit, contentDescription = "Texto", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }

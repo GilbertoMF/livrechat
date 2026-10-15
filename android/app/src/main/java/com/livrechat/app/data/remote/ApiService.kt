@@ -5,6 +5,7 @@ import com.livrechat.app.data.remote.model.BaseResponse
 import com.livrechat.app.data.remote.model.CallHistoryDto
 import com.livrechat.app.data.remote.model.ContactDto
 import com.livrechat.app.data.remote.model.ConversationDto
+import com.livrechat.app.data.remote.model.CreateGroupRequest
 import com.livrechat.app.data.remote.model.IceServersResponse
 import com.livrechat.app.data.remote.model.LoginRequest
 import com.livrechat.app.data.remote.model.LoginResponse
@@ -139,7 +140,7 @@ interface ApiService {
 
     @POST("api/messages/groups")
     suspend fun createGroup(
-        @Body body: Map<String, Any>
+        @Body request: CreateGroupRequest
     ): Response<ConversationDto>
 
     @GET("api/messages/conversations/{conversationId}/members")

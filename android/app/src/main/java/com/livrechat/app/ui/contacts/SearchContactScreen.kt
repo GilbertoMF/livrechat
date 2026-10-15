@@ -24,7 +24,9 @@ import coil.compose.AsyncImage
 import com.livrechat.app.LivreChatApp
 import com.livrechat.app.data.local.entity.ConversationEntity
 import com.livrechat.app.data.remote.model.AddContactRequest
+import com.livrechat.app.data.remote.model.CreateGroupRequest
 import com.livrechat.app.data.remote.model.UserDto
+import com.livrechat.app.ui.common.UserAvatarView
 import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
 import kotlinx.coroutines.Dispatchers
@@ -434,9 +436,9 @@ fun SearchContactScreen(
                         scope.launch {
                             try {
                                 val res = apiService.createGroup(
-                                    mapOf(
-                                        "title" to title,
-                                        "memberIds" to selectedGroupMembers.toList()
+                                    CreateGroupRequest(
+                                        title = title,
+                                        memberIds = selectedGroupMembers.toList()
                                     )
                                 )
                                 if (res.isSuccessful && res.body() != null) {
@@ -588,107 +590,168 @@ fun SearchContactScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Action Tiles (Shown when not searching)
+            // Action Hub (Shown when not searching)
             if (!isSearchActive || searchQuery.isEmpty()) {
                 item {
-                    // 1. Novo grupo
-                    ActionContactTile(
-                        icon = Icons.Default.GroupAdd,
-                        title = "Novo grupo",
-                        onClick = {
-                            newGroupTitle = ""
-                            selectedGroupMembers = emptySet()
-                            showCreateGroupDialog = true
-                        }
-                    )
-                }
-
-                item {
-                    // 2. Novo contato (com botão QR Code)
-                    Row(
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { showAddContactDialog = true }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = CircleShape,
-                                color = Color(0xFF25D366),
-                                modifier = Modifier.size(42.dp)
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.PersonAdd,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
+                                LivreActionCard(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Default.GroupAdd,
+                                    iconTint = BluePrimary,
+                                    title = "Novo Grupo",
+                                    subtitle = "Criar sala",
+                                    onClick = {
+                                        newGroupTitle = ""
+                                        selectedGroupMembers = emptySet()
+                                        showCreateGroupDialog = true
+                                    }
+                                )
+                                LivreActionCard(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Default.PersonAddAlt1,
+                                    iconTint = Color(0xFF8E24AA),
+                                    title = "Adicionar",
+                                    subtitle = "Por Username / ID",
+                                    onClick = { showAddContactDialog = true }
+                                )
                             }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text(
-                                text = "Novo contato",
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 16.sp
-                            )
-                        }
 
-                        IconButton(onClick = onNavigateToQRCode) {
-                            Icon(
-                                imageVector = Icons.Default.QrCode,
-                                contentDescription = "Escanear QR Code",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                LivreActionCard(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Default.QrCodeScanner,
+                                    iconTint = Color(0xFF00897B),
+                                    title = "Ler QR Code",
+                                    subtitle = "Conectar rápido",
+                                    onClick = onNavigateToQRCode
+                                )
+                                val selfContact = contactsList.firstOrNull { it.isSelf }
+                                LivreActionCard(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Default.BookmarkBorder,
+                                    iconTint = Color(0xFFF57C00),
+                                    title = "Meu Espaço",
+                                    subtitle = "Notas e Mídia",
+                                    onClick = {
+                                        if (selfContact != null) {
+                                            startChatWithUser(selfContact.userId, selfContact.displayName, selfContact.username, null)
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
 
                 item {
-                    // 3. Nova comunidade
-                    ActionContactTile(
-                        icon = Icons.Default.Groups,
-                        title = "Nova comunidade",
-                        onClick = {
-                            Toast.makeText(context, "Comunidades em desenvolvimento", Toast.LENGTH_SHORT).show()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Meus Contatos",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        val otherCount = filteredContacts.count { !it.isSelf }
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = BluePrimary.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "$otherCount salvo(s)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BluePrimary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
                         }
-                    )
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Contatos no LivreChat",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
+                    }
                 }
             }
 
-            // Contact List
-            items(filteredContacts, key = { it.userId }) { contact ->
-                ContactRowItem(
-                    contact = contact,
-                    onClick = {
-                        startChatWithUser(
-                            targetUserId = contact.userId,
-                            targetDisplayName = contact.displayName,
-                            targetUsername = contact.username,
-                            avatarUrl = contact.avatarUrl
-                        )
-                    },
-                    onEditClick = if (!contact.isSelf) {
-                        {
-                            contactToEdit = contact
-                            editNicknameText = contact.displayName
+            val contactsToRender = if (isSearchActive && searchQuery.isNotEmpty()) filteredContacts else filteredContacts.filter { !it.isSelf }
+
+            if (contactsToRender.isEmpty()) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 32.dp, vertical = 36.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.PersonSearch,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
                         }
-                    } else null,
-                    onDeleteClick = if (!contact.isSelf) { { contactToDelete = contact } } else null
-                )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = if (searchQuery.isNotEmpty()) "Nenhum contato encontrado para \"$searchQuery\"" else "Nenhum contato salvo ainda",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (searchQuery.isNotEmpty()) "Tente buscar pelo username exato ou ID" else "Use os botões acima para adicionar amigos pelo ID ou QR Code",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                // Contact List
+                items(contactsToRender, key = { it.userId }) { contact ->
+                    ContactRowItem(
+                        contact = contact,
+                        onClick = {
+                            startChatWithUser(
+                                targetUserId = contact.userId,
+                                targetDisplayName = contact.displayName,
+                                targetUsername = contact.username,
+                                avatarUrl = contact.avatarUrl
+                            )
+                        },
+                        onEditClick = if (!contact.isSelf) {
+                            {
+                                contactToEdit = contact
+                                editNicknameText = contact.displayName
+                            }
+                        } else null,
+                        onDeleteClick = if (!contact.isSelf) { { contactToDelete = contact } } else null
+                    )
+                }
             }
 
             // Additional Search Results from Server (if actively searching)
@@ -699,11 +762,11 @@ fun SearchContactScreen(
                 if (nonLocalResults.isNotEmpty()) {
                     item {
                         Text(
-                            text = "Outros usuários encontrados",
+                            text = "Outros usuários encontrados no LivreChat",
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                            fontWeight = FontWeight.Bold,
+                            color = BluePrimary,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                         )
                     }
                     items(nonLocalResults, key = { it.id }) { user ->
@@ -727,38 +790,39 @@ fun SearchContactScreen(
 }
 
 @Composable
-fun ActionContactTile(
+fun LivreActionCard(
+    modifier: Modifier = Modifier,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: Color,
     title: String,
+    subtitle: String,
     onClick: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 2.dp,
+        modifier = modifier.clickable(onClick = onClick)
     ) {
-        Surface(
-            shape = CircleShape,
-            color = Color(0xFF25D366),
-            modifier = Modifier.size(42.dp)
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = iconTint.copy(alpha = 0.14f),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
+                }
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(text = title, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                Text(text = subtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
         }
-        Spacer(modifier = Modifier.width(16.dp))
-        Text(
-            text = title,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp
-        )
     }
 }
 
@@ -769,72 +833,85 @@ fun ContactRowItem(
     onEditClick: (() -> Unit)? = null,
     onDeleteClick: (() -> Unit)? = null
 ) {
-    Row(
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 14.dp, vertical = 4.dp)
     ) {
-        // Avatar
-        Surface(
-            shape = CircleShape,
-            color = if (contact.isSelf) Color(0xFF25D366).copy(alpha = 0.2f) else BluePrimary.copy(alpha = 0.15f),
-            modifier = Modifier.size(46.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                if (!contact.avatarUrl.isNullOrEmpty()) {
-                    AsyncImage(
-                        model = contact.avatarUrl,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize().clip(CircleShape)
-                    )
-                } else {
-                    Text(
-                        text = contact.displayName.take(1).uppercase(),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = if (contact.isSelf) Color(0xFF25D366) else BluePrimary
+            // Modern LivreChat Avatar
+            UserAvatarView(
+                avatarUrl = contact.avatarUrl,
+                displayName = contact.displayName,
+                size = 46.dp,
+                fontSize = 18.sp
+            )
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (contact.isSelf) "${contact.displayName} (Você)" else contact.displayName,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = contact.bio.ifBlank { "@${contact.username}" },
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+
+            // Quick Chat Button
+            IconButton(
+                onClick = onClick,
+                modifier = Modifier.size(34.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ChatBubbleOutline,
+                    contentDescription = "Conversar",
+                    tint = BluePrimary,
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+
+            if (!contact.isSelf && onEditClick != null) {
+                IconButton(
+                    onClick = onEditClick,
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Editar contato",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.width(14.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = if (contact.isSelf) "${contact.displayName} (Você)" else contact.displayName,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 16.sp
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = contact.bio.ifBlank { "@${contact.username}" },
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        if (!contact.isSelf && onEditClick != null) {
-            IconButton(onClick = onEditClick) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = "Editar contato",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-
-        if (!contact.isSelf && onDeleteClick != null) {
-            IconButton(onClick = onDeleteClick) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Excluir contato",
-                    tint = DangerRed.copy(alpha = 0.7f),
-                    modifier = Modifier.size(20.dp)
-                )
+            if (!contact.isSelf && onDeleteClick != null) {
+                IconButton(
+                    onClick = onDeleteClick,
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Excluir contato",
+                        tint = DangerRed.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }

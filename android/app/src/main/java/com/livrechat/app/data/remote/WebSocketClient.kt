@@ -157,16 +157,21 @@ class WebSocketClient(
                         "chat:message" -> {
                             val m = json.getAsJsonObject("message") ?: return@launch
                             val currentUserId = preferencesManager.currentUserId ?: ""
+                            val senderId = m.get("sender_id").asStringOrDefault()
+                            if (preferencesManager.isUserBlocked(senderId)) {
+                                Log.d(TAG, "Mensagem descartada de usuário bloqueado: $senderId")
+                                return@launch
+                            }
                             val entity = MessageEntity(
                                 id = m.get("id").asStringOrDefault(),
                                 conversationId = m.get("conversation_id").asStringOrDefault(),
-                                senderId = m.get("sender_id").asStringOrDefault(),
+                                senderId = senderId,
                                 content = m.get("content").asStringOrDefault(),
                                 iv = m.get("iv").asStringOrNull(),
                                 messageType = m.get("message_type").asStringOrDefault("text"),
                                 replyToId = m.get("reply_to_id").asStringOrNull(),
                                 status = "delivered",
-                                isOutgoing = m.get("sender_id").asStringOrDefault() == currentUserId,
+                                isOutgoing = senderId == currentUserId,
                                 isEdited = m.get("is_edited").asBooleanOrDefault(false),
                                 isDeleted = m.get("is_deleted").asBooleanOrDefault(false),
                                 createdAt = System.currentTimeMillis()
@@ -188,12 +193,17 @@ class WebSocketClient(
                         "chat:typing" -> {
                             val convId = json.get("conversationId").asStringOrDefault()
                             val userId = json.get("userId").asStringOrDefault()
+                            if (preferencesManager.isUserBlocked(userId)) return@launch
                             val username = json.get("username").asStringOrDefault()
                             val isTyping = json.get("isTyping").asBooleanOrDefault(false)
                             listener.onTyping(convId, userId, username, isTyping)
                         }
                         "call:incoming" -> {
                             val callerId = json.get("callerId").asStringOrDefault()
+                            if (preferencesManager.isUserBlocked(callerId)) {
+                                Log.d(TAG, "Chamada ignorada de contato bloqueado: $callerId")
+                                return@launch
+                            }
                             val callerUsername = json.get("callerUsername").asStringOrDefault()
                             val callerDisplayName = json.get("callerDisplayName").asStringOrDefault()
                             val callerAvatarUrl = json.get("callerAvatarUrl").asStringOrNull()
@@ -285,7 +295,8 @@ class WebSocketClient(
                                 }
                             } else System.currentTimeMillis()
                             if (uid != null) {
-                                listener.onUserStatus(uid, status == "online", ts)
+                                val isOnline = (status == "online") && !preferencesManager.isUserBlocked(uid)
+                                listener.onUserStatus(uid, isOnline, ts)
                             }
                         }
                     }

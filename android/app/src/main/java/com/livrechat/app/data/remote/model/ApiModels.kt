@@ -179,4 +179,7 @@ data class StatusDto(
     val views: List<StatusViewDto>? = null
 )
 
-
+data class CreateGroupRequest(
+    val title: String,
+    val memberIds: List<String>
+)
