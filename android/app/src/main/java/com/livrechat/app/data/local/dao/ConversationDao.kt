@@ -60,6 +60,9 @@ interface ConversationDao {
 
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun deleteConversation(id: String)
+
+    @Query("UPDATE conversations SET otherDisplayName = :displayName WHERE otherUserId = :otherUserId")
+    suspend fun updateOtherDisplayName(otherUserId: String, displayName: String)
 }
 
 private fun sanitizePreview(content: String?): String? {

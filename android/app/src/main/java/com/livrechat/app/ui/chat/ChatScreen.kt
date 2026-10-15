@@ -37,6 +37,12 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.viewinterop.AndroidView
+import android.widget.EditText
+import androidx.core.view.ViewCompat
+import com.livrechat.app.util.TimeUtils
 import coil.compose.AsyncImage
 import com.livrechat.app.data.local.model.ReactionUtils
 import com.livrechat.app.ui.camera.CustomCameraDialog
@@ -155,6 +161,7 @@ fun ChatScreen(
     var initialScrollCompleted by remember { mutableStateOf(false) }
     var unreadBelowCount by remember { mutableIntStateOf(0) }
     var showScrollToBottomButton by remember { mutableStateOf(false) }
+    var showEmojiStickerSheet by remember { mutableStateOf(false) }
 
     val isNearBottom by remember {
         derivedStateOf {
@@ -223,6 +230,78 @@ fun ChatScreen(
         }
     }
 
+    val imeBottom = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current)
+    LaunchedEffect(imeBottom) {
+        if (imeBottom > 0 && messages.isNotEmpty()) {
+            delay(60)
+            listState.animateScrollToItem(messages.size - 1)
+            showScrollToBottomButton = false
+            unreadBelowCount = 0
+        }
+    }
+
+    LaunchedEffect(showEmojiStickerSheet) {
+        if (showEmojiStickerSheet && messages.isNotEmpty()) {
+            delay(100)
+            listState.animateScrollToItem(messages.size - 1)
+            showScrollToBottomButton = false
+            unreadBelowCount = 0
+        }
+    }
+
+    var clipboardImageUri by remember { mutableStateOf<Uri?>(null) }
+
+    LaunchedEffect(Unit) {
+        try {
+            val clipManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            if (clipManager != null && clipManager.hasPrimaryClip()) {
+                val clip = clipManager.primaryClip
+                if (clip != null && clip.itemCount > 0) {
+                    val item = clip.getItemAt(0)
+                    val uri = item.uri
+                    val desc = clipManager.primaryClipDescription
+                    if (uri != null && (desc?.hasMimeType("image/*") == true || context.contentResolver.getType(uri)?.startsWith("image/") == true)) {
+                        clipboardImageUri = uri
+                    }
+                }
+            }
+        } catch (e: Exception) {}
+    }
+
+    fun handlePastedImage(uri: Uri) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val scaled = MediaFileManager.loadGalleryImageCorrected(context, uri, 1280)
+                if (scaled != null) {
+                    val baos = ByteArrayOutputStream()
+                    scaled.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+                    val bytes = baos.toByteArray()
+                    val localFile = MediaFileManager.saveBytesToLocalFile(context, bytes, "paste_${System.currentTimeMillis()}.jpg")
+                    val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    val dataUri = "data:image/jpeg;base64,$b64"
+                    viewModel.sendMediaMessage(
+                        conversationId = conversationId,
+                        content = localFile.absolutePath,
+                        networkPayload = dataUri,
+                        messageType = "image",
+                        fileName = "imagem_colada.jpg",
+                        fileSize = bytes.size.toLong(),
+                        targetUserId = otherUserId
+                    )
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Imagem colada e enviada!", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Não foi possível carregar a imagem colada", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("ChatScreen", "Erro ao processar imagem colada", e)
+            }
+        }
+    }
+
     val currentConv by remember(conversationId) {
         app.database.conversationDao().getConversationByIdFlow(conversationId)
     }.collectAsState(initial = null)
@@ -235,7 +314,6 @@ fun ChatScreen(
     var messageActionTarget by remember { mutableStateOf<MessageEntity?>(null) }
     var replyingToMessage by remember { mutableStateOf<MessageEntity?>(null) }
     var showCameraDialog by remember { mutableStateOf(false) }
-    var showEmojiStickerSheet by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val inputFocusRequester = remember { FocusRequester() }
     var showAttachmentSheet by remember { mutableStateOf(false) }
@@ -495,7 +573,11 @@ fun ChatScreen(
             TopAppBar(
                 title = {
                     val isGroup = currentConv?.isGroup == true
-                    val headerTitle = if (isGroup) (currentConv?.groupTitle ?: "Grupo") else otherDisplayName
+                    val headerTitle = if (isGroup) {
+                        currentConv?.groupTitle ?: "Grupo"
+                    } else {
+                        prefs.getContactCustomName(otherUserId) ?: currentConv?.otherDisplayName ?: otherDisplayName
+                    }
                     val headerAvatar = if (isGroup) currentConv?.groupAvatar else currentConv?.otherAvatarUrl
 
                     Row(
@@ -785,37 +867,92 @@ fun ChatScreen(
                         }
                     }
                 } else {
-                    // Standard Text & Mic Mode
+                    // Clipboard Copied Image Pill Banner
+                    if (clipboardImageUri != null) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            border = BorderStroke(1.dp, BluePrimary.copy(alpha = 0.4f)),
+                            shadowElevation = 4.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    AsyncImage(
+                                        model = clipboardImageUri,
+                                        contentDescription = "Prévia da imagem copiada",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Imagem na Área de Transferência",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Toque em Colar para enviar na conversa",
+                                        fontSize = 11.sp,
+                                        color = BluePrimary
+                                    )
+                                }
+                                Button(
+                                    onClick = {
+                                        val uriToSend = clipboardImageUri
+                                        clipboardImageUri = null
+                                        if (uriToSend != null) {
+                                            handlePastedImage(uriToSend)
+                                        }
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = BluePrimary),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text("Colar", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                IconButton(
+                                    onClick = { clipboardImageUri = null },
+                                    modifier = Modifier.size(26.dp).padding(start = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Fechar", modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    // Standard Text & Mic Mode with Rich Image Paste Support
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        OutlinedTextField(
-                            value = textInput,
-                            onValueChange = {
-                                textInput = it
-                                if (it.isNotBlank()) {
-                                    val now = System.currentTimeMillis()
-                                    if (now - lastTypingSentTime > 1500L) {
-                                        lastTypingSentTime = now
-                                        viewModel.sendTyping(true, otherUserId)
-                                    }
-                                    typingDebounceJob?.cancel()
-                                    typingDebounceJob = scope.launch {
-                                        delay(1500)
-                                        viewModel.sendTyping(false, otherUserId)
-                                        lastTypingSentTime = 0L
-                                    }
-                                } else {
-                                    typingDebounceJob?.cancel()
-                                    viewModel.sendTyping(false, otherUserId)
-                                    lastTypingSentTime = 0L
-                                }
-                            },
-                            placeholder = { Text("Mensagem", fontSize = 15.sp) },
-                            leadingIcon = {
+                        val textColorArgb = MaterialTheme.colorScheme.onSurface.toArgb()
+                        val hintColorArgb = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
+
+                        Surface(
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 IconButton(onClick = {
                                     if (showEmojiStickerSheet) {
                                         showEmojiStickerSheet = false
@@ -832,8 +969,87 @@ fun ChatScreen(
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                            },
-                            trailingIcon = {
+
+                                AndroidView(
+                                    factory = { ctx ->
+                                        val et = EditText(ctx)
+                                        et.background = null
+                                        et.hint = "Mensagem"
+                                        et.setHintTextColor(hintColorArgb)
+                                        et.setTextColor(textColorArgb)
+                                        et.textSize = 15f
+                                        et.maxLines = 4
+                                        et.isSingleLine = false
+                                        et.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_NONE
+                                        et.inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                                                android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
+                                                android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+
+                                        // Rich content receiver for Gboard clipboard and system clipboard
+                                        ViewCompat.setOnReceiveContentListener(
+                                            et,
+                                            arrayOf("image/*", "image/png", "image/jpeg", "image/webp", "image/gif")
+                                        ) { _, payload ->
+                                            val split = payload.partition { it.uri != null }
+                                            val img = split.first
+                                            val rem = split.second
+                                            if (img != null && img.clip.itemCount > 0) {
+                                                val uri = img.clip.getItemAt(0)?.uri
+                                                if (uri != null) {
+                                                    handlePastedImage(uri)
+                                                }
+                                            }
+                                            rem
+                                        }
+
+                                        et.addTextChangedListener(object : android.text.TextWatcher {
+                                            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                                            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                                                val str = s?.toString() ?: ""
+                                                if (str != textInput) {
+                                                    textInput = str
+                                                    if (str.isNotBlank()) {
+                                                        val now = System.currentTimeMillis()
+                                                        if (now - lastTypingSentTime > 1500L) {
+                                                            lastTypingSentTime = now
+                                                            viewModel.sendTyping(true, otherUserId)
+                                                        }
+                                                        typingDebounceJob?.cancel()
+                                                        typingDebounceJob = scope.launch {
+                                                            delay(1500)
+                                                            viewModel.sendTyping(false, otherUserId)
+                                                            lastTypingSentTime = 0L
+                                                        }
+                                                    } else {
+                                                        typingDebounceJob?.cancel()
+                                                        viewModel.sendTyping(false, otherUserId)
+                                                        lastTypingSentTime = 0L
+                                                    }
+                                                }
+                                            }
+                                            override fun afterTextChanged(s: android.text.Editable?) {}
+                                        })
+
+                                        et.setOnFocusChangeListener { _, hasFocus ->
+                                            if (hasFocus && showEmojiStickerSheet) {
+                                                showEmojiStickerSheet = false
+                                            }
+                                        }
+                                        et
+                                    },
+                                    update = { et: EditText ->
+                                        if (et.text.toString() != textInput) {
+                                            et.setText(textInput)
+                                            et.setSelection(et.text?.length ?: 0)
+                                        }
+                                        et.setTextColor(textColorArgb)
+                                        et.setHintTextColor(hintColorArgb)
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     IconButton(onClick = { showAttachmentSheet = true }) {
                                         Icon(
@@ -852,19 +1068,8 @@ fun ChatScreen(
                                         }
                                     }
                                 }
-                            },
-                            maxLines = 4,
-                            shape = RoundedCornerShape(24.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 8.dp)
-                                .focusRequester(inputFocusRequester)
-                                .onFocusChanged { focusState ->
-                                    if (focusState.isFocused && showEmojiStickerSheet) {
-                                        showEmojiStickerSheet = false
-                                    }
-                                }
-                        )
+                            }
+                        }
 
                         if (textInput.isNotBlank()) {
                             IconButton(
@@ -1280,7 +1485,7 @@ fun MessageBubble(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.createdAt)),
+                            text = TimeUtils.formatTime(message.createdAt),
                             color = OfflineGray,
                             fontSize = 11.sp
                         )
@@ -1422,7 +1627,7 @@ fun MessageBubble(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.createdAt)),
+                                text = TimeUtils.formatTime(message.createdAt),
                                 color = if (isOutgoing) Color.White.copy(alpha = 0.7f) else OfflineGray,
                                 fontSize = 11.sp
                             )
@@ -2070,15 +2275,15 @@ fun formatChatLastSeen(ts: Long?): String {
     if (ts == null || ts <= 0L) return "Visto por último recentemente"
     val now = java.util.Calendar.getInstance()
     val time = java.util.Calendar.getInstance().apply { timeInMillis = ts }
-    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    val timeStr = com.livrechat.app.util.TimeUtils.formatTime(ts)
     return if (now.get(java.util.Calendar.YEAR) == time.get(java.util.Calendar.YEAR) &&
                now.get(java.util.Calendar.DAY_OF_YEAR) == time.get(java.util.Calendar.DAY_OF_YEAR)) {
-        "Visto por último hoje às ${timeFormat.format(Date(ts))}"
+        "Visto por último hoje às $timeStr"
     } else if (now.get(java.util.Calendar.YEAR) == time.get(java.util.Calendar.YEAR) &&
                now.get(java.util.Calendar.DAY_OF_YEAR) - time.get(java.util.Calendar.DAY_OF_YEAR) == 1) {
-        "Visto por último ontem às ${timeFormat.format(Date(ts))}"
+        "Visto por último ontem às $timeStr"
     } else {
-        val dateFormat = SimpleDateFormat("dd/MM/yyyy às HH:mm", Locale.getDefault())
-        "Visto por último em ${dateFormat.format(Date(ts))}"
+        val dateStr = com.livrechat.app.util.TimeUtils.formatDateTimeWithWord(ts)
+        "Visto por último em $dateStr"
     }
 }

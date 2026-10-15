@@ -89,7 +89,11 @@ fun ContactProfileDialog(
         }
     }
 
-    val displayTitle = userProfile?.displayName?.ifBlank { null }
+    val customSavedName = remember(otherUserId) { app.preferencesManager.getContactCustomName(otherUserId) }
+    var localCustomName by remember { mutableStateOf(customSavedName) }
+
+    val displayTitle = localCustomName
+        ?: userProfile?.displayName?.ifBlank { null }
         ?: otherDisplayName.ifBlank { "Contato" }
     val displayHandle = userProfile?.username?.ifBlank { null }
         ?: otherUsername.ifBlank { otherUserId.take(12) }
@@ -834,20 +838,38 @@ fun ContactProfileDialog(
                     val newName = editNicknameInput.trim()
                     if (newName.isNotBlank()) {
                         showEditNicknameDialog = false
+                        localCustomName = newName
+                        app.preferencesManager.setContactCustomName(otherUserId, newName)
                         scope.launch {
-                            try {
-                                app.apiClient.apiService.updateContact(otherUserId, mapOf("nickname" to newName))
-                                withContext(Dispatchers.IO) {
+                            withContext(Dispatchers.IO) {
+                                try {
+                                    app.database.conversationDao().updateOtherDisplayName(otherUserId, newName)
                                     val conv = app.database.conversationDao().getConversationById(conversationId)
                                     if (conv != null) {
                                         app.database.conversationDao().insertOrUpdate(conv.copy(otherDisplayName = newName))
                                     }
-                                }
-                                userProfile = userProfile?.copy(displayName = newName)
-                                Toast.makeText(context, "Nome atualizado", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Erro ao atualizar", Toast.LENGTH_SHORT).show()
+                                    val existingContact = app.database.contactDao().getContactByUserId(otherUserId)
+                                    if (existingContact != null) {
+                                        app.database.contactDao().insertContact(existingContact.copy(displayName = newName))
+                                    } else {
+                                        app.database.contactDao().insertContact(
+                                            com.livrechat.app.data.local.entity.ContactEntity(
+                                                id = otherUserId,
+                                                contactUserId = otherUserId,
+                                                username = otherUsername,
+                                                displayName = newName,
+                                                avatarUrl = otherAvatarUrl,
+                                                publicKey = null
+                                            )
+                                        )
+                                    }
+                                } catch (e: Exception) {}
+                                try {
+                                    app.apiClient.apiService.updateContact(otherUserId, mapOf("nickname" to newName))
+                                } catch (e: Exception) {}
                             }
+                            userProfile = userProfile?.copy(displayName = newName)
+                            Toast.makeText(context, "Nome atualizado", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }) {

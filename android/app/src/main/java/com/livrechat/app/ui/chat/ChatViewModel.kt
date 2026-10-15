@@ -124,11 +124,18 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                                 }
                             }
                         }
+                        val effectiveUserId = otherU?.id ?: dto.conversationId
+                        val customNick = prefs.getContactCustomName(effectiveUserId)
+                        val effectiveDisplayName = customNick
+                            ?: localExisting?.otherDisplayName?.takeIf { !it.startsWith("ID ") && it.isNotBlank() }
+                            ?: otherU?.displayName
+                            ?: (dto.title ?: "Grupo")
+
                         ConversationEntity(
                             id = dto.conversationId,
-                            otherUserId = otherU?.id ?: dto.conversationId,
+                            otherUserId = effectiveUserId,
                             otherUsername = otherU?.username ?: (dto.title ?: "Grupo"),
-                            otherDisplayName = otherU?.displayName ?: (dto.title ?: "Grupo"),
+                            otherDisplayName = effectiveDisplayName,
                             otherAvatarUrl = otherU?.avatarUrl ?: dto.avatarUrl,
                             otherPublicKey = otherU?.publicKey,
                             lastMessageContent = preview,

@@ -18,6 +18,12 @@ import java.io.FileOutputStream
 import android.media.MediaPlayer
 import android.widget.VideoView
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -1858,8 +1864,30 @@ fun FullScreenStatusViewer(
 
     var isAudioPlaying by remember { mutableStateOf(false) }
     var statusMediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+    var isMuted by remember { mutableStateOf(false) }
+    var audioCurrentMs by remember { mutableIntStateOf(0) }
+    var audioDurationMs by remember { mutableIntStateOf(15000) }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "vinyl")
+    val vinylRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(durationMillis = 7000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "vinylRotation"
+    )
+
+    LaunchedEffect(isAudioPlaying, isPaused) {
+        while (isAudioPlaying && !isPaused) {
+            audioCurrentMs = statusMediaPlayer?.currentPosition ?: 0
+            delay(100)
+        }
+    }
 
     DisposableEffect(currentStatus) {
+        audioCurrentMs = 0
         if (currentStatus.contentType == "audio" && currentStatus.content.isNotBlank()) {
             try {
                 val mp = MediaPlayer()
@@ -1874,8 +1902,12 @@ fun FullScreenStatusViewer(
                     mp.setDataSource(content)
                 }
                 mp.setOnPreparedListener {
+                    if (isMuted) it.setVolume(0f, 0f) else it.setVolume(1f, 1f)
                     it.start()
                     isAudioPlaying = true
+                    if (it.duration > 0) {
+                        audioDurationMs = it.duration
+                    }
                 }
                 mp.setOnCompletionListener {
                     isAudioPlaying = false
@@ -2075,69 +2107,145 @@ fun FullScreenStatusViewer(
                             listOf(title, artist, art, userC)
                         }
 
+                        val activeRotation = if (isAudioPlaying && !isPaused) vinylRotation else 0f
+
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
-                            modifier = Modifier.padding(24.dp)
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                         ) {
-                            // WhatsApp Floating Music Card
-                            Surface(
-                                shape = RoundedCornerShape(24.dp),
-                                color = Color.Black.copy(alpha = 0.55f),
-                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                            // WhatsApp-style Vinyl Record (Disco de Vinil)
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp)
+                                    .size(200.dp)
+                                    .clickable {
+                                        try {
+                                            if (statusMediaPlayer?.isPlaying == true) {
+                                                statusMediaPlayer?.pause()
+                                                isAudioPlaying = false
+                                                isPaused = true
+                                            } else {
+                                                statusMediaPlayer?.start()
+                                                isAudioPlaying = true
+                                                isPaused = false
+                                            }
+                                        } catch (e: Exception) {}
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.padding(24.dp)
+                                // Outer Vinyl Shell with grooves & rotation
+                                Box(
+                                    modifier = Modifier
+                                        .size(195.dp)
+                                        .graphicsLayer { rotationZ = activeRotation }
+                                        .background(Color(0xFF161616), CircleShape)
+                                        .border(2.dp, Color(0xFF2C2C2C), CircleShape),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    if (albumArt.isNotBlank()) {
-                                        Surface(
-                                            shape = RoundedCornerShape(18.dp),
-                                            shadowElevation = 8.dp,
-                                            border = BorderStroke(2.dp, Color.White.copy(alpha = 0.35f)),
-                                            modifier = Modifier.size(110.dp)
-                                        ) {
+                                    // Concentric sound grooves
+                                    Box(modifier = Modifier.size(170.dp).border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape))
+                                    Box(modifier = Modifier.size(145.dp).border(1.dp, Color.White.copy(alpha = 0.07f), CircleShape))
+                                    Box(modifier = Modifier.size(120.dp).border(1.dp, Color.White.copy(alpha = 0.06f), CircleShape))
+
+                                    // Center Album Art Disc
+                                    Surface(
+                                        shape = CircleShape,
+                                        modifier = Modifier.size(88.dp),
+                                        border = BorderStroke(2.dp, Color(0xFF25D366))
+                                    ) {
+                                        if (albumArt.isNotBlank()) {
                                             AsyncImage(
                                                 model = albumArt,
                                                 contentDescription = null,
                                                 modifier = Modifier.fillMaxSize(),
                                                 contentScale = ContentScale.Crop
                                             )
-                                        }
-                                    } else {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(110.dp)
-                                                .background(Color.White.copy(alpha = 0.15f), CircleShape)
-                                                .border(2.5.dp, Color(0xFF25D366), CircleShape),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Surface(
-                                                shape = CircleShape,
-                                                color = Color.Black.copy(alpha = 0.4f),
-                                                modifier = Modifier.size(50.dp)
+                                        } else {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(Color(0xFF075E54)),
+                                                contentAlignment = Alignment.Center
                                             ) {
-                                                Box(contentAlignment = Alignment.Center) {
-                                                    Icon(
-                                                        Icons.Default.MusicNote,
-                                                        contentDescription = null,
-                                                        tint = Color(0xFF25D366),
-                                                        modifier = Modifier.size(30.dp)
-                                                    )
-                                                }
+                                                Icon(
+                                                    Icons.Default.MusicNote,
+                                                    contentDescription = null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(40.dp)
+                                                )
                                             }
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(18.dp))
+                                    // Spindle Hole
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .background(Color.Black, CircleShape)
+                                            .border(1.5.dp, Color.LightGray.copy(alpha = 0.8f), CircleShape)
+                                    )
+                                }
+
+                                // Center Play/Pause Glass Icon
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color.Black.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(52.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = if (isAudioPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                            contentDescription = if (isAudioPlaying) "Pausar" else "Reproduzir",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(30.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(18.dp))
+
+                            // WhatsApp Music Card
+                            Surface(
+                                shape = RoundedCornerShape(22.dp),
+                                color = Color.Black.copy(alpha = 0.58f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 6.dp)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+                                ) {
+                                    // Badge "Música no Flash"
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .background(Color(0xFF25D366).copy(alpha = 0.18f), RoundedCornerShape(12.dp))
+                                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.MusicNote,
+                                            contentDescription = null,
+                                            tint = Color(0xFF25D366),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (musicArtist.isNotBlank()) "Música no Flash" else "Áudio do Flash",
+                                            color = Color(0xFF25D366),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
 
                                     Text(
                                         text = musicTitle,
                                         color = Color.White,
-                                        fontSize = 20.sp,
+                                        fontSize = 19.sp,
                                         fontWeight = FontWeight.Bold,
                                         textAlign = TextAlign.Center,
                                         maxLines = 2,
@@ -2149,7 +2257,7 @@ fun FullScreenStatusViewer(
                                         Text(
                                             text = musicArtist,
                                             color = Color.White.copy(alpha = 0.85f),
-                                            fontSize = 15.sp,
+                                            fontSize = 14.sp,
                                             fontWeight = FontWeight.Medium,
                                             textAlign = TextAlign.Center,
                                             maxLines = 1,
@@ -2157,84 +2265,68 @@ fun FullScreenStatusViewer(
                                         )
                                     }
 
-                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Spacer(modifier = Modifier.height(14.dp))
 
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = Color(0xFF25D366).copy(alpha = 0.2f)
-                                    ) {
-                                        Text(
-                                            text = if (musicArtist.isNotBlank()) "Música de Cantor" else "Áudio do Flash",
-                                            color = Color(0xFF25D366),
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.height(20.dp))
+                                    // Audio Scrubber & Timers
+                                    val currentSec = audioCurrentMs / 1000
+                                    val totalSec = (audioDurationMs.coerceAtLeast(1000)) / 1000
+                                    val curStr = "%02d:%02d".format(currentSec / 60, currentSec % 60)
+                                    val totStr = "%02d:%02d".format(totalSec / 60, totalSec % 60)
 
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
+                                        horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        IconButton(
-                                            onClick = {
-                                                try {
-                                                    if (statusMediaPlayer?.isPlaying == true) {
-                                                        statusMediaPlayer?.pause()
-                                                        isAudioPlaying = false
-                                                    } else {
-                                                        statusMediaPlayer?.start()
-                                                        isAudioPlaying = true
-                                                    }
-                                                } catch (e: Exception) {}
-                                            },
+                                        Text(text = curStr, color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp)
+                                        val ratio = if (audioDurationMs > 0) (audioCurrentMs.toFloat() / audioDurationMs.toFloat()).coerceIn(0f, 1f) else 0f
+                                        LinearProgressIndicator(
+                                            progress = { ratio },
                                             modifier = Modifier
-                                                .size(54.dp)
-                                                .background(Color.White.copy(alpha = 0.2f), CircleShape)
-                                        ) {
-                                            Icon(
-                                                imageVector = if (isAudioPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                                contentDescription = if (isAudioPlaying) "Pausar" else "Reproduzir",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(30.dp)
-                                            )
-                                        }
+                                                .weight(1f)
+                                                .padding(horizontal = 10.dp)
+                                                .height(4.dp)
+                                                .clip(RoundedCornerShape(2.dp)),
+                                            color = Color(0xFF25D366),
+                                            trackColor = Color.White.copy(alpha = 0.25f)
+                                        )
+                                        Text(text = totStr, color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp)
+                                    }
 
-                                        Spacer(modifier = Modifier.width(16.dp))
+                                    Spacer(modifier = Modifier.height(14.dp))
 
-                                        Row(
-                                            modifier = Modifier.weight(1f),
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            val heights = listOf(14.dp, 24.dp, 36.dp, 20.dp, 30.dp, 16.dp, 28.dp, 38.dp, 22.dp, 32.dp, 18.dp)
-                                            heights.forEachIndexed { i, h ->
-                                                val barColor = if (isAudioPlaying) {
-                                                    if (i % 2 == 0) Color(0xFF25D366) else Color.White
-                                                } else {
-                                                    Color.White.copy(alpha = 0.4f)
-                                                }
-                                                Box(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .height(h)
-                                                        .clip(RoundedCornerShape(2.dp))
-                                                        .background(barColor)
-                                                )
+                                    // Dancing Equalizer Visualizer (16 bars)
+                                    Row(
+                                        modifier = Modifier.height(26.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        val timeTick = audioCurrentMs / 100
+                                        for (i in 0 until 16) {
+                                            val barH = if (isAudioPlaying && !isPaused) {
+                                                val wave = kotlin.math.sin((timeTick + i * 1.4).toDouble())
+                                                (8 + kotlin.math.abs(wave) * 16).dp
+                                            } else {
+                                                7.dp
                                             }
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(3.dp)
+                                                    .height(barH)
+                                                    .clip(RoundedCornerShape(2.dp))
+                                                    .background(if (i % 2 == 0) Color(0xFF25D366) else Color.White.copy(alpha = 0.85f))
+                                            )
                                         }
                                     }
                                 }
                             }
 
                             if (userCaption.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(14.dp))
                                 Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = Color.Black.copy(alpha = 0.4f)
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color.Black.copy(alpha = 0.45f),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
                                 ) {
                                     Text(
                                         text = userCaption,
@@ -2271,9 +2363,10 @@ fun FullScreenStatusViewer(
                 }
             }
 
-            // Quick Status Reaction Bar at bottom (when viewing someone else's status)
+            // Bottom Bar: Reactions & Reply (Other user) or Views (Own status)
             if (currentStatus.userId != currentUserId) {
                 var reactionSentEmoji by remember(currentStatus.id) { mutableStateOf<String?>(null) }
+                var replyInputText by remember(currentStatus.id) { mutableStateOf("") }
 
                 LaunchedEffect(reactionSentEmoji) {
                     if (reactionSentEmoji != null) {
@@ -2286,7 +2379,7 @@ fun FullScreenStatusViewer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
-                        .padding(horizontal = 16.dp, vertical = 20.dp),
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (reactionSentEmoji != null) {
@@ -2294,10 +2387,10 @@ fun FullScreenStatusViewer(
                             shape = CircleShape,
                             color = Color.Black.copy(alpha = 0.85f),
                             border = BorderStroke(1.dp, Color(0xFF25D366)),
-                            modifier = Modifier.padding(bottom = 10.dp)
+                            modifier = Modifier.padding(bottom = 8.dp)
                         ) {
                             Text(
-                                text = "Reação enviada $reactionSentEmoji",
+                                text = "Enviado $reactionSentEmoji",
                                 color = Color.White,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -2306,6 +2399,7 @@ fun FullScreenStatusViewer(
                         }
                     }
 
+                    // Quick emoji reactions
                     Surface(
                         shape = CircleShape,
                         color = Color.Black.copy(alpha = 0.65f),
@@ -2332,6 +2426,72 @@ fun FullScreenStatusViewer(
                                     Text(text = emoji, fontSize = 20.sp)
                                 }
                             }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Text Reply Input (WhatsApp Style)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = replyInputText,
+                            onValueChange = { replyInputText = it },
+                            placeholder = { Text("Responder Flash...", fontSize = 14.sp, color = Color.White.copy(alpha = 0.6f)) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedContainerColor = Color.Black.copy(alpha = 0.6f),
+                                unfocusedContainerColor = Color.Black.copy(alpha = 0.6f),
+                                focusedBorderColor = Color(0xFF25D366),
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.3f)
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (replyInputText.isNotBlank()) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = {
+                                    val textToSend = replyInputText.trim()
+                                    if (textToSend.isNotBlank()) {
+                                        onReactToStatus?.invoke(currentStatus.id, currentStatus.userId, "💬 $textToSend")
+                                        reactionSentEmoji = "💬"
+                                        replyInputText = ""
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .background(Color(0xFF25D366), CircleShape)
+                            ) {
+                                Icon(Icons.Default.Send, contentDescription = "Enviar resposta", tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Own Status Bottom Info (WhatsApp style views indicator)
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.Black.copy(alpha = 0.55f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Visibility, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Flash publicado • Visto por você", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
@@ -2384,7 +2544,7 @@ fun FullScreenStatusViewer(
                     } else {
                         currentStatus.avatarUrl
                     }
-                    val resolvedName = if (currentStatus.userId == currentUserId) "Você" else currentStatus.displayName
+                    val resolvedName = if (currentStatus.userId == currentUserId) "Você" else (com.livrechat.app.LivreChatApp.instance.preferencesManager.getContactCustomName(currentStatus.userId) ?: currentStatus.displayName)
 
                     UserAvatarView(
                         avatarUrl = resolvedAvatar,
@@ -2400,13 +2560,30 @@ fun FullScreenStatusViewer(
                             text = resolvedName,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
+                            fontSize = 15.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = formatRelativeTime(currentStatus.createdAt),
                             color = Color.White.copy(alpha = 0.75f),
                             fontSize = 12.sp
                         )
+                    }
+
+                    if (currentStatus.contentType == "audio" || currentStatus.contentType == "video") {
+                        IconButton(onClick = {
+                            isMuted = !isMuted
+                            try {
+                                statusMediaPlayer?.setVolume(if (isMuted) 0f else 1f, if (isMuted) 0f else 1f)
+                            } catch (e: Exception) {}
+                        }) {
+                            Icon(
+                                imageVector = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                                contentDescription = if (isMuted) "Ativar Som" else "Silenciar Som",
+                                tint = Color.White
+                            )
+                        }
                     }
 
                     if (currentStatus.userId == currentUserId) {
@@ -2439,7 +2616,12 @@ fun ConversationItem(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val itemTitle = if (conversation.isGroup) (conversation.groupTitle ?: conversation.otherDisplayName) else conversation.otherDisplayName
+        val prefs = remember { com.livrechat.app.LivreChatApp.instance.preferencesManager }
+        val itemTitle = if (conversation.isGroup) {
+            conversation.groupTitle ?: conversation.otherDisplayName
+        } else {
+            prefs.getContactCustomName(conversation.otherUserId) ?: conversation.otherDisplayName
+        }
         val itemAvatar = if (conversation.isGroup) conversation.groupAvatar else conversation.otherAvatarUrl
 
         // Avatar
@@ -2606,15 +2788,7 @@ fun CallHistoryItem(
 }
 
 private fun formatTimestamp(timestamp: Long): String {
-    if (timestamp == 0L) return ""
-    val now = System.currentTimeMillis()
-    val diff = now - timestamp
-    val sdf = if (diff < 86400000L) {
-        SimpleDateFormat("HH:mm", Locale.getDefault())
-    } else {
-        SimpleDateFormat("dd/MM", Locale.getDefault())
-    }
-    return sdf.format(Date(timestamp))
+    return com.livrechat.app.util.TimeUtils.formatConversationTimestamp(timestamp)
 }
 
 private fun formatRelativeTime(rawTime: String): String {
@@ -2647,8 +2821,8 @@ private fun formatRelativeTime(rawTime: String): String {
         val now = System.currentTimeMillis()
         val diffMs = now - date.time
         val minutes = diffMs / (60 * 1000)
-        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
-        val dateFormat = SimpleDateFormat("dd/MM", Locale.getDefault()).format(date)
+        val timeFormat = com.livrechat.app.util.TimeUtils.formatTime(date.time)
+        val dateFormat = com.livrechat.app.util.TimeUtils.formatDayMonth(date.time)
 
         val calNow = java.util.Calendar.getInstance()
         val calDate = java.util.Calendar.getInstance().apply { time = date }

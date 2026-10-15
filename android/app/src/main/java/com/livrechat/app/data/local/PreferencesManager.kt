@@ -203,6 +203,17 @@ class PreferencesManager(private val context: Context) {
         } catch (e: Exception) {}
     }
 
+    fun setContactCustomName(userId: String, customName: String) {
+        val myId = currentUserId ?: "global"
+        prefs.edit().putString("contact_name_${myId}_$userId", customName.trim()).apply()
+    }
+
+    fun getContactCustomName(userId: String): String? {
+        val myId = currentUserId ?: "global"
+        val name = prefs.getString("contact_name_${myId}_$userId", null)
+        return if (name.isNullOrBlank()) null else name.trim()
+    }
+
     companion object {
         private const val KEY_SERVER_URL = "server_url"
         private const val KEY_ACCESS_TOKEN = "access_token"
