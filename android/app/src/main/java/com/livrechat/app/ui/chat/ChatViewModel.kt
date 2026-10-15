@@ -571,6 +571,12 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         }
     }
 
+    fun sendStatusView(statusId: String, authorId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            connectionManager.getClient().sendStatusView(statusId, authorId)
+        }
+    }
+
     fun clearConversation(conversationId: String, targetUserId: String? = null) {
         val target = targetUserId ?: _currentOtherUserId.value
         viewModelScope.launch(Dispatchers.IO) {

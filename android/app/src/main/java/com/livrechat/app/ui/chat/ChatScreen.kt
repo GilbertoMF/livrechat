@@ -80,6 +80,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -318,6 +319,7 @@ fun ChatScreen(
     val inputFocusRequester = remember { FocusRequester() }
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var viewingImageBase64 by remember { mutableStateOf<String?>(null) }
+    var viewingVideoMessage by remember { mutableStateOf<MessageEntity?>(null) }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -1185,6 +1187,7 @@ fun ChatScreen(
                         },
                         onReactionClick = { viewModel.toggleReaction(it.id, "❤️") },
                         onImageClick = { viewingImageBase64 = it },
+                        onVideoClick = { viewingVideoMessage = it },
                         isGroup = currentConv?.isGroup == true
                     )
                 }
@@ -1395,6 +1398,13 @@ fun ChatScreen(
             onDismiss = { viewingImageBase64 = null }
         )
     }
+
+    if (viewingVideoMessage != null) {
+        FullscreenVideoViewerDialog(
+            message = viewingVideoMessage!!,
+            onDismiss = { viewingVideoMessage = null }
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1406,6 +1416,7 @@ fun MessageBubble(
     onSwipeToReply: (MessageEntity) -> Unit,
     onReactionClick: (MessageEntity) -> Unit,
     onImageClick: (String) -> Unit,
+    onVideoClick: (MessageEntity) -> Unit,
     isGroup: Boolean = false
 ) {
     val isOutgoing = message.isOutgoing
@@ -1496,6 +1507,31 @@ fun MessageBubble(
                     }
                 }
             } else {
+                val isAudioMsg = message.messageType == "audio" ||
+                    message.content.startsWith("data:audio") ||
+                    message.content.endsWith(".m4a") ||
+                    message.content.endsWith(".mp3") ||
+                    message.content.contains("voice_") ||
+                    message.content.contains("audio_msg_")
+
+                val isImageMsg = message.messageType == "image" || message.content.startsWith("data:image")
+                val isVideoMsg = message.messageType == "video" || message.content.startsWith("data:video")
+
+                val videoParts = if (isVideoMsg) (message.iv?.split("|") ?: emptyList()) else emptyList()
+                val videoCaption = videoParts.getOrNull(2)?.ifBlank { null }
+                val imageCaption = if (isImageMsg) message.iv?.ifBlank { null } else null
+
+                val hasMediaCaption = (!videoCaption.isNullOrBlank()) || (!imageCaption.isNullOrBlank())
+                val isMediaMsg = isImageMsg || isVideoMsg
+                val isMediaWithoutCaption = isMediaMsg && !hasMediaCaption
+
+                val bubblePadding = when {
+                    isMediaWithoutCaption -> PaddingValues(3.dp)
+                    isMediaMsg && hasMediaCaption -> PaddingValues(start = 3.dp, top = 3.dp, end = 3.dp, bottom = 4.dp)
+                    isAudioMsg -> PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    else -> PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                }
+
                 Surface(
                     shape = RoundedCornerShape(
                         topStart = 16.dp,
@@ -1511,7 +1547,7 @@ fun MessageBubble(
                             onLongClick = { onLongPress(message) }
                         )
                 ) {
-                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Column(modifier = Modifier.padding(bubblePadding)) {
                         // Sender identifier in group conversation if incoming
                         if (isGroup && !isOutgoing) {
                             Text(
@@ -1519,7 +1555,10 @@ fun MessageBubble(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 color = BluePrimary,
-                                modifier = Modifier.padding(bottom = 2.dp)
+                                modifier = Modifier.padding(
+                                    start = if (isMediaMsg) 6.dp else 0.dp,
+                                    bottom = 3.dp
+                                )
                             )
                         }
 
@@ -1530,7 +1569,11 @@ fun MessageBubble(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 6.dp)
+                                    .padding(
+                                        start = if (isMediaMsg) 4.dp else 0.dp,
+                                        end = if (isMediaMsg) 4.dp else 0.dp,
+                                        bottom = 6.dp
+                                    )
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
@@ -1581,30 +1624,25 @@ fun MessageBubble(
                                     fontSize = 14.sp
                                 )
                             }
-                        } else if (
-                            message.messageType == "audio" ||
-                            message.content.startsWith("data:audio") ||
-                            message.content.endsWith(".m4a") ||
-                            message.content.endsWith(".mp3") ||
-                            message.content.contains("voice_") ||
-                            message.content.contains("audio_msg_")
-                        ) {
+                        } else if (isAudioMsg) {
                             AudioMessageBubbleContent(
                                 message = message,
                                 audioPlayerHelper = audioPlayerHelper,
                                 isOutgoing = isOutgoing
                             )
-                        } else if (message.messageType == "image" || message.content.startsWith("data:image")) {
+                        } else if (isImageMsg) {
                             ImageMessageBubbleContent(
                                 message = message,
                                 isOutgoing = isOutgoing,
+                                hasCaption = hasMediaCaption,
                                 onImageClick = { onImageClick(message.content) }
                             )
-                        } else if (message.messageType == "video" || message.content.startsWith("data:video")) {
+                        } else if (isVideoMsg) {
                             VideoMessageBubbleContent(
                                 message = message,
                                 isOutgoing = isOutgoing,
-                                context = context
+                                hasCaption = hasMediaCaption,
+                                onVideoClick = { onVideoClick(message) }
                             )
                         } else if (message.messageType == "file" || message.content.startsWith("data:application")) {
                             FileMessageBubbleContent(
@@ -1620,21 +1658,25 @@ fun MessageBubble(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        // WhatsApp-style timestamp:
+                        // Only show bottom row if NOT media-without-caption and NOT audio (they have timestamps inside!)
+                        if (!isMediaWithoutCaption && !isAudioMsg) {
+                            Spacer(modifier = Modifier.height(if (hasMediaCaption) 2.dp else 4.dp))
 
-                        Row(
-                            modifier = Modifier.align(Alignment.End),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = TimeUtils.formatTime(message.createdAt),
-                                color = if (isOutgoing) Color.White.copy(alpha = 0.7f) else OfflineGray,
-                                fontSize = 11.sp
-                            )
+                            Row(
+                                modifier = Modifier.align(Alignment.End),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = TimeUtils.formatTime(message.createdAt),
+                                    color = if (isOutgoing) Color.White.copy(alpha = 0.7f) else OfflineGray,
+                                    fontSize = 11.sp
+                                )
 
-                            if (isOutgoing && !message.isDeleted) {
-                                Spacer(modifier = Modifier.width(4.dp))
-                                MessageStatusIcon(status = message.status)
+                                if (isOutgoing && !message.isDeleted) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    MessageStatusIcon(status = message.status)
+                                }
                             }
                         }
                     }
@@ -1805,7 +1847,7 @@ fun AudioMessageBubbleContent(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(
@@ -1815,17 +1857,17 @@ fun AudioMessageBubbleContent(
             colors = IconButtonDefaults.iconButtonColors(
                 containerColor = if (isOutgoing) Color.White.copy(alpha = 0.25f) else BluePrimary.copy(alpha = 0.15f)
             ),
-            modifier = Modifier.size(42.dp)
+            modifier = Modifier.size(38.dp)
         ) {
             Icon(
                 imageVector = if (isThisPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                 contentDescription = if (isThisPlaying) "Pausar" else "Reproduzir",
                 tint = if (isOutgoing) Color.White else BluePrimary,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(22.dp)
             )
         }
 
-        Spacer(modifier = Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(8.dp))
 
         Column(modifier = Modifier.weight(1f)) {
             // WhatsApp-style Waveform Bars
@@ -1833,10 +1875,10 @@ fun AudioMessageBubbleContent(
                 bars = waveformBars,
                 progress = if (playingId == message.id) progress else 0f,
                 isOutgoing = isOutgoing,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().height(26.dp)
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(3.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1848,14 +1890,26 @@ fun AudioMessageBubbleContent(
                         imageVector = Icons.Default.Mic,
                         contentDescription = null,
                         tint = if (isOutgoing) Color.White.copy(alpha = 0.7f) else BluePrimary,
-                        modifier = Modifier.size(12.dp)
+                        modifier = Modifier.size(11.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text(
-                        text = if (isThisPlaying) "Reproduzindo..." else "Áudio gravado",
+                        text = if (isThisPlaying) "Reproduzindo..." else "Áudio",
                         fontSize = 11.sp,
                         color = if (isOutgoing) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = TimeUtils.formatTime(message.createdAt),
+                        color = if (isOutgoing) Color.White.copy(alpha = 0.75f) else OfflineGray,
+                        fontSize = 11.sp
+                    )
+                    if (isOutgoing && !message.isDeleted) {
+                        Spacer(modifier = Modifier.width(3.dp))
+                        MessageStatusIcon(status = message.status)
+                    }
                 }
             }
         }
@@ -1939,11 +1993,12 @@ fun AttachmentItem(
 fun ImageMessageBubbleContent(
     message: MessageEntity,
     isOutgoing: Boolean,
+    hasCaption: Boolean,
     onImageClick: () -> Unit
 ) {
     var decodedBitmap by remember(message.content) { mutableStateOf<Bitmap?>(null) }
-
     val context = LocalContext.current
+
     LaunchedEffect(message.content) {
         withContext(Dispatchers.IO) {
             val bmp = MediaFileManager.decodeAndCorrectBitmap(context, message.content)
@@ -1954,35 +2009,70 @@ fun ImageMessageBubbleContent(
     }
 
     Column {
-        if (decodedBitmap != null) {
-            Image(
-                bitmap = decodedBitmap!!.asImageBitmap(),
-                contentDescription = "Foto",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 140.dp, max = 260.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable(onClick = onImageClick),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(140.dp)
-                    .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = if (isOutgoing) Color.White else BluePrimary)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(13.dp))
+                .clickable(onClick = onImageClick)
+        ) {
+            if (decodedBitmap != null) {
+                Image(
+                    bitmap = decodedBitmap!!.asImageBitmap(),
+                    contentDescription = "Foto",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 160.dp, max = 280.dp),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .background(Color.Black.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = if (isOutgoing) Color.White else BluePrimary
+                    )
+                }
+            }
+
+            // WhatsApp-style floating timestamp pill inside photo when no caption
+            if (!hasCaption) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.Black.copy(alpha = 0.52f),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = TimeUtils.formatTime(message.createdAt),
+                            color = Color.White,
+                            fontSize = 11.sp
+                        )
+                        if (isOutgoing && !message.isDeleted) {
+                            Spacer(modifier = Modifier.width(3.dp))
+                            MessageStatusIcon(status = message.status)
+                        }
+                    }
+                }
             }
         }
 
-        if (!message.iv.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(6.dp))
+        if (hasCaption && !message.iv.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = message.iv,
                 color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp
+                fontSize = 14.sp,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
             )
         }
     }
@@ -1992,64 +2082,140 @@ fun ImageMessageBubbleContent(
 fun VideoMessageBubbleContent(
     message: MessageEntity,
     isOutgoing: Boolean,
-    context: Context
+    hasCaption: Boolean,
+    onVideoClick: () -> Unit
 ) {
+    val context = LocalContext.current
     val parts = remember(message.iv) { message.iv?.split("|") ?: emptyList() }
     val fileName = parts.getOrNull(0)?.ifBlank { null } ?: "video_${message.id.take(8)}.mp4"
     val fileSize = parts.getOrNull(1)?.toLongOrNull() ?: 0L
     val caption = parts.getOrNull(2)?.ifBlank { null }
 
+    var thumbnailBitmap by remember(message.id) { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(message.content) {
+        withContext(Dispatchers.IO) {
+            try {
+                val retriever = MediaMetadataRetriever()
+                if (MediaFileManager.isLocalFilePath(message.content)) {
+                    val path = message.content.removePrefix("file://")
+                    retriever.setDataSource(path)
+                } else {
+                    val clean = if (message.content.contains(",")) message.content.substringAfter(",") else message.content
+                    val bytes = Base64.decode(clean, Base64.DEFAULT)
+                    val temp = File(context.cacheDir, "thumb_${message.id}.mp4")
+                    FileOutputStream(temp).use { it.write(bytes) }
+                    retriever.setDataSource(temp.absolutePath)
+                }
+                val frame = retriever.getFrameAtTime(1000000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                    ?: retriever.frameAtTime
+                withContext(Dispatchers.Main) {
+                    thumbnailBitmap = frame
+                }
+                retriever.release()
+            } catch (e: Exception) {}
+        }
+    }
+
     Column {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(150.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.Black.copy(alpha = 0.7f))
-                .clickable {
-                    openMediaFile(context, message.content, fileName, "video/mp4")
-                },
+                .height(180.dp)
+                .clip(RoundedCornerShape(13.dp))
+                .background(Color.Black.copy(alpha = 0.85f))
+                .clickable { onVideoClick() },
             contentAlignment = Alignment.Center
         ) {
+            if (thumbnailBitmap != null) {
+                Image(
+                    bitmap = thumbnailBitmap!!.asImageBitmap(),
+                    contentDescription = "Vídeo",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+
+            // Dark tint overlay
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.35f))
+            )
+
+            // Play button circle
             Surface(
                 shape = CircleShape,
-                color = Color.White.copy(alpha = 0.3f),
-                modifier = Modifier.size(54.dp)
+                color = Color.Black.copy(alpha = 0.6f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
+                modifier = Modifier.size(50.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = "Reproduzir Vídeo",
                         tint = Color.White,
-                        modifier = Modifier.size(34.dp)
+                        modifier = Modifier.size(30.dp)
                     )
                 }
             }
 
+            // WhatsApp-style Bottom indicators
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
                     .align(Alignment.BottomStart)
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(6.dp)
+                    .background(Color.Black.copy(alpha = 0.52f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Videocam, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                Icon(
+                    Icons.Default.Videocam,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(13.dp)
+                )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = if (fileSize > 0) "Vídeo • ${formatFileSize(fileSize)}" else "Vídeo",
+                    text = if (fileSize > 0) formatFileSize(fileSize) else "Vídeo",
                     color = Color.White,
                     fontSize = 11.sp
                 )
             }
+
+            if (!hasCaption) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.Black.copy(alpha = 0.52f),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = TimeUtils.formatTime(message.createdAt),
+                            color = Color.White,
+                            fontSize = 11.sp
+                        )
+                        if (isOutgoing && !message.isDeleted) {
+                            Spacer(modifier = Modifier.width(3.dp))
+                            MessageStatusIcon(status = message.status)
+                        }
+                    }
+                }
+            }
         }
 
-        if (!caption.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(6.dp))
+        if (hasCaption && !caption.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = caption,
                 color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp
+                fontSize = 14.sp,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
             )
         }
     }
@@ -2206,6 +2372,195 @@ fun FullscreenImageViewerDialog(
                     }) {
                         Icon(Icons.Default.Share, contentDescription = "Compartilhar", tint = Color.White)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FullscreenVideoViewerDialog(
+    message: MessageEntity,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    var isPlaying by remember { mutableStateOf(true) }
+    var currentPosition by remember { mutableIntStateOf(0) }
+    var duration by remember { mutableIntStateOf(0) }
+    var showControls by remember { mutableStateOf(true) }
+    var videoViewRef by remember { mutableStateOf<android.widget.VideoView?>(null) }
+    var tempVideoFile by remember { mutableStateOf<File?>(null) }
+
+    val parts = remember(message.iv) { message.iv?.split("|") ?: emptyList() }
+    val fileName = parts.getOrNull(0)?.ifBlank { null } ?: "video_${message.id.take(8)}.mp4"
+
+    LaunchedEffect(message.content) {
+        withContext(Dispatchers.IO) {
+            try {
+                val file = if (MediaFileManager.isLocalFilePath(message.content)) {
+                    File(message.content.removePrefix("file://"))
+                } else {
+                    val clean = if (message.content.contains(",")) message.content.substringAfter(",") else message.content
+                    val bytes = Base64.decode(clean, Base64.DEFAULT)
+                    val f = File(context.cacheDir, "play_${fileName}")
+                    FileOutputStream(f).use { it.write(bytes) }
+                    f
+                }
+                withContext(Dispatchers.Main) {
+                    tempVideoFile = file
+                }
+            } catch (e: Exception) {}
+        }
+    }
+
+    LaunchedEffect(isPlaying) {
+        while (isPlaying) {
+            videoViewRef?.let { vv ->
+                if (vv.isPlaying) {
+                    currentPosition = vv.currentPosition
+                    if (vv.duration > 0) duration = vv.duration
+                }
+            }
+            delay(250)
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable { showControls = !showControls }
+        ) {
+            if (tempVideoFile != null) {
+                AndroidView(
+                    factory = { ctx ->
+                        android.widget.VideoView(ctx).apply {
+                            setVideoPath(tempVideoFile!!.absolutePath)
+                            setOnPreparedListener { mp ->
+                                mp.isLooping = true
+                                duration = mp.duration
+                                start()
+                                isPlaying = true
+                            }
+                            setOnCompletionListener {
+                                isPlaying = false
+                            }
+                            videoViewRef = this
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center),
+                    color = Color.White
+                )
+            }
+
+            if (showControls) {
+                // Center Play/Pause toggle
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.Black.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clickable {
+                                videoViewRef?.let { vv ->
+                                    if (vv.isPlaying) {
+                                        vv.pause()
+                                        isPlaying = false
+                                    } else {
+                                        vv.start()
+                                        isPlaying = true
+                                    }
+                                }
+                            }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Pausar" else "Reproduzir",
+                                tint = Color.White,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Top Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter)
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 12.dp, vertical = 24.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White)
+                    }
+
+                    Text(
+                        text = fileName,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
+                    )
+
+                    IconButton(onClick = {
+                        openMediaFile(context, message.content, fileName, "video/mp4")
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = "Compartilhar", tint = Color.White)
+                    }
+                }
+
+                // Bottom Scrubber & Timers
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                ) {
+                    val curSec = currentPosition / 1000
+                    val durSec = duration / 1000
+                    val curStr = "%02d:%02d".format(curSec / 60, curSec % 60)
+                    val durStr = "%02d:%02d".format(durSec / 60, durSec % 60)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(curStr, color = Color.White, fontSize = 12.sp)
+                        Text(durStr, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                    }
+
+                    Slider(
+                        value = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f,
+                        onValueChange = { ratio ->
+                            val newPos = (ratio * duration).toInt()
+                            currentPosition = newPos
+                            videoViewRef?.seekTo(newPos)
+                        },
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color(0xFF25D366),
+                            activeTrackColor = Color(0xFF25D366),
+                            inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }

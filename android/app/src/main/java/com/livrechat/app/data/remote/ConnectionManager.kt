@@ -413,9 +413,15 @@ class ConnectionManager(
         }
     }
 
-    override fun onStatusReaction(statusId: String, fromUserId: String, fromUsername: String, emoji: String) {
+    override fun onStatusReaction(statusId: String, fromUserId: String, fromUsername: String, emoji: String, displayName: String?, avatarUrl: String?) {
         synchronized(listeners) {
-            listeners.forEach { it.onStatusReaction(statusId, fromUserId, fromUsername, emoji) }
+            listeners.forEach { it.onStatusReaction(statusId, fromUserId, fromUsername, emoji, displayName, avatarUrl) }
+        }
+    }
+
+    override fun onStatusView(statusId: String, fromUserId: String, fromUsername: String, displayName: String?, avatarUrl: String?) {
+        synchronized(listeners) {
+            listeners.forEach { it.onStatusView(statusId, fromUserId, fromUsername, displayName, avatarUrl) }
         }
     }
 

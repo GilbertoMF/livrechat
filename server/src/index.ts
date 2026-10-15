@@ -101,6 +101,8 @@ app.delete('/api/calls/history', authenticateToken, CallsController.clearCallHis
 app.get('/api/status', authenticateToken, StatusController.getStatuses);
 app.post('/api/status', authenticateToken, StatusController.createStatus);
 app.delete('/api/status/:statusId', authenticateToken, StatusController.deleteStatus);
+app.post('/api/status/:statusId/view', authenticateToken, StatusController.viewStatus);
+app.post('/api/status/:statusId/react', authenticateToken, StatusController.reactStatus);
 
 // Attach WebSocket Manager
 export const wsManager = new WebSocketManager(server);

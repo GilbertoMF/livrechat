@@ -146,6 +146,10 @@ fun HomeScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        loadStatuses()
+    }
+
     LaunchedEffect(isConnected) {
         chatViewModel.syncConversations()
     }
@@ -177,6 +181,53 @@ fun HomeScreen(
             override fun onStatusUpdated() {
                 scope.launch(Dispatchers.Main) {
                     loadStatuses()
+                }
+            }
+            override fun onStatusReaction(statusId: String, fromUserId: String, fromUsername: String, emoji: String, displayName: String?, avatarUrl: String?) {
+                scope.launch(Dispatchers.Main) {
+                    val newReaction = com.livrechat.app.data.remote.model.StatusReactionDto(
+                        userId = fromUserId,
+                        username = fromUsername,
+                        displayName = displayName,
+                        avatarUrl = avatarUrl,
+                        emoji = emoji,
+                        createdAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).format(java.util.Date())
+                    )
+                    statusesList = statusesList.map { s ->
+                        if (s.id == statusId) {
+                            val cur = s.reactions?.filter { it.userId != fromUserId } ?: emptyList()
+                            s.copy(reactions = cur + newReaction)
+                        } else s
+                    }
+                    activeStatusViewerList = activeStatusViewerList?.map { s ->
+                        if (s.id == statusId) {
+                            val cur = s.reactions?.filter { it.userId != fromUserId } ?: emptyList()
+                            s.copy(reactions = cur + newReaction)
+                        } else s
+                    }
+                }
+            }
+            override fun onStatusView(statusId: String, fromUserId: String, fromUsername: String, displayName: String?, avatarUrl: String?) {
+                scope.launch(Dispatchers.Main) {
+                    val newView = com.livrechat.app.data.remote.model.StatusViewDto(
+                        userId = fromUserId,
+                        username = fromUsername,
+                        displayName = displayName,
+                        avatarUrl = avatarUrl,
+                        viewedAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).format(java.util.Date())
+                    )
+                    statusesList = statusesList.map { s ->
+                        if (s.id == statusId) {
+                            val cur = s.views?.filter { it.userId != fromUserId } ?: emptyList()
+                            s.copy(views = cur + newView)
+                        } else s
+                    }
+                    activeStatusViewerList = activeStatusViewerList?.map { s ->
+                        if (s.id == statusId) {
+                            val cur = s.views?.filter { it.userId != fromUserId } ?: emptyList()
+                            s.copy(views = cur + newView)
+                        } else s
+                    }
                 }
             }
         }
@@ -1301,6 +1352,19 @@ fun HomeScreen(
             },
             onReactToStatus = { statusId, authorId, emoji ->
                 chatViewModel.sendStatusReaction(statusId, authorId, emoji)
+                scope.launch {
+                    try {
+                        apiService.reactToStatus(statusId, mapOf("emoji" to emoji))
+                    } catch (e: Exception) {}
+                }
+            },
+            onRecordStatusView = { statusId, authorId ->
+                chatViewModel.sendStatusView(statusId, authorId)
+                scope.launch {
+                    try {
+                        apiService.recordStatusView(statusId)
+                    } catch (e: Exception) {}
+                }
             }
         )
     }
@@ -1743,6 +1807,8 @@ fun HomeScreen(
                         items(grouped.keys.toList(), key = { it }) { contactUserId ->
                             val userStatuses = grouped[contactUserId] ?: emptyList()
                             val latestStatus = userStatuses.last()
+                            val contactDisplayName = prefs.getContactCustomName(contactUserId)
+                                ?: latestStatus.displayName.ifBlank { latestStatus.username }
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1760,7 +1826,7 @@ fun HomeScreen(
                                 ) {
                                     UserAvatarView(
                                         avatarUrl = latestStatus.avatarUrl,
-                                        displayName = latestStatus.displayName,
+                                        displayName = contactDisplayName,
                                         size = 50.dp,
                                         fontSize = 18.sp
                                     )
@@ -1769,7 +1835,7 @@ fun HomeScreen(
                                 Spacer(modifier = Modifier.width(16.dp))
 
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(latestStatus.displayName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Text(contactDisplayName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         formatRelativeTime(latestStatus.createdAt),
@@ -1839,6 +1905,7 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FullScreenStatusViewer(
     statuses: List<StatusDto>,
@@ -1846,20 +1913,33 @@ fun FullScreenStatusViewer(
     userAvatarUrl: String? = null,
     onDismiss: () -> Unit,
     onDeleteStatus: (String) -> Unit,
-    onReactToStatus: ((statusId: String, authorId: String, emoji: String) -> Unit)? = null
+    onReactToStatus: ((statusId: String, authorId: String, emoji: String) -> Unit)? = null,
+    onRecordStatusView: ((statusId: String, authorId: String) -> Unit)? = null
 ) {
     if (statuses.isEmpty()) {
         onDismiss()
         return
     }
     val context = LocalContext.current
+    val prefs = remember { LivreChatApp.instance.preferencesManager }
     var currentIndex by remember { mutableStateOf(0) }
     var progress by remember { mutableStateOf(0f) }
     var isPaused by remember { mutableStateOf(false) }
+    var showViewersSheet by remember { mutableStateOf(false) }
 
     val currentStatus = statuses.getOrNull(currentIndex) ?: run {
         onDismiss()
         return
+    }
+
+    LaunchedEffect(showViewersSheet) {
+        isPaused = showViewersSheet
+    }
+
+    LaunchedEffect(currentStatus.id) {
+        if (currentStatus.userId != currentUserId) {
+            onRecordStatusView?.invoke(currentStatus.id, currentStatus.userId)
+        }
     }
 
     var isAudioPlaying by remember { mutableStateOf(false) }
@@ -2473,25 +2553,221 @@ fun FullScreenStatusViewer(
                     }
                 }
             } else {
-                // Own Status Bottom Info (WhatsApp style views indicator)
-                Row(
+                // Own Status Bottom Info: Reactions floating badges & Views indicator
+                val rxList = currentStatus.reactions ?: emptyList()
+                if (rxList.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 16.dp, bottom = 68.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        rxList.take(3).forEach { rx ->
+                            val rxName = prefs.getContactCustomName(rx.userId)
+                                ?: rx.displayName?.ifBlank { null }
+                                ?: rx.username
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = Color.Black.copy(alpha = 0.75f),
+                                border = BorderStroke(1.dp, Color(0xFF25D366).copy(alpha = 0.6f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(rx.emoji, fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        rxName,
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // WhatsApp-style Views pill
+                val viewsList = currentStatus.views ?: emptyList()
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.Black.copy(alpha = 0.65f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 20.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(bottom = 20.dp)
+                        .clickable { showViewersSheet = true }
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = Color.Black.copy(alpha = 0.55f),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.Visibility,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        val viewText = when (viewsList.size) {
+                            0 -> "Nenhuma visualização"
+                            1 -> "1 visualização"
+                            else -> "${viewsList.size} visualizações"
+                        }
+                        val rxText = if (rxList.isNotEmpty()) " • ${rxList.size} reações" else ""
+                        Text(
+                            text = "$viewText$rxText",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            if (showViewersSheet) {
+                val viewsList = currentStatus.views ?: emptyList()
+                ModalBottomSheet(
+                    onDismissRequest = { showViewersSheet = false },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    scrimColor = Color.Black.copy(alpha = 0.6f)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .padding(bottom = 28.dp)
                     ) {
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(Icons.Default.Visibility, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Flash publicado • Visto por você", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Visibility,
+                                    contentDescription = null,
+                                    tint = Color(0xFF25D366),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Visualizado por ${viewsList.size}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 17.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            IconButton(onClick = { showViewersSheet = false }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "Fechar")
+                            }
+                        }
+                        Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), thickness = 0.5.dp)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        val reactionsMap = remember(currentStatus.reactions) {
+                            currentStatus.reactions?.associateBy { it.userId } ?: emptyMap()
+                        }
+
+                        if (viewsList.isEmpty() && reactionsMap.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 36.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Default.VisibilityOff,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(42.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text(
+                                        "Ninguém visualizou ainda",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        } else {
+                            val allViewerIds = (viewsList.map { it.userId } + reactionsMap.keys).distinct()
+                            LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 350.dp)) {
+                                items(allViewerIds) { vId ->
+                                    val viewObj = viewsList.find { it.userId == vId }
+                                    val rxObj = reactionsMap[vId]
+                                    val dName = prefs.getContactCustomName(vId)
+                                        ?: viewObj?.displayName?.ifBlank { null }
+                                        ?: rxObj?.displayName?.ifBlank { null }
+                                        ?: viewObj?.username
+                                        ?: rxObj?.username
+                                        ?: "Contato"
+                                    val aUrl = viewObj?.avatarUrl ?: rxObj?.avatarUrl
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        UserAvatarView(
+                                            avatarUrl = aUrl,
+                                            displayName = dName,
+                                            size = 46.dp,
+                                            fontSize = 16.sp
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = dName,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            val timeFormatted = if (!viewObj?.viewedAt.isNullOrBlank()) {
+                                                formatRelativeTime(viewObj!!.viewedAt!!)
+                                            } else if (!rxObj?.createdAt.isNullOrBlank()) {
+                                                formatRelativeTime(rxObj!!.createdAt!!)
+                                            } else "Visualizado"
+                                            Text(
+                                                text = timeFormatted,
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (rxObj != null) {
+                                            Surface(
+                                                shape = CircleShape,
+                                                color = Color(0xFF25D366).copy(alpha = 0.15f),
+                                                border = BorderStroke(1.dp, Color(0xFF25D366).copy(alpha = 0.4f)),
+                                                modifier = Modifier.padding(start = 8.dp)
+                                            ) {
+                                                Text(
+                                                    text = rxObj.emoji,
+                                                    fontSize = 20.sp,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Divider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), thickness = 0.5.dp)
+                                }
+                            }
                         }
                     }
                 }

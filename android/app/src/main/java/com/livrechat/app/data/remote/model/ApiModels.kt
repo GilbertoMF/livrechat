@@ -146,6 +146,23 @@ data class ContactDto(
     val bio: String = ""
 )
 
+data class StatusReactionDto(
+    @SerializedName("user_id") val userId: String,
+    val username: String,
+    @SerializedName("display_name") val displayName: String? = null,
+    @SerializedName("avatar_url") val avatarUrl: String? = null,
+    val emoji: String,
+    @SerializedName("created_at") val createdAt: String? = null
+)
+
+data class StatusViewDto(
+    @SerializedName("user_id") val userId: String,
+    val username: String,
+    @SerializedName("display_name") val displayName: String? = null,
+    @SerializedName("avatar_url") val avatarUrl: String? = null,
+    @SerializedName("viewed_at") val viewedAt: String? = null
+)
+
 data class StatusDto(
     val id: String,
     @SerializedName("user_id") val userId: String,
@@ -157,6 +174,9 @@ data class StatusDto(
     val caption: String? = null,
     @SerializedName("background_color") val backgroundColor: String? = null,
     @SerializedName("created_at") val createdAt: String,
-    @SerializedName("expires_at") val expiresAt: String? = null
+    @SerializedName("expires_at") val expiresAt: String? = null,
+    val reactions: List<StatusReactionDto>? = null,
+    val views: List<StatusViewDto>? = null
 )
+
 

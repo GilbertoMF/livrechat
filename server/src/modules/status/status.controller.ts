@@ -100,4 +100,52 @@ export class StatusController {
       res.status(500).json({ error: 'Falha ao apagar status' });
     }
   }
+
+  public static async viewStatus(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.userId;
+      const { statusId } = req.params;
+      if (!userId || !statusId) return res.status(400).json({ error: 'Dados incompletos' });
+
+      const profile = await db.getProfile(userId);
+      const user = await db.findUserById(userId);
+      const view = {
+        user_id: userId,
+        username: user?.username || 'usuario',
+        display_name: profile?.display_name || user?.username || 'Usuário',
+        avatar_url: profile?.avatar_url,
+        viewed_at: new Date().toISOString()
+      };
+      await db.addStatusView(statusId, view);
+
+      res.status(200).json({ success: true, view });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  }
+
+  public static async reactStatus(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.userId;
+      const { statusId } = req.params;
+      const { emoji } = req.body;
+      if (!userId || !statusId || !emoji) return res.status(400).json({ error: 'Dados incompletos' });
+
+      const profile = await db.getProfile(userId);
+      const user = await db.findUserById(userId);
+      const reaction = {
+        user_id: userId,
+        username: user?.username || 'usuario',
+        display_name: profile?.display_name || user?.username || 'Usuário',
+        avatar_url: profile?.avatar_url,
+        emoji,
+        created_at: new Date().toISOString()
+      };
+      await db.addStatusReaction(statusId, reaction);
+
+      res.status(200).json({ success: true, reaction });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  }
 }

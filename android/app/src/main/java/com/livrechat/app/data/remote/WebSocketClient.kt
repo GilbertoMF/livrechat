@@ -37,7 +37,8 @@ interface WebSocketEventsListener {
     fun onChatCleared(conversationId: String) {}
     fun onStatusUpdated() {}
     fun onMessageReaction(messageId: String, conversationId: String, userId: String, emoji: String, reactions: String?) {}
-    fun onStatusReaction(statusId: String, fromUserId: String, fromUsername: String, emoji: String) {}
+    fun onStatusReaction(statusId: String, fromUserId: String, fromUsername: String, emoji: String, displayName: String? = null, avatarUrl: String? = null) {}
+    fun onStatusView(statusId: String, fromUserId: String, fromUsername: String, displayName: String? = null, avatarUrl: String? = null) {}
     fun onConversationRead(conversationId: String, userId: String) {}
     fun onUserStatus(userId: String, isOnline: Boolean, lastSeenTimestamp: Long? = null) {}
 }
@@ -239,7 +240,17 @@ class WebSocketClient(
                             val fromUserId = json.get("fromUserId").asStringOrDefault()
                             val fromUsername = json.get("fromUsername").asStringOrDefault()
                             val emoji = json.get("emoji").asStringOrDefault()
-                            listener.onStatusReaction(statusId, fromUserId, fromUsername, emoji)
+                            val displayName = json.get("displayName")?.asStringOrNull()
+                            val avatarUrl = json.get("avatarUrl")?.asStringOrNull()
+                            listener.onStatusReaction(statusId, fromUserId, fromUsername, emoji, displayName, avatarUrl)
+                        }
+                        "status:view" -> {
+                            val statusId = json.get("statusId").asStringOrDefault()
+                            val fromUserId = json.get("fromUserId").asStringOrDefault()
+                            val fromUsername = json.get("fromUsername").asStringOrDefault()
+                            val displayName = json.get("displayName")?.asStringOrNull()
+                            val avatarUrl = json.get("avatarUrl")?.asStringOrNull()
+                            listener.onStatusView(statusId, fromUserId, fromUsername, displayName, avatarUrl)
                         }
                         "chat:cleared" -> {
                             val convId = json.get("conversationId").asStringOrDefault()
@@ -406,6 +417,15 @@ class WebSocketClient(
             addProperty("statusId", statusId)
             addProperty("authorId", authorId)
             addProperty("emoji", emoji)
+        }
+        return sendPayload(payload)
+    }
+
+    fun sendStatusView(statusId: String, authorId: String): Boolean {
+        val payload = JsonObject().apply {
+            addProperty("type", "status:view")
+            addProperty("statusId", statusId)
+            addProperty("authorId", authorId)
         }
         return sendPayload(payload)
     }

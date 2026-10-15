@@ -126,6 +126,23 @@ export interface BackupMetadata {
   last_backup_at: string;
 }
 
+export interface StatusReactionRecord {
+  user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url?: string;
+  emoji: string;
+  created_at: string;
+}
+
+export interface StatusViewRecord {
+  user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url?: string;
+  viewed_at: string;
+}
+
 export interface StatusRecord {
   id: string;
   user_id: string;
@@ -138,6 +155,8 @@ export interface StatusRecord {
   background_color?: string;
   created_at: string;
   expires_at: string;
+  reactions?: StatusReactionRecord[];
+  views?: StatusViewRecord[];
 }
 
 class DatabaseService {
@@ -237,6 +256,8 @@ class DatabaseService {
           await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS title VARCHAR(100);').catch(() => {});
           await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS avatar_url TEXT;').catch(() => {});
           await client.query('ALTER TABLE conversations ADD COLUMN IF NOT EXISTS created_by VARCHAR(36);').catch(() => {});
+          await client.query('ALTER TABLE statuses ADD COLUMN IF NOT EXISTS reactions JSONB DEFAULT \'[]\'::jsonb;').catch(() => {});
+          await client.query('ALTER TABLE statuses ADD COLUMN IF NOT EXISTS views JSONB DEFAULT \'[]\'::jsonb;').catch(() => {});
           console.log(`[Database] PostgreSQL (${CONFIG.DATABASE_URL.includes('neon.tech') ? 'Neon.tech' : 'Cloud'}) conectado e tabelas migradas com sucesso.`);
         } else {
           console.log('[Database] PostgreSQL conectado.');
@@ -1889,7 +1910,9 @@ class DatabaseService {
           caption: r.caption,
           background_color: r.background_color,
           created_at: r.created_at?.toISOString?.() || r.created_at,
-          expires_at: r.expires_at?.toISOString?.() || r.expires_at
+          expires_at: r.expires_at?.toISOString?.() || r.expires_at,
+          reactions: typeof r.reactions === 'string' ? JSON.parse(r.reactions) : (r.reactions || []),
+          views: typeof r.views === 'string' ? JSON.parse(r.views) : (r.views || [])
         }));
       } catch (e) {
         console.warn('[Database] Erro PG getActiveStatuses:', e);
@@ -1903,9 +1926,83 @@ class DatabaseService {
       return {
         ...s,
         avatar_url: s.avatar_url || prof?.avatar_url,
-        display_name: s.display_name || prof?.display_name || s.username
+        display_name: s.display_name || prof?.display_name || s.username,
+        reactions: s.reactions || [],
+        views: s.views || []
       };
     }).sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+
+  public async addStatusReaction(statusId: string, reaction: StatusReactionRecord): Promise<void> {
+    const status = this.memoryStore.statuses.find(s => s.id === statusId);
+    if (status) {
+      if (!status.reactions) status.reactions = [];
+      const existingIdx = status.reactions.findIndex(r => r.user_id === reaction.user_id);
+      if (existingIdx >= 0) {
+        status.reactions[existingIdx] = reaction;
+      } else {
+        status.reactions.push(reaction);
+      }
+      this.saveToLocal();
+    }
+
+    if (this.pgPool) {
+      try {
+        const res = await this.pgPool.query('SELECT reactions FROM statuses WHERE id = $1', [statusId]);
+        if (res.rows.length > 0) {
+          let list: StatusReactionRecord[] = [];
+          try {
+            const raw = res.rows[0].reactions;
+            list = typeof raw === 'string' ? JSON.parse(raw) : (raw || []);
+          } catch (e) { list = []; }
+          const idx = list.findIndex(r => r.user_id === reaction.user_id);
+          if (idx >= 0) {
+            list[idx] = reaction;
+          } else {
+            list.push(reaction);
+          }
+          await this.pgPool.query('UPDATE statuses SET reactions = $1 WHERE id = $2', [JSON.stringify(list), statusId]);
+        }
+      } catch (e) {
+        console.warn('[Database] Erro PG addStatusReaction:', e);
+      }
+    }
+  }
+
+  public async addStatusView(statusId: string, view: StatusViewRecord): Promise<void> {
+    const status = this.memoryStore.statuses.find(s => s.id === statusId);
+    if (status) {
+      if (!status.views) status.views = [];
+      const existingIdx = status.views.findIndex(v => v.user_id === view.user_id);
+      if (existingIdx >= 0) {
+        status.views[existingIdx] = view;
+      } else {
+        status.views.push(view);
+      }
+      this.saveToLocal();
+    }
+
+    if (this.pgPool) {
+      try {
+        const res = await this.pgPool.query('SELECT views FROM statuses WHERE id = $1', [statusId]);
+        if (res.rows.length > 0) {
+          let list: StatusViewRecord[] = [];
+          try {
+            const raw = res.rows[0].views;
+            list = typeof raw === 'string' ? JSON.parse(raw) : (raw || []);
+          } catch (e) { list = []; }
+          const idx = list.findIndex(v => v.user_id === view.user_id);
+          if (idx >= 0) {
+            list[idx] = view;
+          } else {
+            list.push(view);
+          }
+          await this.pgPool.query('UPDATE statuses SET views = $1 WHERE id = $2', [JSON.stringify(list), statusId]);
+        }
+      } catch (e) {
+        console.warn('[Database] Erro PG addStatusView:', e);
+      }
+    }
   }
 
   public async deleteStatus(statusId: string, userId: string): Promise<boolean> {

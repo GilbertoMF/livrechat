@@ -328,13 +328,55 @@ export class WebSocketManager {
 
       case 'status:reaction': {
         const { statusId, authorId, emoji } = event;
+        const profile = await db.getProfile(senderId);
+        const user = await db.findUserById(senderId);
+        const reaction = {
+          user_id: senderId,
+          username: user?.username || senderWs.username || 'usuario',
+          display_name: profile?.display_name || user?.username || 'Usuário',
+          avatar_url: profile?.avatar_url,
+          emoji,
+          created_at: new Date().toISOString()
+        };
+        await db.addStatusReaction(statusId, reaction);
+
         if (authorId) {
           this.sendToUser(authorId, {
             type: 'status:reaction',
             statusId,
             fromUserId: senderId,
             fromUsername: senderWs.username,
-            emoji
+            displayName: reaction.display_name,
+            avatarUrl: reaction.avatar_url,
+            emoji,
+            reaction
+          });
+        }
+        break;
+      }
+
+      case 'status:view': {
+        const { statusId, authorId } = event;
+        const profile = await db.getProfile(senderId);
+        const user = await db.findUserById(senderId);
+        const view = {
+          user_id: senderId,
+          username: user?.username || senderWs.username || 'usuario',
+          display_name: profile?.display_name || user?.username || 'Usuário',
+          avatar_url: profile?.avatar_url,
+          viewed_at: new Date().toISOString()
+        };
+        await db.addStatusView(statusId, view);
+
+        if (authorId && authorId !== senderId) {
+          this.sendToUser(authorId, {
+            type: 'status:view',
+            statusId,
+            fromUserId: senderId,
+            fromUsername: senderWs.username,
+            displayName: view.display_name,
+            avatarUrl: view.avatar_url,
+            view
           });
         }
         break;

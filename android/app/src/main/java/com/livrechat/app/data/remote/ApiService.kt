@@ -122,6 +122,15 @@ interface ApiService {
     @DELETE("api/status/{statusId}")
     suspend fun deleteStatus(@Path("statusId") statusId: String): Response<BaseResponse>
 
+    @POST("api/status/{statusId}/view")
+    suspend fun recordStatusView(@Path("statusId") statusId: String): Response<BaseResponse>
+
+    @POST("api/status/{statusId}/react")
+    suspend fun reactToStatus(
+        @Path("statusId") statusId: String,
+        @Body body: Map<String, String>
+    ): Response<BaseResponse>
+
     @PUT("api/users/contacts/{contactUserId}")
     suspend fun updateContact(
         @Path("contactUserId") contactUserId: String,
