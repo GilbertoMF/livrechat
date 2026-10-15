@@ -1064,6 +1064,50 @@ class DatabaseService {
     return conv;
   }
 
+  public async updateGroupConversation(
+    conversationId: string,
+    title?: string,
+    avatarUrl?: string
+  ): Promise<Conversation | null> {
+    let conv = this.memoryStore.conversations.find(c => c.id === conversationId);
+    const now = new Date().toISOString();
+    if (conv) {
+      if (title !== undefined) conv.title = title;
+      if (avatarUrl !== undefined) conv.avatar_url = avatarUrl;
+      conv.updated_at = now;
+      this.saveToLocal();
+    }
+
+    if (this.pgPool) {
+      try {
+        const fields: string[] = [];
+        const params: any[] = [conversationId];
+        let idx = 2;
+        if (title !== undefined) {
+          fields.push(`title = $${idx++}`);
+          params.push(title);
+        }
+        if (avatarUrl !== undefined) {
+          fields.push(`avatar_url = $${idx++}`);
+          params.push(avatarUrl);
+        }
+        fields.push(`updated_at = $${idx++}`);
+        params.push(now);
+
+        if (fields.length > 1) {
+          await this.pgPool.query(
+            `UPDATE conversations SET ${fields.join(', ')} WHERE id = $1`,
+            params
+          );
+        }
+      } catch (e) {
+        console.warn('[Database] Erro PG updateGroupConversation:', e);
+      }
+    }
+
+    return conv || null;
+  }
+
   public async getConversationsForUser(userId: string) {
     if (this.pgPool) {
       try {

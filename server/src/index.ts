@@ -78,6 +78,7 @@ app.put('/api/users/preferences', authenticateToken, UsersController.updatePrefe
 app.get('/api/messages/conversations', authenticateToken, MessagesController.getConversations);
 app.post('/api/messages/conversations/direct', authenticateToken, MessagesController.getOrCreateConversation);
 app.post('/api/messages/groups', authenticateToken, MessagesController.createGroup);
+app.put('/api/messages/groups/:conversationId', authenticateToken, MessagesController.updateGroup);
 app.get('/api/messages/conversations/:conversationId/members', authenticateToken, MessagesController.getConversationMembers);
 app.post('/api/messages/conversations/:conversationId/members', authenticateToken, MessagesController.addConversationMembers);
 app.delete('/api/messages/conversations/:conversationId/members/:memberId', authenticateToken, MessagesController.removeConversationMember);

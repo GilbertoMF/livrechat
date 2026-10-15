@@ -341,6 +341,36 @@ export class MessagesController {
     }
   }
 
+  public static async updateGroup(req: AuthRequest, res: Response) {
+    try {
+      const { conversationId } = req.params;
+      const { title, avatarUrl } = req.body;
+
+      const updated = await db.updateGroupConversation(conversationId, title, avatarUrl);
+      if (!updated) {
+        return res.status(404).json({ error: 'Grupo não encontrado.' });
+      }
+
+      // Notify members via WS
+      const wsManager = WebSocketManager.getInstance();
+      if (wsManager) {
+        const members = await db.getConversationMembers(conversationId);
+        for (const mId of members) {
+          wsManager.sendToUser(mId, {
+            type: 'group:updated',
+            conversationId,
+            title: updated.title,
+            avatarUrl: updated.avatar_url || null
+          });
+        }
+      }
+
+      return res.status(200).json({ success: true, conversation: updated });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   public static async getConversationMembers(req: AuthRequest, res: Response) {
     try {
       const { conversationId } = req.params;

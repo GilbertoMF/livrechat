@@ -43,10 +43,24 @@ import com.livrechat.app.ui.common.UserAvatarView
 import com.livrechat.app.ui.contacts.ContactUiModel
 import com.livrechat.app.ui.theme.DangerRed
 import com.livrechat.app.ui.theme.SuccessGreen
+import android.Manifest
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.ExifInterface
+import android.net.Uri
+import android.util.Base64
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import com.livrechat.app.ui.common.PhotoAdjustDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -177,9 +191,150 @@ fun ContactProfileDialog(
 
     val customSavedName = remember(otherUserId) { if (!isGroup) app.preferencesManager.getContactCustomName(otherUserId) else null }
     var localCustomName by remember { mutableStateOf(customSavedName) }
+    var currentGroupTitle by remember(groupTitle) { mutableStateOf(groupTitle) }
+    var currentGroupAvatar by remember(groupAvatar) { mutableStateOf(groupAvatar) }
+
+    var showAvatarOptionsDialog by remember { mutableStateOf(false) }
+    var showPhotoAdjustDialog by remember { mutableStateOf(false) }
+    var bitmapToAdjust by remember { mutableStateOf<Bitmap?>(null) }
+    var isUpdatingGroupPhoto by remember { mutableStateOf(false) }
+    var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
+    var tempCameraFile by remember { mutableStateOf<File?>(null) }
+
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempCameraFile != null && tempCameraFile!!.exists()) {
+            val fileToProcess = tempCameraFile!!
+            scope.launch(Dispatchers.IO) {
+                try {
+                    var bitmap = BitmapFactory.decodeFile(fileToProcess.absolutePath)
+                    if (bitmap != null) {
+                        try {
+                            val exif = ExifInterface(fileToProcess.absolutePath)
+                            val orientation = exif.getAttributeInt(
+                                ExifInterface.TAG_ORIENTATION,
+                                ExifInterface.ORIENTATION_NORMAL
+                            )
+                            val matrix = android.graphics.Matrix()
+                            when (orientation) {
+                                ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                                ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                            }
+                            if (orientation != ExifInterface.ORIENTATION_NORMAL && orientation != ExifInterface.ORIENTATION_UNDEFINED) {
+                                bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                            }
+                        } catch (e: Exception) {}
+
+                        withContext(Dispatchers.Main) {
+                            bitmapToAdjust = bitmap
+                            showPhotoAdjustDialog = true
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Erro ao carregar foto da câmera", Toast.LENGTH_SHORT).show()
+                    }
+                } finally {
+                    fileToProcess.delete()
+                }
+            }
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            tempCameraUri?.let { takePictureLauncher.launch(it) }
+        } else {
+            Toast.makeText(context, "Permissão de câmera necessária para tirar foto", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun launchCamera() {
+        try {
+            val file = File(context.cacheDir, "group_cam_${System.currentTimeMillis()}.jpg")
+            tempCameraFile = file
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            tempCameraUri = uri
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (hasPermission) {
+                takePictureLauncher.launch(uri)
+            } else {
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+        } catch (e: Exception) {
+            Toast.makeText(context, "Erro ao abrir câmera: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val originalBitmap = BitmapFactory.decodeStream(inputStream)
+                    inputStream?.close()
+                    if (originalBitmap != null) {
+                        withContext(Dispatchers.Main) {
+                            bitmapToAdjust = originalBitmap
+                            showPhotoAdjustDialog = true
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Erro ao selecionar imagem", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    fun removeGroupPhoto() {
+        isUpdatingGroupPhoto = true
+        scope.launch(Dispatchers.IO) {
+            try {
+                try {
+                    File(context.filesDir, "group_avatar_${conversationId}.jpg").delete()
+                } catch (e: Exception) {}
+
+                val conv = app.database.conversationDao().getConversationById(conversationId)
+                if (conv != null) {
+                    app.database.conversationDao().insertOrUpdate(conv.copy(groupAvatar = null))
+                }
+
+                app.apiClient.apiService.updateGroup(conversationId, mapOf("avatarUrl" to ""))
+
+                withContext(Dispatchers.Main) {
+                    currentGroupAvatar = null
+                    Toast.makeText(context, "Foto do grupo removida", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Erro ao remover foto: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    isUpdatingGroupPhoto = false
+                }
+            }
+        }
+    }
 
     val displayTitle = if (isGroup) {
-        groupTitle?.ifBlank { null } ?: otherDisplayName.ifBlank { "Grupo" }
+        currentGroupTitle?.ifBlank { null } ?: otherDisplayName.ifBlank { "Grupo" }
     } else {
         localCustomName
             ?: userProfile?.displayName?.ifBlank { null }
@@ -193,7 +348,7 @@ fun ContactProfileDialog(
             ?: otherUsername.ifBlank { otherUserId.take(12) }
     }
 
-    val avatarUrl = if (isGroup) groupAvatar else (userProfile?.avatarUrl ?: otherAvatarUrl)
+    val avatarUrl = if (isGroup) currentGroupAvatar else (userProfile?.avatarUrl ?: otherAvatarUrl)
     val bioText = if (isGroup) "Grupo criado no LivreChat" else (userProfile?.bio?.ifBlank { null } ?: "Disponível no LivreChat")
 
     val audioPlayerHelper = remember { AudioPlayerHelper(context) }
@@ -270,7 +425,10 @@ fun ContactProfileDialog(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         // Avatar Grande
-                        Box(contentAlignment = Alignment.Center) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(116.dp)
+                        ) {
                             UserAvatarView(
                                 avatarUrl = avatarUrl,
                                 displayName = displayTitle,
@@ -280,11 +438,42 @@ fun ContactProfileDialog(
                                     .clip(CircleShape)
                                     .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), CircleShape)
                                     .clickable {
-                                        if (!avatarUrl.isNullOrBlank()) {
+                                        if (isGroup) {
+                                            showAvatarOptionsDialog = true
+                                        } else if (!avatarUrl.isNullOrBlank()) {
                                             onViewMedia(avatarUrl)
                                         }
                                     }
                             )
+
+                            if (isGroup) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.surface),
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .size(36.dp)
+                                        .clickable { showAvatarOptionsDialog = true }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        if (isUpdatingGroupPhoto) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(16.dp),
+                                                color = Color.White,
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.CameraAlt,
+                                                contentDescription = "Alterar foto do grupo",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(14.dp))
@@ -300,22 +489,20 @@ fun ContactProfileDialog(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            if (!isGroup) {
-                                Spacer(modifier = Modifier.width(6.dp))
-                                IconButton(
-                                    onClick = {
-                                        editNicknameInput = displayTitle
-                                        showEditNicknameDialog = true
-                                    },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Edit,
-                                        contentDescription = "Editar nome",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            IconButton(
+                                onClick = {
+                                    editNicknameInput = displayTitle
+                                    showEditNicknameDialog = true
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = "Editar nome",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
 
@@ -1181,19 +1368,28 @@ fun ContactProfileDialog(
         )
     }
 
-    // Editar Nome do Contato
+    // Editar Nome do Contato / Grupo
     if (showEditNicknameDialog) {
         AlertDialog(
             onDismissRequest = { showEditNicknameDialog = false },
-            title = { Text("Editar Nome do Contato", fontWeight = FontWeight.Bold) },
+            title = {
+                Text(
+                    text = if (isGroup) "Editar Nome do Grupo" else "Editar Nome do Contato",
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 Column {
-                    Text("Defina como este contato será exibido para você:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = if (isGroup) "Defina o nome de exibição deste grupo:" else "Defina como este contato será exibido para você:",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = editNicknameInput,
                         onValueChange = { editNicknameInput = it },
-                        label = { Text("Nome / Apelido") },
+                        label = { Text(if (isGroup) "Nome do grupo" else "Nome / Apelido") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1204,38 +1400,58 @@ fun ContactProfileDialog(
                     val newName = editNicknameInput.trim()
                     if (newName.isNotBlank()) {
                         showEditNicknameDialog = false
-                        localCustomName = newName
-                        app.preferencesManager.setContactCustomName(otherUserId, newName)
-                        scope.launch {
-                            withContext(Dispatchers.IO) {
+                        if (isGroup) {
+                            currentGroupTitle = newName
+                            scope.launch(Dispatchers.IO) {
                                 try {
-                                    app.database.conversationDao().updateOtherDisplayName(otherUserId, newName)
                                     val conv = app.database.conversationDao().getConversationById(conversationId)
                                     if (conv != null) {
-                                        app.database.conversationDao().insertOrUpdate(conv.copy(otherDisplayName = newName))
+                                        app.database.conversationDao().insertOrUpdate(conv.copy(groupTitle = newName))
                                     }
-                                    val existingContact = app.database.contactDao().getContactByUserId(otherUserId)
-                                    if (existingContact != null) {
-                                        app.database.contactDao().insertContact(existingContact.copy(displayName = newName))
-                                    } else {
-                                        app.database.contactDao().insertContact(
-                                            com.livrechat.app.data.local.entity.ContactEntity(
-                                                id = otherUserId,
-                                                contactUserId = otherUserId,
-                                                username = otherUsername,
-                                                displayName = newName,
-                                                avatarUrl = otherAvatarUrl,
-                                                publicKey = null
-                                            )
-                                        )
+                                    app.apiClient.apiService.updateGroup(conversationId, mapOf("title" to newName))
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "Nome do grupo atualizado", Toast.LENGTH_SHORT).show()
                                     }
-                                } catch (e: Exception) {}
-                                try {
-                                    app.apiClient.apiService.updateContact(otherUserId, mapOf("nickname" to newName))
-                                } catch (e: Exception) {}
+                                } catch (e: Exception) {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "Erro ao atualizar nome: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             }
-                            userProfile = userProfile?.copy(displayName = newName)
-                            Toast.makeText(context, "Nome atualizado", Toast.LENGTH_SHORT).show()
+                        } else {
+                            localCustomName = newName
+                            app.preferencesManager.setContactCustomName(otherUserId, newName)
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    try {
+                                        app.database.conversationDao().updateOtherDisplayName(otherUserId, newName)
+                                        val conv = app.database.conversationDao().getConversationById(conversationId)
+                                        if (conv != null) {
+                                            app.database.conversationDao().insertOrUpdate(conv.copy(otherDisplayName = newName))
+                                        }
+                                        val existingContact = app.database.contactDao().getContactByUserId(otherUserId)
+                                        if (existingContact != null) {
+                                            app.database.contactDao().insertContact(existingContact.copy(displayName = newName))
+                                        } else {
+                                            app.database.contactDao().insertContact(
+                                                com.livrechat.app.data.local.entity.ContactEntity(
+                                                    id = otherUserId,
+                                                    contactUserId = otherUserId,
+                                                    username = otherUsername,
+                                                    displayName = newName,
+                                                    avatarUrl = otherAvatarUrl,
+                                                    publicKey = null
+                                                )
+                                            )
+                                        }
+                                    } catch (e: Exception) {}
+                                    try {
+                                        app.apiClient.apiService.updateContact(otherUserId, mapOf("nickname" to newName))
+                                    } catch (e: Exception) {}
+                                }
+                                userProfile = userProfile?.copy(displayName = newName)
+                                Toast.makeText(context, "Nome atualizado", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                 }) {
@@ -1245,6 +1461,185 @@ fun ContactProfileDialog(
             dismissButton = {
                 TextButton(onClick = { showEditNicknameDialog = false }) {
                     Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Diálogo: Opções de Foto do Grupo
+    if (showAvatarOptionsDialog) {
+        AlertDialog(
+            onDismissRequest = { showAvatarOptionsDialog = false },
+            title = {
+                Text(
+                    text = "Foto do grupo",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Câmera
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showAvatarOptionsDialog = false
+                                launchCamera()
+                            }
+                            .padding(vertical = 12.dp, horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Câmera",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = "Câmera",
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    // Galeria
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showAvatarOptionsDialog = false
+                                galleryLauncher.launch("image/*")
+                            }
+                            .padding(vertical = 12.dp, horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhotoLibrary,
+                            contentDescription = "Galeria",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = "Galeria",
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    if (!currentGroupAvatar.isNullOrBlank()) {
+                        // Ver foto
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showAvatarOptionsDialog = false
+                                    onViewMedia(currentGroupAvatar!!)
+                                }
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Visibility,
+                                contentDescription = "Ver foto",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(
+                                text = "Ver foto",
+                                fontSize = 16.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        // Remover foto
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showAvatarOptionsDialog = false
+                                    removeGroupPhoto()
+                                }
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Remover foto",
+                                tint = DangerRed,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(
+                                text = "Remover foto",
+                                fontSize = 16.sp,
+                                color = DangerRed
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showAvatarOptionsDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Diálogo de Ajuste e Corte da Foto do Grupo (Circular)
+    if (showPhotoAdjustDialog && bitmapToAdjust != null) {
+        PhotoAdjustDialog(
+            sourceBitmap = bitmapToAdjust!!,
+            onDismiss = {
+                showPhotoAdjustDialog = false
+                bitmapToAdjust = null
+            },
+            onCropFinished = { croppedBitmap ->
+                isUpdatingGroupPhoto = true
+                showPhotoAdjustDialog = false
+                bitmapToAdjust = null
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        // 1. Salvar arquivo local em cache
+                        val localGroupFile = File(context.filesDir, "group_avatar_${conversationId}.jpg")
+                        FileOutputStream(localGroupFile).use { fos ->
+                            croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 85, fos)
+                        }
+
+                        // 2. Codificar para Base64 data URI
+                        val baos = ByteArrayOutputStream()
+                        croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+                        val bytes = baos.toByteArray()
+                        val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        val dataUri = "data:image/jpeg;base64,$base64"
+
+                        // 3. Atualizar Room DB
+                        val conv = app.database.conversationDao().getConversationById(conversationId)
+                        if (conv != null) {
+                            app.database.conversationDao().insertOrUpdate(conv.copy(groupAvatar = dataUri))
+                        }
+
+                        // 4. Enviar ao servidor
+                        app.apiClient.apiService.updateGroup(conversationId, mapOf("avatarUrl" to dataUri))
+
+                        withContext(Dispatchers.Main) {
+                            currentGroupAvatar = dataUri
+                            Toast.makeText(context, "Foto do grupo atualizada!", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Erro ao atualizar foto: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    } finally {
+                        withContext(Dispatchers.Main) {
+                            isUpdatingGroupPhoto = false
+                        }
+                    }
                 }
             }
         )

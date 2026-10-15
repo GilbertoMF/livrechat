@@ -131,6 +131,12 @@ interface ApiService {
         @Body request: CreateGroupRequest
     ): Response<ConversationDto>
 
+    @PUT("api/messages/groups/{conversationId}")
+    suspend fun updateGroup(
+        @Path("conversationId") conversationId: String,
+        @Body body: Map<String, String>
+    ): Response<BaseResponse>
+
     @GET("api/messages/conversations/{conversationId}/members")
     suspend fun getGroupMembers(
         @Path("conversationId") conversationId: String
