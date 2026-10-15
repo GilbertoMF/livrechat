@@ -49,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -174,7 +175,9 @@ fun ChatScreen(
     val app = remember { com.livrechat.app.LivreChatApp.instance }
     val prefs = remember { app.preferencesManager }
     val onlineUsers by app.connectionManager.onlineUsers.collectAsState()
+    val lastSeenUsers by app.connectionManager.lastSeenUsers.collectAsState()
     val isContactOnline = onlineUsers[otherUserId] == true
+    val contactLastSeen = lastSeenUsers[otherUserId]
 
     LaunchedEffect(otherUserId) {
         if (otherUserId.isNotBlank()) {
@@ -244,18 +247,8 @@ fun ChatScreen(
         if (uri != null) {
             scope.launch(Dispatchers.IO) {
                 try {
-                    val input = context.contentResolver.openInputStream(uri)
-                    val original = BitmapFactory.decodeStream(input)
-                    input?.close()
-                    if (original != null) {
-                        val maxDim = 1280
-                        val width = original.width
-                        val height = original.height
-                        val scale = if (width > height) maxDim.toFloat() / width else maxDim.toFloat() / height
-                        val scaled = if (scale < 1f) {
-                            Bitmap.createScaledBitmap(original, (width * scale).toInt(), (height * scale).toInt(), true)
-                        } else original
-
+                    val scaled = MediaFileManager.loadGalleryImageCorrected(context, uri, 1280)
+                    if (scaled != null) {
                         val baos = ByteArrayOutputStream()
                         scaled.compress(Bitmap.CompressFormat.JPEG, 80, baos)
                         val bytes = baos.toByteArray()
@@ -526,11 +519,13 @@ fun ChatScreen(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+                            val subtitleText = if (isGroup) "Grupo"
+                                   else if (isTyping) "digitando..."
+                                   else if (isContactOnline) "Online"
+                                   else formatChatLastSeen(contactLastSeen)
+
                             Text(
-                                text = if (isGroup) "Grupo"
-                                       else if (isTyping) "digitando..."
-                                       else if (isContactOnline) "Online"
-                                       else "Visto por último recentemente",
+                                text = subtitleText,
                                 fontSize = 12.sp,
                                 color = if (isTyping) BlueAccent
                                         else if (isContactOnline && !isGroup) Color(0xFF4CAF50)
@@ -1381,7 +1376,14 @@ fun MessageBubble(
                                     fontSize = 14.sp
                                 )
                             }
-                        } else if (message.messageType == "audio") {
+                        } else if (
+                            message.messageType == "audio" ||
+                            message.content.startsWith("data:audio") ||
+                            message.content.endsWith(".m4a") ||
+                            message.content.endsWith(".mp3") ||
+                            message.content.contains("voice_") ||
+                            message.content.contains("audio_msg_")
+                        ) {
                             AudioMessageBubbleContent(
                                 message = message,
                                 audioPlayerHelper = audioPlayerHelper,
@@ -1736,27 +1738,12 @@ fun ImageMessageBubbleContent(
 ) {
     var decodedBitmap by remember(message.content) { mutableStateOf<Bitmap?>(null) }
 
+    val context = LocalContext.current
     LaunchedEffect(message.content) {
         withContext(Dispatchers.IO) {
-            try {
-                if (MediaFileManager.isLocalFilePath(message.content)) {
-                    val local = java.io.File(message.content.removePrefix("file://"))
-                    if (local.exists()) {
-                        val bmp = BitmapFactory.decodeFile(local.absolutePath)
-                        withContext(Dispatchers.Main) {
-                            decodedBitmap = bmp
-                        }
-                        return@withContext
-                    }
-                }
-                val clean = if (message.content.contains(",")) message.content.substringAfter(",") else message.content
-                val bytes = Base64.decode(clean, Base64.DEFAULT)
-                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                withContext(Dispatchers.Main) {
-                    decodedBitmap = bmp
-                }
-            } catch (e: Exception) {
-                decodedBitmap = null
+            val bmp = MediaFileManager.decodeAndCorrectBitmap(context, message.content)
+            withContext(Dispatchers.Main) {
+                decodedBitmap = bmp
             }
         }
     }
@@ -1953,26 +1940,14 @@ fun FullscreenImageViewerDialog(
     var decodedBitmap by remember(base64Content) { mutableStateOf<Bitmap?>(null) }
     val context = LocalContext.current
 
+    var rotationDegrees by remember { mutableFloatStateOf(0f) }
+
     LaunchedEffect(base64Content) {
         withContext(Dispatchers.IO) {
-            try {
-                if (MediaFileManager.isLocalFilePath(base64Content)) {
-                    val local = java.io.File(base64Content.removePrefix("file://"))
-                    if (local.exists()) {
-                        val bmp = BitmapFactory.decodeFile(local.absolutePath)
-                        withContext(Dispatchers.Main) {
-                            decodedBitmap = bmp
-                        }
-                        return@withContext
-                    }
-                }
-                val clean = if (base64Content.contains(",")) base64Content.substringAfter(",") else base64Content
-                val bytes = Base64.decode(clean, Base64.DEFAULT)
-                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                withContext(Dispatchers.Main) {
-                    decodedBitmap = bmp
-                }
-            } catch (e: Exception) {}
+            val bmp = MediaFileManager.decodeAndCorrectBitmap(context, base64Content)
+            withContext(Dispatchers.Main) {
+                decodedBitmap = bmp
+            }
         }
     }
 
@@ -1989,7 +1964,9 @@ fun FullscreenImageViewerDialog(
                 Image(
                     bitmap = decodedBitmap!!.asImageBitmap(),
                     contentDescription = "Foto em tela cheia",
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { rotationZ = rotationDegrees },
                     contentScale = ContentScale.Fit
                 )
             } else {
@@ -2012,10 +1989,18 @@ fun FullscreenImageViewerDialog(
                     Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White)
                 }
 
-                IconButton(onClick = {
-                    openMediaFile(context, base64Content, "foto_${System.currentTimeMillis()}.jpg", "image/jpeg")
-                }) {
-                    Icon(Icons.Default.Share, contentDescription = "Compartilhar", tint = Color.White)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = {
+                        rotationDegrees = (rotationDegrees + 90f) % 360f
+                    }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Girar 90°", tint = Color.White)
+                    }
+
+                    IconButton(onClick = {
+                        openMediaFile(context, base64Content, "foto_${System.currentTimeMillis()}.jpg", "image/jpeg")
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = "Compartilhar", tint = Color.White)
+                    }
                 }
             }
         }
@@ -2078,5 +2063,22 @@ fun openMediaFile(context: Context, base64Content: String, fileName: String, mim
         context.startActivity(Intent.createChooser(intent, "Abrir com..."))
     } catch (e: Exception) {
         Toast.makeText(context, "Não foi possível abrir o arquivo: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+fun formatChatLastSeen(ts: Long?): String {
+    if (ts == null || ts <= 0L) return "Visto por último recentemente"
+    val now = java.util.Calendar.getInstance()
+    val time = java.util.Calendar.getInstance().apply { timeInMillis = ts }
+    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    return if (now.get(java.util.Calendar.YEAR) == time.get(java.util.Calendar.YEAR) &&
+               now.get(java.util.Calendar.DAY_OF_YEAR) == time.get(java.util.Calendar.DAY_OF_YEAR)) {
+        "Visto por último hoje às ${timeFormat.format(Date(ts))}"
+    } else if (now.get(java.util.Calendar.YEAR) == time.get(java.util.Calendar.YEAR) &&
+               now.get(java.util.Calendar.DAY_OF_YEAR) - time.get(java.util.Calendar.DAY_OF_YEAR) == 1) {
+        "Visto por último ontem às ${timeFormat.format(Date(ts))}"
+    } else {
+        val dateFormat = SimpleDateFormat("dd/MM/yyyy às HH:mm", Locale.getDefault())
+        "Visto por último em ${dateFormat.format(Date(ts))}"
     }
 }

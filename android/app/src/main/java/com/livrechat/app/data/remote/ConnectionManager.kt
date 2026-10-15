@@ -40,7 +40,12 @@ class ConnectionManager(
     private val _onlineUsers = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val onlineUsers: StateFlow<Map<String, Boolean>> = _onlineUsers.asStateFlow()
 
+    // Map of userId -> lastSeenTimestamp
+    private val _lastSeenUsers = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val lastSeenUsers: StateFlow<Map<String, Long>> = _lastSeenUsers.asStateFlow()
+
     fun isUserOnline(userId: String): Boolean = _onlineUsers.value[userId] ?: false
+    fun getLastSeen(userId: String): Long? = _lastSeenUsers.value[userId]
     fun queryUserStatus(userId: String) = webSocketClient.queryUserStatus(userId)
 
     init {
@@ -243,8 +248,27 @@ class ConnectionManager(
             val db = LivreChatApp.instance.database
             db.messageDao().updateStatus(messageId, status)
 
+            // If message is read, mark all previous messages in that conversation as read too
+            if (status == "read") {
+                val msg = db.messageDao().getMessageById(messageId)
+                if (msg != null) {
+                    db.messageDao().markOutgoingAsReadUpTo(msg.conversationId, msg.createdAt)
+                }
+            }
+
             synchronized(listeners) {
                 listeners.forEach { it.onMessageReceipt(messageId, status, userId) }
+            }
+        }
+    }
+
+    override fun onConversationRead(conversationId: String, userId: String) {
+        scope.launch {
+            val db = LivreChatApp.instance.database
+            db.messageDao().markAllOutgoingAsRead(conversationId)
+
+            synchronized(listeners) {
+                listeners.forEach { it.onConversationRead(conversationId, userId) }
             }
         }
     }
@@ -279,12 +303,19 @@ class ConnectionManager(
         }
     }
 
-    override fun onUserStatus(userId: String, isOnline: Boolean) {
+    override fun onUserStatus(userId: String, isOnline: Boolean, lastSeenTimestamp: Long?) {
         val map = _onlineUsers.value.toMutableMap()
         map[userId] = isOnline
         _onlineUsers.value = map
+
+        if (!isOnline) {
+            val lsMap = _lastSeenUsers.value.toMutableMap()
+            lsMap[userId] = lastSeenTimestamp ?: System.currentTimeMillis()
+            _lastSeenUsers.value = lsMap
+        }
+
         synchronized(listeners) {
-            listeners.forEach { it.onUserStatus(userId, isOnline) }
+            listeners.forEach { it.onUserStatus(userId, isOnline, lastSeenTimestamp) }
         }
     }
 

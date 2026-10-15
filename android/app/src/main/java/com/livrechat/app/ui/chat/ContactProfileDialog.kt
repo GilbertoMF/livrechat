@@ -36,6 +36,7 @@ import coil.compose.AsyncImage
 import com.livrechat.app.LivreChatApp
 import com.livrechat.app.data.local.entity.MessageEntity
 import com.livrechat.app.data.remote.model.UserDto
+import com.livrechat.app.media.AudioPlayerHelper
 import com.livrechat.app.ui.common.UserAvatarView
 import com.livrechat.app.ui.theme.BluePrimary
 import com.livrechat.app.ui.theme.DangerRed
@@ -43,6 +44,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,11 +96,38 @@ fun ContactProfileDialog(
     val avatarUrl = userProfile?.avatarUrl ?: otherAvatarUrl
     val bioText = userProfile?.bio?.ifBlank { null } ?: "Disponível no LivreChat"
 
+    val audioPlayerHelper = remember { AudioPlayerHelper(context) }
+    DisposableEffect(Unit) {
+        onDispose { audioPlayerHelper.stop() }
+    }
+
     val mediaMessages = remember(messages) {
         messages.filter { msg ->
             !msg.isDeleted && (msg.messageType in listOf("image", "video") || msg.content.startsWith("data:image"))
         }
     }
+
+    val audioMessages = remember(messages) {
+        messages.filter { msg ->
+            !msg.isDeleted && (
+                msg.messageType == "audio" ||
+                msg.content.startsWith("data:audio") ||
+                msg.content.endsWith(".m4a") ||
+                msg.content.endsWith(".mp3") ||
+                msg.content.contains("voice_") ||
+                msg.content.contains("audio_")
+            )
+        }
+    }
+
+    val docMessages = remember(messages) {
+        messages.filter { msg ->
+            !msg.isDeleted && (msg.messageType == "file" || msg.content.startsWith("data:application"))
+        }
+    }
+
+    val totalMediaCount = mediaMessages.size + audioMessages.size + docMessages.size
+    var selectedMediaTab by remember { mutableIntStateOf(0) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -365,48 +396,171 @@ fun ContactProfileDialog(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "${mediaMessages.size} itens",
+                                    text = "$totalMediaCount itens",
                                     fontSize = 13.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
 
-                            if (mediaMessages.isEmpty()) {
-                                Text(
-                                    text = "Nenhuma foto ou vídeo compartilhado ainda",
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    modifier = Modifier.padding(vertical = 8.dp)
+                            // Media Category Tabs
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilterChip(
+                                    selected = selectedMediaTab == 0,
+                                    onClick = { selectedMediaTab = 0 },
+                                    label = { Text("Mídia (${mediaMessages.size})", fontSize = 11.sp) }
                                 )
-                            } else {
-                                LazyRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    items(mediaMessages.take(10)) { msg ->
-                                        Surface(
-                                            shape = RoundedCornerShape(10.dp),
-                                            color = MaterialTheme.colorScheme.surfaceVariant,
-                                            modifier = Modifier
-                                                .size(76.dp)
-                                                .clickable { onViewMedia(msg.content) }
-                                        ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                if (msg.content.startsWith("/") || msg.content.startsWith("file://")) {
-                                                    val local = File(msg.content.removePrefix("file://"))
-                                                    if (local.exists()) {
-                                                        AsyncImage(
-                                                            model = local,
-                                                            contentDescription = null,
-                                                            contentScale = ContentScale.Crop,
-                                                            modifier = Modifier.fillMaxSize()
-                                                        )
-                                                    } else {
-                                                        Icon(Icons.Default.Image, contentDescription = null, tint = BluePrimary)
+                                FilterChip(
+                                    selected = selectedMediaTab == 1,
+                                    onClick = { selectedMediaTab = 1 },
+                                    label = { Text("Áudios (${audioMessages.size})", fontSize = 11.sp) }
+                                )
+                                FilterChip(
+                                    selected = selectedMediaTab == 2,
+                                    onClick = { selectedMediaTab = 2 },
+                                    label = { Text("Docs (${docMessages.size})", fontSize = 11.sp) }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            when (selectedMediaTab) {
+                                0 -> {
+                                    if (mediaMessages.isEmpty()) {
+                                        Text(
+                                            text = "Nenhuma foto ou vídeo compartilhado ainda",
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        )
+                                    } else {
+                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            items(mediaMessages.take(15)) { msg ->
+                                                Surface(
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                                    modifier = Modifier
+                                                        .size(76.dp)
+                                                        .clickable { onViewMedia(msg.content) }
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        if (msg.content.startsWith("/") || msg.content.startsWith("file://")) {
+                                                            val local = File(msg.content.removePrefix("file://"))
+                                                            if (local.exists()) {
+                                                                AsyncImage(
+                                                                    model = local,
+                                                                    contentDescription = null,
+                                                                    contentScale = ContentScale.Crop,
+                                                                    modifier = Modifier.fillMaxSize()
+                                                                )
+                                                            } else {
+                                                                Icon(Icons.Default.Image, contentDescription = null, tint = BluePrimary)
+                                                            }
+                                                        } else {
+                                                            Icon(Icons.Default.Image, contentDescription = null, tint = BluePrimary)
+                                                        }
                                                     }
-                                                } else {
-                                                    Icon(Icons.Default.Image, contentDescription = null, tint = BluePrimary)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                1 -> {
+                                    val isPlaying by audioPlayerHelper.isPlaying.collectAsState()
+                                    val playingId by audioPlayerHelper.playingMessageId.collectAsState()
+
+                                    if (audioMessages.isEmpty()) {
+                                        Text(
+                                            text = "Nenhum áudio compartilhado ainda",
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        )
+                                    } else {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            audioMessages.take(10).forEach { msg ->
+                                                val isThisPlaying = isPlaying && playingId == msg.id
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                                                        .clickable { audioPlayerHelper.playAudio(msg.id, msg.content) }
+                                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Surface(
+                                                        shape = CircleShape,
+                                                        color = if (isThisPlaying) Color(0xFF25D366) else BluePrimary,
+                                                        modifier = Modifier.size(34.dp)
+                                                    ) {
+                                                        Box(contentAlignment = Alignment.Center) {
+                                                            Icon(
+                                                                imageVector = if (isThisPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                                contentDescription = null,
+                                                                tint = Color.White,
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                    Spacer(modifier = Modifier.width(10.dp))
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = if (msg.isOutgoing) "Mensagem de voz enviada" else "Mensagem de voz recebida",
+                                                            fontWeight = FontWeight.Medium,
+                                                            fontSize = 13.sp
+                                                        )
+                                                        Text(
+                                                            text = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(msg.createdAt)),
+                                                            fontSize = 11.sp,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                    Icon(Icons.Default.Mic, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                2 -> {
+                                    if (docMessages.isEmpty()) {
+                                        Text(
+                                            text = "Nenhum documento compartilhado ainda",
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        )
+                                    } else {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            docMessages.take(10).forEach { msg ->
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(Icons.Default.InsertDriveFile, contentDescription = null, tint = BluePrimary, modifier = Modifier.size(26.dp))
+                                                    Spacer(modifier = Modifier.width(10.dp))
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = msg.content.substringAfterLast("/"),
+                                                            fontWeight = FontWeight.Medium,
+                                                            fontSize = 13.sp,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Text(
+                                                            text = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(msg.createdAt)),
+                                                            fontSize = 11.sp,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }

@@ -38,7 +38,8 @@ interface WebSocketEventsListener {
     fun onStatusUpdated() {}
     fun onMessageReaction(messageId: String, conversationId: String, userId: String, emoji: String, reactions: String?) {}
     fun onStatusReaction(statusId: String, fromUserId: String, fromUsername: String, emoji: String) {}
-    fun onUserStatus(userId: String, isOnline: Boolean) {}
+    fun onConversationRead(conversationId: String, userId: String) {}
+    fun onUserStatus(userId: String, isOnline: Boolean, lastSeenTimestamp: Long? = null) {}
 }
 
 class WebSocketClient(
@@ -244,14 +245,32 @@ class WebSocketClient(
                             val convId = json.get("conversationId").asStringOrDefault()
                             listener.onChatCleared(convId)
                         }
+                        "chat:conversation_read" -> {
+                            val convId = json.get("conversationId").asStringOrDefault()
+                            val userId = json.get("userId").asStringOrDefault()
+                            listener.onConversationRead(convId, userId)
+                        }
                         "status:new", "status:deleted" -> {
                             listener.onStatusUpdated()
                         }
                         "user:status" -> {
                             val uid = json.get("userId").asStringOrNull()
                             val status = json.get("status").asStringOrDefault()
+                            val timestampStr = json.get("timestamp").asStringOrNull()
+                            val ts = if (timestampStr != null) {
+                                try {
+                                    val instant = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                        java.time.Instant.parse(timestampStr).toEpochMilli()
+                                    } else {
+                                        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).parse(timestampStr.take(19))?.time ?: System.currentTimeMillis()
+                                    }
+                                    instant
+                                } catch (e: Exception) {
+                                    System.currentTimeMillis()
+                                }
+                            } else System.currentTimeMillis()
                             if (uid != null) {
-                                listener.onUserStatus(uid, status == "online")
+                                listener.onUserStatus(uid, status == "online", ts)
                             }
                         }
                     }

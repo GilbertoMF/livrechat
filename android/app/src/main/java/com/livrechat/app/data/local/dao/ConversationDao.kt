@@ -26,13 +26,25 @@ interface ConversationDao {
     suspend fun getConversationByUserId(otherUserId: String): ConversationEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertOrUpdate(conversation: ConversationEntity)
+    suspend fun insertOrUpdateRaw(conversation: ConversationEntity)
+
+    suspend fun insertOrUpdate(conversation: ConversationEntity) {
+        insertOrUpdateRaw(conversation.copy(lastMessageContent = sanitizePreview(conversation.lastMessageContent)))
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(conversations: List<ConversationEntity>)
+    suspend fun insertAllRaw(conversations: List<ConversationEntity>)
+
+    suspend fun insertAll(conversations: List<ConversationEntity>) {
+        insertAllRaw(conversations.map { it.copy(lastMessageContent = sanitizePreview(it.lastMessageContent)) })
+    }
 
     @Query("UPDATE conversations SET lastMessageContent = :content, lastMessageTimestamp = :timestamp WHERE id = :convId")
-    suspend fun updateLastMessage(convId: String, content: String, timestamp: Long)
+    suspend fun updateLastMessageRaw(convId: String, content: String, timestamp: Long)
+
+    suspend fun updateLastMessage(convId: String, content: String, timestamp: Long) {
+        updateLastMessageRaw(convId, sanitizePreview(content) ?: "", timestamp)
+    }
 
     @Query("UPDATE conversations SET unreadCount = 0 WHERE id = :convId")
     suspend fun clearUnreadCount(convId: String)
@@ -48,4 +60,16 @@ interface ConversationDao {
 
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun deleteConversation(id: String)
+}
+
+private fun sanitizePreview(content: String?): String? {
+    if (content == null) return null
+    return when {
+        content.startsWith("data:image") -> "📷 Foto"
+        content.startsWith("data:audio") || content.endsWith(".m4a") || content.endsWith(".mp3") || content.contains("voice_") -> "🎵 Áudio"
+        content.startsWith("data:video") || content.endsWith(".mp4") -> "🎥 Vídeo"
+        content.startsWith("data:application") -> "📄 Documento"
+        content.length > 150 -> content.take(150) + "..."
+        else -> content
+    }
 }

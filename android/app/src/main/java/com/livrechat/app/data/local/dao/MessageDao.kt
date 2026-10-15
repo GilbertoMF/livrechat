@@ -49,6 +49,12 @@ interface MessageDao {
     @Query("UPDATE messages SET status = 'read' WHERE conversationId = :convId AND isOutgoing = 0")
     suspend fun markAllIncomingAsRead(convId: String)
 
+    @Query("UPDATE messages SET status = 'read' WHERE conversationId = :convId AND isOutgoing = 1 AND status != 'read'")
+    suspend fun markAllOutgoingAsRead(convId: String)
+
+    @Query("UPDATE messages SET status = 'read' WHERE conversationId = :convId AND isOutgoing = 1 AND createdAt <= :timestamp AND status != 'read'")
+    suspend fun markOutgoingAsReadUpTo(convId: String, timestamp: Long)
+
     @Query("DELETE FROM messages WHERE id = :messageId")
     suspend fun deletePermanently(messageId: String)
 

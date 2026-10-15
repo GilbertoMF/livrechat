@@ -57,7 +57,7 @@ class MainActivity : FragmentActivity() {
         }
 
         val prefs = LivreChatApp.instance.preferencesManager
-        if (prefs.isBiometricEnabled && prefs.accessToken != null) {
+        if (prefs.isBiometricEnabled && prefs.accessToken != null && !prefs.currentUserId.isNullOrBlank()) {
             isAppUnlockedState.value = false
             triggerBiometricUnlock()
         } else {
@@ -145,7 +145,7 @@ class MainActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         val prefs = LivreChatApp.instance.preferencesManager
-        if (prefs.isBiometricEnabled && prefs.accessToken != null && !isAppUnlockedState.value) {
+        if (prefs.isBiometricEnabled && prefs.accessToken != null && !prefs.currentUserId.isNullOrBlank() && !isAppUnlockedState.value) {
             triggerBiometricUnlock()
         }
     }

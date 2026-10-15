@@ -107,6 +107,23 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             dto.unreadCount
                         }
                         val otherU = dto.otherUser
+                        val preview = when (dto.lastMessage?.messageType) {
+                            "image" -> "📷 Foto"
+                            "audio" -> "🎵 Áudio"
+                            "video" -> "🎥 Vídeo"
+                            "file" -> "📄 Documento"
+                            else -> {
+                                val c = dto.lastMessage?.content
+                                when {
+                                    c == null -> localExisting?.lastMessageContent
+                                    c.startsWith("data:image") -> "📷 Foto"
+                                    c.startsWith("data:audio") || c.endsWith(".m4a") || c.endsWith(".mp3") || c.contains("voice_") -> "🎵 Áudio"
+                                    c.startsWith("data:video") || c.endsWith(".mp4") -> "🎥 Vídeo"
+                                    c.length > 100 -> c.take(100) + "..."
+                                    else -> c
+                                }
+                            }
+                        }
                         ConversationEntity(
                             id = dto.conversationId,
                             otherUserId = otherU?.id ?: dto.conversationId,
@@ -114,7 +131,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             otherDisplayName = otherU?.displayName ?: (dto.title ?: "Grupo"),
                             otherAvatarUrl = otherU?.avatarUrl ?: dto.avatarUrl,
                             otherPublicKey = otherU?.publicKey,
-                            lastMessageContent = dto.lastMessage?.content ?: localExisting?.lastMessageContent,
+                            lastMessageContent = preview,
                             lastMessageTimestamp = localExisting?.lastMessageTimestamp ?: System.currentTimeMillis(),
                             unreadCount = calculatedUnread,
                             isPinned = dto.isPinned,

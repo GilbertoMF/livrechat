@@ -397,192 +397,233 @@ fun HomeScreen(
             Surface(
                 shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                tonalElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier.padding(vertical = 16.dp, horizontal = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Header
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Color(0xFF25D366).copy(alpha = 0.15f),
-                            modifier = Modifier.size(42.dp)
+                    // Drag pill indicator
+                    Box(
+                        modifier = Modifier
+                            .width(36.dp)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Top Bar (Close and Title)
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        IconButton(
+                            onClick = { showStatusOptionsDialog = false },
+                            modifier = Modifier.align(Alignment.CenterStart)
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.AddCircleOutline,
-                                    contentDescription = null,
-                                    tint = Color(0xFF25D366),
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
+                            Icon(Icons.Default.Close, contentDescription = "Fechar", tint = MaterialTheme.colorScheme.onSurface)
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Adicionar ao Flash", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            Text("Compartilhe momentos que expiram em 24h", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+
+                        Text(
+                            text = "Adicionar ao Flash",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
                     }
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
-                    // 1. Texto Criativo
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
+                    // Horizontal Row of WhatsApp-style Circular Action Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 1. Texto
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable {
                                 showStatusOptionsDialog = false
                                 showCreateTextStatusDialog = true
                             }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Surface(
                                 shape = CircleShape,
-                                color = Color(0xFF00A884).copy(alpha = 0.2f),
-                                modifier = Modifier.size(44.dp)
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(54.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFF00A884), modifier = Modifier.size(22.dp))
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Texto",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
                                 }
                             }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Texto Criativo", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                Text("Escreva frases com fundos coloridos", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Texto", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // 2. Câmera
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                showStatusOptionsDialog = false
-                                launchStatusCamera()
-                            }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = Color(0xFF25D366).copy(alpha = 0.2f),
-                                modifier = Modifier.size(44.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF25D366), modifier = Modifier.size(22.dp))
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Tirar Foto na Câmera", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                Text("Capture e publique instantaneamente", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // 3. Galeria
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                showStatusOptionsDialog = false
-                                statusImagePickerLauncher.launch("image/*")
-                            }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = Color(0xFF007AFF).copy(alpha = 0.2f),
-                                modifier = Modifier.size(44.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color(0xFF007AFF), modifier = Modifier.size(22.dp))
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Foto da Galeria", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                Text("Escolha fotos dos seus arquivos", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // 4. Música (Estilo WhatsApp)
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
+                        // 2. Música
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable {
                                 showStatusOptionsDialog = false
                                 showMusicCatalogPicker = true
                             }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Surface(
                                 shape = CircleShape,
-                                color = Color(0xFFE91E63).copy(alpha = 0.2f),
-                                modifier = Modifier.size(44.dp)
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(54.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color(0xFFE91E63), modifier = Modifier.size(22.dp))
+                                    Icon(
+                                        Icons.Default.Audiotrack,
+                                        contentDescription = "Música",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
                                 }
                             }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Música de Cantores", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                Text("Escolha músicas de cantores, astral ou pesquise", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Música", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        }
+
+                        // 3. Voz
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable {
+                                showStatusOptionsDialog = false
+                                statusAudioPickerLauncher.launch("audio/*")
                             }
-                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(54.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.Mic,
+                                        contentDescription = "Voz",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Voz", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        }
+
+                        // 4. Câmera
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable {
+                                showStatusOptionsDialog = false
+                                launchStatusCamera()
+                            }
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(54.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.CameraAlt,
+                                        contentDescription = "Câmera",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Câmera", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        }
+
+                        // 5. Galeria
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable {
+                                showStatusOptionsDialog = false
+                                statusImagePickerLauncher.launch("image/*")
+                            }
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(54.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.PhotoLibrary,
+                                        contentDescription = "Galeria",
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Galeria", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                    OutlinedButton(
-                        onClick = { showStatusOptionsDialog = false },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                    // Quick access tiles: Câmera Instantânea & Galeria
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text("Cancelar", fontWeight = FontWeight.Medium)
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF25D366).copy(alpha = 0.12f),
+                            border = BorderStroke(1.dp, Color(0xFF25D366).copy(alpha = 0.3f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    showStatusOptionsDialog = false
+                                    launchStatusCamera()
+                                }
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF25D366), modifier = Modifier.size(28.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("Abrir Câmera", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF25D366))
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF007AFF).copy(alpha = 0.12f),
+                            border = BorderStroke(1.dp, Color(0xFF007AFF).copy(alpha = 0.3f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    showStatusOptionsDialog = false
+                                    statusImagePickerLauncher.launch("image/*")
+                                }
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color(0xFF007AFF), modifier = Modifier.size(28.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("Abrir Galeria", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF007AFF))
+                            }
+                        }
                     }
+
+                    Spacer(modifier = Modifier.height(14.dp))
                 }
             }
         }

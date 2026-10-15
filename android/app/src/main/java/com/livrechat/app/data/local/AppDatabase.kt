@@ -62,6 +62,19 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .fallbackToDestructiveMigration()
+                .addCallback(object : RoomDatabase.Callback() {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        try {
+                            db.execSQL("UPDATE conversations SET lastMessageContent = '📷 Foto' WHERE lastMessageContent LIKE 'data:image%' OR (lastMessageContent IS NOT NULL AND length(lastMessageContent) > 200)")
+                            db.execSQL("UPDATE conversations SET lastMessageContent = '🎵 Áudio' WHERE lastMessageContent LIKE 'data:audio%'")
+                            db.execSQL("UPDATE conversations SET lastMessageContent = '🎥 Vídeo' WHERE lastMessageContent LIKE 'data:video%'")
+                            db.execSQL("UPDATE messages SET content = '[Mídia]' WHERE content IS NOT NULL AND length(content) > 500000")
+                        } catch (e: Exception) {
+                            android.util.Log.e("AppDatabase", "Erro ao sanitizar banco de dados", e)
+                        }
+                    }
+                })
                 .build()
                 INSTANCE = instance
                 instance

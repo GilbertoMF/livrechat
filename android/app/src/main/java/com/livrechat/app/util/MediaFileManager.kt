@@ -1,6 +1,8 @@
 package com.livrechat.app.util
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.media.ExifInterface
 import android.net.Uri
 import android.util.Base64
 import androidx.core.content.FileProvider
@@ -61,4 +63,129 @@ object MediaFileManager {
     fun getFileUri(context: Context, file: File): Uri {
         return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     }
+
+    fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
+        if (degrees % 360f == 0f) return bitmap
+        val matrix = android.graphics.Matrix().apply { postRotate(degrees) }
+        val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        return rotated
+    }
+
+    fun decodeFileWithExif(file: File): Bitmap? {
+        if (!file.exists() || file.length() == 0L) return null
+        return try {
+            val exif = ExifInterface(file.absolutePath)
+            val orientation = exif.getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL
+            )
+            val rotation = when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+            val original = android.graphics.BitmapFactory.decodeFile(file.absolutePath) ?: return null
+            if (rotation != 0f) {
+                val rotated = rotateBitmap(original, rotation)
+                if (rotated != original) original.recycle()
+                rotated
+            } else {
+                original
+            }
+        } catch (e: Exception) {
+            try {
+                android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+            } catch (ex: Exception) {
+                null
+            }
+        }
+    }
+
+    fun loadGalleryImageCorrected(context: Context, uri: Uri, maxDim: Int = 1280): Bitmap? {
+        return try {
+            var rotation = 0f
+            try {
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    val exif = ExifInterface(stream)
+                    val orientation = exif.getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_NORMAL
+                    )
+                    rotation = when (orientation) {
+                        ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                        ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                        ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                        else -> 0f
+                    }
+                }
+            } catch (e: Exception) {}
+
+            val original = context.contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream)
+            } ?: return null
+
+            val upright = if (rotation != 0f) {
+                val r = rotateBitmap(original, rotation)
+                if (r != original) original.recycle()
+                r
+            } else {
+                original
+            }
+
+            val w = upright.width
+            val h = upright.height
+            val scale = if (w > h) maxDim.toFloat() / w else maxDim.toFloat() / h
+            if (scale < 1f) {
+                val scaled = Bitmap.createScaledBitmap(upright, (w * scale).toInt(), (h * scale).toInt(), true)
+                if (scaled != upright) upright.recycle()
+                scaled
+            } else {
+                upright
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun decodeAndCorrectBitmap(context: Context, content: String): Bitmap? {
+        if (content.isBlank()) return null
+        return try {
+            if (isLocalFilePath(content)) {
+                val local = getLocalFile(content)
+                if (local != null) {
+                    decodeFileWithExif(local)
+                } else null
+            } else {
+                val clean = if (content.contains(",")) content.substringAfter(",") else content
+                val bytes = Base64.decode(clean, Base64.DEFAULT)
+                var rotation = 0f
+                try {
+                    val exif = ExifInterface(java.io.ByteArrayInputStream(bytes))
+                    val orientation = exif.getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_NORMAL
+                    )
+                    rotation = when (orientation) {
+                        ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                        ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                        ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                        else -> 0f
+                    }
+                } catch (e: Exception) {}
+
+                val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+                if (rotation != 0f) {
+                    val rotated = rotateBitmap(bmp, rotation)
+                    if (rotated != bmp) bmp.recycle()
+                    rotated
+                } else {
+                    bmp
+                }
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
 }
+

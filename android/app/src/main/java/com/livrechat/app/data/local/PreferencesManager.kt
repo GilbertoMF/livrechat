@@ -82,16 +82,37 @@ class PreferencesManager(private val context: Context) {
         }
 
     var isBiometricEnabled: Boolean
-        get() = prefs.getBoolean(KEY_BIOMETRIC_ENABLED, false)
-        set(value) = prefs.edit().putBoolean(KEY_BIOMETRIC_ENABLED, value).apply()
+        get() {
+            val uid = currentUserId
+            if (uid.isNullOrBlank()) return false
+            return prefs.getBoolean("biometric_enabled_$uid", false)
+        }
+        set(value) {
+            val uid = currentUserId ?: return
+            prefs.edit().putBoolean("biometric_enabled_$uid", value).apply()
+        }
 
     var isPinLockEnabled: Boolean
-        get() = prefs.getBoolean(KEY_PIN_LOCK_ENABLED, false)
-        set(value) = prefs.edit().putBoolean(KEY_PIN_LOCK_ENABLED, value).apply()
+        get() {
+            val uid = currentUserId
+            if (uid.isNullOrBlank()) return false
+            return prefs.getBoolean("pin_lock_enabled_$uid", false)
+        }
+        set(value) {
+            val uid = currentUserId ?: return
+            prefs.edit().putBoolean("pin_lock_enabled_$uid", value).apply()
+        }
 
     var appLockPin: String?
-        get() = prefs.getString(KEY_APP_LOCK_PIN, null)
-        set(value) = prefs.edit().putString(KEY_APP_LOCK_PIN, value).apply()
+        get() {
+            val uid = currentUserId
+            if (uid.isNullOrBlank()) return null
+            return prefs.getString("app_lock_pin_$uid", null)
+        }
+        set(value) {
+            val uid = currentUserId ?: return
+            prefs.edit().putString("app_lock_pin_$uid", value).apply()
+        }
 
     var selfDestructTimer: String
         get() = prefs.getString(KEY_SELF_DESTRUCT_TIMER, "off") ?: "off"
@@ -152,7 +173,8 @@ class PreferencesManager(private val context: Context) {
     }
 
     fun clearAuth() {
-        prefs.edit()
+        val uid = currentUserId
+        val editor = prefs.edit()
             .remove(KEY_ACCESS_TOKEN)
             .remove(KEY_REFRESH_TOKEN)
             .remove(KEY_USER_ID)
@@ -160,7 +182,15 @@ class PreferencesManager(private val context: Context) {
             .remove(KEY_DISPLAY_NAME)
             .remove(KEY_USER_BIO)
             .remove(KEY_USER_AVATAR)
-            .apply()
+            .remove(KEY_BIOMETRIC_ENABLED)
+            .remove(KEY_PIN_LOCK_ENABLED)
+            .remove(KEY_APP_LOCK_PIN)
+        if (!uid.isNullOrBlank()) {
+            editor.remove("biometric_enabled_$uid")
+                .remove("pin_lock_enabled_$uid")
+                .remove("app_lock_pin_$uid")
+        }
+        editor.apply()
 
         try {
             val appFilesDir = context.filesDir
