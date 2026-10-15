@@ -1,6 +1,10 @@
 package com.livrechat.app.data.remote
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.util.Log
 import com.google.gson.JsonObject
 import com.livrechat.app.LivreChatApp
@@ -53,7 +57,23 @@ class ConnectionManager(
     fun queryUserStatus(userId: String) = webSocketClient.queryUserStatus(userId)
 
     init {
-        // WebSocketClient constructor will be passed this listener
+        try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            cm?.registerNetworkCallback(request, object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    val prefs = LivreChatApp.instance.preferencesManager
+                    if (prefs.isLoggedIn() && !_isConnected.value) {
+                        Log.d(TAG, "Rede de internet disponível. Conectando WebSocket...")
+                        connect()
+                    }
+                }
+            })
+        } catch (e: Exception) {
+            Log.w(TAG, "Falha ao registrar NetworkCallback", e)
+        }
     }
 
     fun setActiveConversation(conversationId: String?) {

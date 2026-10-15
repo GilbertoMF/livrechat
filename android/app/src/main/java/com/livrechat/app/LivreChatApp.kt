@@ -60,20 +60,12 @@ class LivreChatApp : Application() {
         ws.setListener(connectionManager)
 
         if (preferencesManager.isLoggedIn()) {
+            com.livrechat.app.service.LivreChatBackgroundService.start(this)
             connectionManager.connect()
         }
 
         // Non-blocking background initialization on Dispatchers.IO
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            try {
-                val nm = getSystemService(NotificationManager::class.java)
-                nm?.cancel(1001)
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    nm?.deleteNotificationChannel("livrechat_background_sync_channel")
-                }
-                com.livrechat.app.service.LivreChatBackgroundService.stop(this@LivreChatApp)
-            } catch (e: Exception) {}
-
             try {
                 database.openHelper.writableDatabase.execSQL(
                     "UPDATE messages SET content = '[Arquivo transferido / salvo]' WHERE length(content) > 250000 AND (content NOT LIKE 'file://%' AND content NOT LIKE '/%')"

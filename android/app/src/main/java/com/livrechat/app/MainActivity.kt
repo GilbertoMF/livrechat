@@ -4,8 +4,11 @@ import android.Manifest
 import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -68,13 +71,9 @@ class MainActivity : FragmentActivity() {
         checkAndRequestPermissions()
         com.livrechat.app.sync.ContactSyncHelper.getOrCreateAccount(this)
 
-        try {
-            val nm = getSystemService(NotificationManager::class.java)
-            nm?.cancel(1001)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                nm?.deleteNotificationChannel("livrechat_background_sync_channel")
-            }
-        } catch (e: Exception) {}
+        if (prefs.isLoggedIn()) {
+            com.livrechat.app.service.LivreChatBackgroundService.start(this)
+        }
 
         if (prefs.blockScreenshots) {
             window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
@@ -169,6 +168,13 @@ class MainActivity : FragmentActivity() {
         if (prefs.isBiometricEnabled && prefs.accessToken != null && !prefs.currentUserId.isNullOrBlank() && !isAppUnlockedState.value) {
             triggerBiometricUnlock()
         }
+
+        if (prefs.isLoggedIn()) {
+            com.livrechat.app.service.LivreChatBackgroundService.start(this)
+            if (!LivreChatApp.instance.connectionManager.isConnected.value) {
+                LivreChatApp.instance.connectionManager.connect()
+            }
+        }
     }
 
     private fun triggerBiometricUnlock() {
@@ -258,6 +264,24 @@ class MainActivity : FragmentActivity() {
 
         if (permissionsToRequest.isNotEmpty()) {
             permissionLauncher.launch(permissionsToRequest.toTypedArray())
+        }
+
+        requestBatteryOptimizationExemption()
+    }
+
+    private fun requestBatteryOptimizationExemption() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                val powerManager = getSystemService(PowerManager::class.java)
+                if (powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                }
+            } catch (e: Exception) {
+                // Ignore if device restricts direct exemption prompt
+            }
         }
     }
 }

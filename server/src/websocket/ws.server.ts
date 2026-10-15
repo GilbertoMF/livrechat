@@ -636,12 +636,14 @@ export class WebSocketManager {
       return false;
     }
     const message = JSON.stringify(payload);
+    let sent = false;
     for (const ws of sockets) {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(message);
+        sent = true;
       }
     }
-    return true;
+    return sent;
   }
 
   public broadcast(payload: any) {

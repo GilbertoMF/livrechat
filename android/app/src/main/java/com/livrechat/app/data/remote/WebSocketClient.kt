@@ -60,15 +60,35 @@ class WebSocketClient(
     private var webSocket: WebSocket? = null
     private var isIntentionalClose = false
     private var reconnectAttempts = 0
+    private var reconnectJob: Job? = null
+
+    @Volatile
+    private var isConnected = false
+    @Volatile
+    private var isConnecting = false
+
+    fun isConnected(): Boolean = isConnected
 
     private val client = OkHttpClient.Builder()
-        .pingInterval(25, TimeUnit.SECONDS)
+        .pingInterval(20, TimeUnit.SECONDS)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
     fun connect() {
         val token = preferencesManager.accessToken ?: return
+        if (token.isBlank()) return
+
+        // If already connected and socket is open, do not re-create
+        if (isConnected && webSocket != null) {
+            Log.d(TAG, "WebSocket já conectado, ignorando solicitação redundante.")
+            return
+        }
+
+        reconnectJob?.cancel()
+        reconnectJob = null
+        reconnectAttempts = 0
+
         var server = preferencesManager.serverUrl.trim()
         server = server.replace("http://", "ws://").replace("https://", "wss://")
         if (server.endsWith("/")) {
@@ -77,11 +97,19 @@ class WebSocketClient(
         val wsUrl = "$server/ws?token=$token"
 
         isIntentionalClose = false
+        isConnecting = true
+
+        try {
+            webSocket?.cancel()
+        } catch (e: Exception) {}
+
         val request = Request.Builder().url(wsUrl).build()
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d(TAG, "Conexão WebSocket estabelecida.")
+                isConnected = true
+                isConnecting = false
                 reconnectAttempts = 0
                 scope.launch(Dispatchers.Main) {
                     listener.onConnected()
@@ -94,6 +122,8 @@ class WebSocketClient(
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "WebSocket fechado: $code / $reason")
+                isConnected = false
+                isConnecting = false
                 scope.launch(Dispatchers.Main) {
                     listener.onDisconnected()
                 }
@@ -104,6 +134,8 @@ class WebSocketClient(
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "Falha no WebSocket: ${t.message}")
+                isConnected = false
+                isConnecting = false
                 scope.launch(Dispatchers.Main) {
                     listener.onDisconnected()
                 }
@@ -115,15 +147,20 @@ class WebSocketClient(
     }
 
     fun disconnect() {
+        reconnectJob?.cancel()
+        reconnectJob = null
         isIntentionalClose = true
+        isConnected = false
+        isConnecting = false
         webSocket?.close(1000, "Desconexão solicitada")
         webSocket = null
     }
 
     private fun scheduleReconnect() {
-        scope.launch {
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
             reconnectAttempts++
-            val delayMs = (1000L * (1 shl Math.min(reconnectAttempts, 5))).coerceAtMost(30000L)
+            val delayMs = (1000L * (1 shl Math.min(reconnectAttempts, 3))).coerceAtMost(10000L)
             Log.d(TAG, "Tentando reconectar em ${delayMs / 1000}s (tentativa $reconnectAttempts)...")
             delay(delayMs)
             if (!isIntentionalClose && isActive) {
