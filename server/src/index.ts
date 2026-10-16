@@ -12,6 +12,7 @@ import { CallsController } from './modules/calls/calls.controller';
 import { StatusController } from './modules/status/status.controller';
 import { MediaController, uploadMiddleware } from './modules/media/media.controller';
 import { WebSocketManager } from './websocket/ws.server';
+import { fcmService } from './services/fcm.service';
 
 const app = express();
 const server = http.createServer(app);
@@ -36,11 +37,18 @@ app.get(['/apks/livrechat-latest.apk', '/download/latest'], (req, res) => {
 });
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
+  let registeredFcmDevices = 0;
+  try {
+    registeredFcmDevices = await db.getFcmTokenCount();
+  } catch (e) {}
+
   res.status(200).json({
     status: 'online',
     appName: 'LivreChat Server',
     version: '1.1.1',
+    fcmInitialized: fcmService.isAvailable(),
+    registeredFcmDevices,
     timestamp: new Date().toISOString()
   });
 });

@@ -2449,6 +2449,18 @@ class DatabaseService {
       }
     }
   }
+
+  public async getFcmTokenCount(): Promise<number> {
+    if (this.pgPool) {
+      try {
+        const res = await this.pgPool.query('SELECT COUNT(*) as count FROM user_fcm_tokens');
+        return parseInt(res.rows[0]?.count || '0', 10);
+      } catch (e) {
+        return 0;
+      }
+    }
+    return this.memoryStore.fcm_tokens?.length || 0;
+  }
 }
 
 export const db = new DatabaseService();
