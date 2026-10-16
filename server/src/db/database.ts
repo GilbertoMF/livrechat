@@ -786,13 +786,16 @@ class DatabaseService {
 
   public async unblockUser(blockerId: string, blockedId: string): Promise<boolean> {
     this.memoryStore.blocked_users = this.memoryStore.blocked_users.filter(
-      b => !(b.blocker_id === blockerId && b.blocked_id === blockedId)
+      b => !(b.blocker_id === blockerId && (b.blocked_id === blockedId || b.id === blockedId))
     );
     this.saveToLocal();
 
     if (this.pgPool) {
       try {
-        await this.pgPool.query('DELETE FROM blocked_users WHERE blocker_id = $1 AND blocked_id = $2', [blockerId, blockedId]);
+        await this.pgPool.query(
+          'DELETE FROM blocked_users WHERE blocker_id = $1 AND (blocked_id = $2 OR id = $2)',
+          [blockerId, blockedId]
+        );
         return true;
       } catch (e) {
         console.warn('[Database] Erro PG unblockUser:', e);

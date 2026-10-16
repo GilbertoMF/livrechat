@@ -80,9 +80,14 @@ export class MessagesController {
 
       const messages = await db.getMessages(conversationId, limit, before);
 
+      // Filter out any messages sent by users that the requesting user has blocked
+      const blockedList = await db.getBlockedUsers(userId);
+      const blockedSenderIds = new Set(blockedList.map(b => b.blocked_id));
+      const visibleMessages = messages.filter(m => !blockedSenderIds.has(m.sender_id));
+
       // Attach receipts & consolidated status
       const enriched = await Promise.all(
-        messages.map(async m => {
+        visibleMessages.map(async m => {
           const receipts = await db.getReceiptsForMessage(m.id);
           const otherReceipts = receipts.filter(r => r.user_id !== m.sender_id);
           const hasRead = otherReceipts.some(r => r.status === 'read');
@@ -142,6 +147,24 @@ export class MessagesController {
         created_at: now,
         updated_at: now
       };
+
+      let members = await db.getConversationMembers(conversationId);
+      const otherMember = targetUserId || (members.length <= 2 ? members.find(m => m !== senderId) : null);
+      if (otherMember) {
+        const isBlocked = await db.isBlocked(senderId, otherMember);
+        if (isBlocked) {
+          // Blocked: return 1 tick ack to sender without persisting for recipient
+          return res.status(200).json({
+            id,
+            conversation_id: conversationId,
+            sender_id: senderId,
+            content,
+            message_type: messageType || 'text',
+            status: 'sent',
+            created_at: now
+          });
+        }
+      }
 
       const saved = await db.createMessage(msg);
 

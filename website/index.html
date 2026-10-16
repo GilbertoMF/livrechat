@@ -592,21 +592,21 @@
     <section class="hero">
       <div class="hero-pill">
         <span class="pulse"></span>
-        <span>Versão 1.0.4 Disponível • Apenas ~24.9 MB</span>
+        <span>Versão 1.0.5 Disponível • Apenas ~24.9 MB</span>
       </div>
       <h1>Privacidade Real.<br><span class="gradient-text">Sem Número de Telefone.</span></h1>
       <p>Converse, faça chamadas de voz WebRTC criptografadas e envie mídias com quem você quiser com máxima segurança e liberdade.</p>
 
       <div class="cta-box">
         <div class="btn-group">
-          <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.0.4-arm64.apk" class="btn btn-primary" download>
+          <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.0.5-arm64.apk" class="btn btn-primary" download>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
             </svg>
-            <span>Baixar APK Mais Recente (v1.0.4)</span>
+            <span>Baixar APK Mais Recente (v1.0.5)</span>
             <span class="badge-pill">24.9 MB</span>
           </a>
-          <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.0.4-universal.apk" class="btn btn-secondary" download>
+          <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.0.5-universal.apk" class="btn btn-secondary" download>
             <span>APK Universal (Todos os Celulares)</span>
             <span class="badge-pill">31.4 MB</span>
           </a>
@@ -638,7 +638,7 @@
         <div class="version-card latest">
           <div class="version-header">
             <div class="version-title-group">
-              <span class="version-number">LivreChat v1.0.4</span>
+              <span class="version-number">LivreChat v1.0.5</span>
               <span class="tag-latest">Versão Atual (Recomendada)</span>
             </div>
             <span class="version-date">Lançada em 16 de Outubro de 2026</span>
@@ -648,32 +648,58 @@
           <ul class="changelog-list">
             <li>
               <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-              <span><strong>Ordenação e Horários das Mensagens Corrigidos:</strong> Resolvido o bug onde mensagens novas apareciam acima das antigas ("mensagens novas ficando em cima"). Agora o fuso UTC do servidor é convertido perfeitamente para o horário local brasileiro e as mensagens são salvas e ordenadas na ordem cronológica exata.</span>
+              <span><strong>Desbloqueio de Contatos 100% Corrigido:</strong> Resolvido o problema onde contatos bloqueados apareciam como "Usuário @ID" e não saíam da lista ao clicar em Desbloquear. Agora o contato exibe nome de perfil e é removido corretamente tanto localmente quanto no servidor.</span>
             </li>
             <li>
               <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-              <span><strong>Sanitização Automática de Timestamps:</strong> Ao abrir o app ou entrar em uma conversa, qualquer mensagem salva anteriormente com horário no futuro é instantaneamente corrigida e reordenada.</span>
+              <span><strong>Bloqueio de Mensagens Efetivo (1 Tique):</strong> Quando um contato bloqueado tenta enviar mensagem, o app dele exibe 1 tique cinza (simulando envio normal como no WhatsApp), mas a mensagem não é entregue ao destinatário nem salva no banco de dados.</span>
             </li>
             <li>
               <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-              <span><strong>Fila de Mensagens Offline:</strong> Mensagens enviadas sem internet não falham com ponto de exclamação; ficam com o ícone de relógio e saem automaticamente ao reconectar.</span>
-            </li>
-            <li>
-              <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-              <span><strong>Grupos Estilo WhatsApp:</strong> Nomes coloridos, contagem de participantes e avisos de quem está digitando ou gravando áudio em tempo real.</span>
+              <span><strong>Filtro de Mensagens Bloqueadas:</strong> Ao sair e reentrar na conversa, as mensagens de contatos bloqueados não reaparecem no histórico.</span>
             </li>
           </ul>
 
           <div class="downloads-row">
-            <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.0.4-arm64.apk" class="download-pill-btn highlight" download>
+            <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.0.5-arm64.apk" class="download-pill-btn highlight" download>
               <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
               <span>Baixar APK Leve (ARM64)</span>
               <span class="file-size-tag">24.9 MB • Recomendado</span>
             </a>
-            <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.0.4-universal.apk" class="download-pill-btn" download>
+            <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.0.5-universal.apk" class="download-pill-btn" download>
               <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
               <span>Baixar APK Universal</span>
               <span class="file-size-tag">31.4 MB • Todos os Celulares</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="version-card">
+          <div class="version-header">
+            <div class="version-title-group">
+              <span class="version-number">LivreChat v1.0.4</span>
+              <span class="tag-stable">Versão Anterior</span>
+            </div>
+            <span class="version-date">Lançada em 16 de Outubro de 2026</span>
+          </div>
+
+          <div class="changelog-title">Novidades e Melhorias desta versão:</div>
+          <ul class="changelog-list">
+            <li>
+              <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+              <span><strong>Ordenação e Horários das Mensagens Corrigidos:</strong> Resolvido o bug onde mensagens novas apareciam acima das antigas. Fuso UTC convertido para o horário local brasileiro.</span>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+              <span><strong>Sanitização Automática de Timestamps:</strong> Reordenação e saneamento automático de mensagens com timestamps futuros.</span>
+            </li>
+          </ul>
+
+          <div class="downloads-row">
+            <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.0.4-arm64.apk" class="download-pill-btn" download>
+              <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+              <span>Baixar APK (ARM64)</span>
+              <span class="file-size-tag">24.9 MB</span>
             </a>
           </div>
         </div>

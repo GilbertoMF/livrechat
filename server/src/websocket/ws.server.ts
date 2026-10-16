@@ -174,6 +174,32 @@ export class WebSocketManager {
           }
         }
 
+        let members = await db.getConversationMembers(conversationId);
+        if (targetUserId && !members.includes(targetUserId)) {
+          members.push(targetUserId);
+        }
+        members = Array.from(new Set(members));
+
+        // Check if direct 1-on-1 communication is blocked in either direction
+        let isDirectBlocked = false;
+        const otherMember = targetUserId || (members.length <= 2 ? members.find(m => m !== senderId) : null);
+        if (otherMember) {
+          isDirectBlocked = await db.isBlocked(senderId, otherMember);
+        }
+
+        if (isDirectBlocked) {
+          // Contact is blocked!
+          // Give sender 1 gray tick ack (like WhatsApp: appears sent to sender, but never delivered to recipient and never saved in conversation)
+          senderWs.send(JSON.stringify({
+            type: 'chat:ack',
+            messageId: msgId,
+            clientMessageId,
+            status: 'sent',
+            timestamp: now
+          }));
+          break;
+        }
+
         // 1. Instant acknowledgment to sender (0ms latency - 1 tick)
         senderWs.send(JSON.stringify({
           type: 'chat:ack',
@@ -199,11 +225,6 @@ export class WebSocketManager {
 
         // 2. Immediately forward to online recipients without waiting for DB
         const forwardToRecipients = async () => {
-          let members = await db.getConversationMembers(conversationId);
-          if (targetUserId && !members.includes(targetUserId)) {
-            members.push(targetUserId);
-          }
-          members = Array.from(new Set(members));
 
           const senderProfile = await db.getProfile(senderId);
           const senderUser = await db.findUserById(senderId);

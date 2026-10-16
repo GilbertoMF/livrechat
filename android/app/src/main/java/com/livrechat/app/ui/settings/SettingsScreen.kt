@@ -1546,8 +1546,17 @@ fun SettingsScreen(
                                     }
                                     IconButton(
                                         onClick = {
+                                            prefs.setUserBlocked(contactItem.userId, true)
                                             scope.launch(Dispatchers.IO) {
-                                                try { apiService.blockUser(mapOf("blockedUserId" to contactItem.userId)) } catch (e: Exception) {}
+                                                try {
+                                                    apiService.blockUser(mapOf("blockedUserId" to contactItem.userId, "targetUserId" to contactItem.userId))
+                                                    val res = apiService.getBlockedUsers()
+                                                    if (res.isSuccessful && res.body() != null) {
+                                                        withContext(Dispatchers.Main) {
+                                                            blockedUsersList = res.body()!!
+                                                        }
+                                                    }
+                                                } catch (e: Exception) {}
                                             }
                                             Toast.makeText(context, "Contato bloqueado", Toast.LENGTH_SHORT).show()
                                         }

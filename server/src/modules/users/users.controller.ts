@@ -433,7 +433,23 @@ export class UsersController {
     try {
       const userId = req.user!.userId;
       const blocked = await db.getBlockedUsers(userId);
-      return res.status(200).json(blocked);
+      const enriched = await Promise.all(
+        blocked.map(async b => {
+          const user = await db.findUserById(b.blocked_id);
+          const profile = await db.getProfile(b.blocked_id);
+          return {
+            id: b.blocked_id, // Important: id must be the blocked user ID, not the table entry ID
+            blocked_entry_id: b.id,
+            username: user?.username || '',
+            phone_number: profile?.phone_number || '',
+            display_name: profile?.display_name || user?.username || 'Usuário',
+            avatar_url: profile?.avatar_url || null,
+            bio: profile?.bio || null,
+            public_key: profile?.public_key || null
+          };
+        })
+      );
+      return res.status(200).json(enriched);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
