@@ -1,4 +1,5 @@
 import http from 'http';
+import path from 'path';
 import express from 'express';
 import cors from 'cors';
 import { CONFIG } from './config/env';
@@ -19,13 +20,63 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Static assets & Public Download Portal
+const publicDir = path.join(__dirname, '../public');
+app.use(express.static(publicDir));
+
+// Download Portal routes
+app.get(['/', '/download', '/baixar', '/app'], (req, res) => {
+  res.sendFile(path.join(publicDir, 'index.html'));
+});
+
+// Latest APK redirect
+app.get(['/apks/livrechat-latest.apk', '/download/latest'], (req, res) => {
+  res.redirect('/apks/livrechat-v1.0.1-arm64.apk');
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'online',
     appName: 'LivreChat Server',
-    version: '1.0.0',
+    version: '1.0.1',
     timestamp: new Date().toISOString()
+  });
+});
+
+// App Versions API
+app.get('/api/versions', (req, res) => {
+  res.status(200).json({
+    latest: {
+      version: '1.0.1',
+      versionCode: 2,
+      releaseDate: '2026-10-15',
+      apkArm64Url: '/apks/livrechat-v1.0.1-arm64.apk',
+      apkUniversalUrl: '/apks/livrechat-v1.0.1-universal.apk',
+      sizeMbArm64: '23.8 MB',
+      sizeMbUniversal: '30.0 MB'
+    },
+    versions: [
+      {
+        version: '1.0.1',
+        versionCode: 2,
+        releaseDate: '2026-10-15',
+        isLatest: true,
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64', size: '23.8 MB', url: '/apks/livrechat-v1.0.1-arm64.apk' },
+          { type: 'universal', name: 'APK Universal', size: '30.0 MB', url: '/apks/livrechat-v1.0.1-universal.apk' }
+        ]
+      },
+      {
+        version: '1.0.0',
+        versionCode: 1,
+        releaseDate: '2026-10-10',
+        isLatest: false,
+        downloads: [
+          { type: 'universal', name: 'APK Universal v1.0.0', size: '78.4 MB', url: '/apks/livrechat-v1.0.0-universal.apk' }
+        ]
+      }
+    ]
   });
 });
 
