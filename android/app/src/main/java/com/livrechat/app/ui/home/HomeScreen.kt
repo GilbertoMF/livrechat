@@ -26,6 +26,13 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.ui.graphics.TransformOrigin
+import kotlin.math.absoluteValue
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -130,6 +137,7 @@ fun HomeScreen(
     // Status State
     var statusesList by remember { mutableStateOf<List<StatusDto>>(emptyList()) }
     var activeStatusViewerList by remember { mutableStateOf<List<StatusDto>?>(null) }
+    var activeStatusViewerInitialIndex by remember { mutableIntStateOf(0) }
     var showMyFlashActionDialog by remember { mutableStateOf(false) }
     var showStatusOptionsDialog by remember { mutableStateOf(false) }
     var showStatusCameraDialog by remember { mutableStateOf(false) }
@@ -777,7 +785,13 @@ fun HomeScreen(
                             .fillMaxWidth()
                             .clickable {
                                 showMyFlashActionDialog = false
-                                activeStatusViewerList = myStatuses
+                                val fullList = buildList {
+                                    addAll(myStatuses)
+                                    val grouped = contactsStatuses.groupBy { it.userId }
+                                    grouped.values.forEach { addAll(it) }
+                                }
+                                activeStatusViewerList = fullList
+                                activeStatusViewerInitialIndex = 0
                             }
                     ) {
                         Row(
@@ -2081,6 +2095,7 @@ fun HomeScreen(
     if (activeStatusViewerList != null) {
         FullScreenStatusViewer(
             statuses = activeStatusViewerList!!,
+            initialStatusIndex = activeStatusViewerInitialIndex,
             currentUserId = currentUserId,
             userAvatarUrl = prefs.userAvatarUrl,
             onDismiss = { activeStatusViewerList = null },
@@ -2455,7 +2470,13 @@ fun HomeScreen(
                                             )
                                             .clickable {
                                                 if (myStatuses.isNotEmpty()) {
-                                                    activeStatusViewerList = myStatuses
+                                                    val fullList = buildList {
+                                                        addAll(myStatuses)
+                                                        val grouped = contactsStatuses.groupBy { it.userId }
+                                                        grouped.values.forEach { addAll(it) }
+                                                    }
+                                                    activeStatusViewerList = fullList
+                                                    activeStatusViewerInitialIndex = 0
                                                 } else {
                                                     showStatusOptionsDialog = true
                                                 }
@@ -2605,7 +2626,17 @@ fun HomeScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { activeStatusViewerList = userStatuses }
+                                    .clickable {
+                                        val fullList = buildList {
+                                            if (myStatuses.isNotEmpty()) addAll(myStatuses)
+                                            val grp = contactsStatuses.groupBy { it.userId }
+                                            grp.values.forEach { addAll(it) }
+                                        }
+                                        val firstId = userStatuses.firstOrNull()?.id
+                                        val idx = fullList.indexOfFirst { it.id == firstId }.coerceAtLeast(0)
+                                        activeStatusViewerList = if (fullList.isNotEmpty()) fullList else userStatuses
+                                        activeStatusViewerInitialIndex = idx
+                                    }
                                     .padding(vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -2698,10 +2729,39 @@ fun HomeScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
+private fun Modifier.cubeTransition(
+    page: Int,
+    pagerState: PagerState
+): Modifier = graphicsLayer {
+    val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+    if (pageOffset < -1f || pageOffset > 1f) {
+        alpha = 0f
+        return@graphicsLayer
+    }
+    alpha = 1f
+    cameraDistance = 20f * density
+
+    val clampedOffset = pageOffset.coerceIn(-1f, 1f)
+    if (clampedOffset < 0f) {
+        // Page on the right (incoming from right) -> pivot at left edge
+        transformOrigin = TransformOrigin(pivotFractionX = 0f, pivotFractionY = 0.5f)
+        rotationY = -90f * clampedOffset
+    } else if (clampedOffset > 0f) {
+        // Page on the left (outgoing to left) -> pivot at right edge
+        transformOrigin = TransformOrigin(pivotFractionX = 1f, pivotFractionY = 0.5f)
+        rotationY = -90f * clampedOffset
+    } else {
+        transformOrigin = TransformOrigin(pivotFractionX = 0.5f, pivotFractionY = 0.5f)
+        rotationY = 0f
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun FullScreenStatusViewer(
     statuses: List<StatusDto>,
+    initialStatusIndex: Int = 0,
     currentUserId: String?,
     userAvatarUrl: String? = null,
     onDismiss: () -> Unit,
@@ -2715,17 +2775,23 @@ fun FullScreenStatusViewer(
     }
     val context = LocalContext.current
     val prefs = remember { LivreChatApp.instance.preferencesManager }
-    var currentIndex by remember { mutableStateOf(0) }
-    var progress by remember { mutableStateOf(0f) }
+    val scope = rememberCoroutineScope()
+
+    val pagerState = rememberPagerState(
+        initialPage = initialStatusIndex.coerceIn(0, (statuses.size - 1).coerceAtLeast(0)),
+        pageCount = { statuses.size }
+    )
+
+    var currentProgress by remember { mutableFloatStateOf(0f) }
     var isPaused by remember { mutableStateOf(false) }
     var showViewersSheet by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
-    var imageScale by remember(currentIndex) { mutableFloatStateOf(1f) }
-    var imageOffset by remember(currentIndex) { mutableStateOf(Offset.Zero) }
+    var imageScale by remember(pagerState.currentPage) { mutableFloatStateOf(1f) }
+    var imageOffset by remember(pagerState.currentPage) { mutableStateOf(Offset.Zero) }
     var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
 
-    val currentStatus = statuses.getOrNull(currentIndex) ?: run {
+    val currentStatus = statuses.getOrNull(pagerState.currentPage) ?: run {
         onDismiss()
         return
     }
@@ -2734,11 +2800,12 @@ fun FullScreenStatusViewer(
         isPaused = showViewersSheet || showDeleteConfirmDialog
     }
 
-    LaunchedEffect(currentStatus.id) {
+    LaunchedEffect(pagerState.currentPage) {
         imageScale = 1f
         imageOffset = Offset.Zero
-        if (currentStatus.userId != currentUserId) {
-            onRecordStatusView?.invoke(currentStatus.id, currentStatus.userId)
+        val cur = statuses.getOrNull(pagerState.currentPage)
+        if (cur != null && cur.userId != currentUserId) {
+            onRecordStatusView?.invoke(cur.id, cur.userId)
         }
     }
 
@@ -2753,7 +2820,7 @@ fun FullScreenStatusViewer(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = androidx.compose.animation.core.tween(durationMillis = 7000, easing = LinearEasing),
+            animation = tween(durationMillis = 7000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "vinylRotation"
@@ -2835,24 +2902,30 @@ fun FullScreenStatusViewer(
         }
     }
 
-    LaunchedEffect(currentIndex, isPaused) {
-        progress = 0f
+    LaunchedEffect(pagerState.currentPage, isPaused) {
+        currentProgress = 0f
+        val cur = statuses.getOrNull(pagerState.currentPage) ?: return@LaunchedEffect
         val stepMs = 50L
-        val totalMs = if (currentStatus.contentType == "audio") {
-            if (audioDurationMs > 0) audioDurationMs.toLong() else 15000L
-        } else 5000L
-        val steps = (totalMs / stepMs).toInt()
+        val totalMs = when (cur.contentType) {
+            "audio" -> if (audioDurationMs > 0) audioDurationMs.toLong() else 15000L
+            "video" -> 15000L
+            else -> 5000L
+        }
+        val steps = (totalMs / stepMs).toInt().coerceAtLeast(1)
         for (i in 1..steps) {
-            if (isPaused) {
-                while (isPaused) {
+            if (isPaused || pagerState.isScrollInProgress) {
+                while (isPaused || pagerState.isScrollInProgress) {
                     delay(100)
                 }
             }
             delay(stepMs)
-            progress = i.toFloat() / steps
+            currentProgress = i.toFloat() / steps
         }
-        if (currentIndex < statuses.size - 1) {
-            currentIndex++
+        if (pagerState.currentPage < statuses.size - 1) {
+            pagerState.animateScrollToPage(
+                page = pagerState.currentPage + 1,
+                animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing)
+            )
         } else {
             onDismiss()
         }
@@ -2862,34 +2935,48 @@ fun FullScreenStatusViewer(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
-        val backgroundColor = remember(currentStatus) {
-            if ((currentStatus.contentType == "text" || currentStatus.contentType == "audio") && !currentStatus.backgroundColor.isNullOrBlank()) {
-                try {
-                    Color(android.graphics.Color.parseColor(currentStatus.backgroundColor))
-                } catch (e: Exception) {
-                    Color(0xFF075E54)
-                }
-            } else {
-                Color.Black
-            }
-        }
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(backgroundColor)
+                .background(Color.Black)
         ) {
-            // Main Content Centered
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(vertical = 80.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                when (currentStatus.contentType) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                userScrollEnabled = (imageScale <= 1.05f),
+                beyondBoundsPageCount = 1
+            ) { page ->
+                val pageStatus = statuses[page]
+                val isCurrentPage = (page == pagerState.currentPage)
+                val backgroundColor = remember(pageStatus) {
+                    if ((pageStatus.contentType == "text" || pageStatus.contentType == "audio") && !pageStatus.backgroundColor.isNullOrBlank()) {
+                        try {
+                            Color(android.graphics.Color.parseColor(pageStatus.backgroundColor))
+                        } catch (e: Exception) {
+                            Color(0xFF075E54)
+                        }
+                    } else {
+                        Color.Black
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .cubeTransition(page, pagerState)
+                        .background(backgroundColor)
+                ) {
+                    // Main Content Centered
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(vertical = 80.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                when (pageStatus.contentType) {
                     "text" -> {
                         Text(
-                            text = currentStatus.content,
+                            text = pageStatus.content,
                             color = Color.White,
                             fontSize = 26.sp,
                             fontWeight = FontWeight.Bold,
@@ -2898,7 +2985,7 @@ fun FullScreenStatusViewer(
                         )
                     }
                     "image" -> {
-                        val imageContent = currentStatus.content
+                        val imageContent = pageStatus.content
                         var decodedBitmap by remember(imageContent) { mutableStateOf<Bitmap?>(null) }
                         LaunchedEffect(imageContent) {
                             withContext(Dispatchers.IO) {
@@ -2914,22 +3001,26 @@ fun FullScreenStatusViewer(
                         }
 
                         val transformState = rememberTransformableState { zoomChange, panChange, _ ->
-                            imageScale = (imageScale * zoomChange).coerceIn(1f, 4.5f)
-                            if (imageScale > 1.05f) {
-                                imageOffset += panChange
-                                isPaused = true
-                            } else {
-                                imageOffset = Offset.Zero
+                            if (isCurrentPage) {
+                                imageScale = (imageScale * zoomChange).coerceIn(1f, 4.5f)
+                                if (imageScale > 1.05f) {
+                                    imageOffset += panChange
+                                    isPaused = true
+                                } else {
+                                    imageOffset = Offset.Zero
+                                }
                             }
                         }
 
                         val zoomModifier = Modifier
                             .fillMaxSize()
                             .graphicsLayer {
-                                scaleX = imageScale
-                                scaleY = imageScale
-                                translationX = imageOffset.x
-                                translationY = imageOffset.y
+                                if (isCurrentPage) {
+                                    scaleX = imageScale
+                                    scaleY = imageScale
+                                    translationX = imageOffset.x
+                                    translationY = imageOffset.y
+                                }
                             }
                             .transformable(transformState)
 
@@ -2950,9 +3041,9 @@ fun FullScreenStatusViewer(
                         }
                     }
                     "video" -> {
-                        val videoContent = currentStatus.content
-                        var videoUri by remember(currentStatus.id) {
-                            val cachedFile = File(context.cacheDir, "status_vid_${currentStatus.id}.mp4")
+                        val videoContent = pageStatus.content
+                        var videoUri by remember(pageStatus.id) {
+                            val cachedFile = File(context.cacheDir, "status_vid_${pageStatus.id}.mp4")
                             mutableStateOf(if (cachedFile.exists() && cachedFile.length() > 0L) Uri.fromFile(cachedFile) else null)
                         }
                         LaunchedEffect(videoContent) {
@@ -2963,7 +3054,7 @@ fun FullScreenStatusViewer(
                                             val tempFile = MediaFileManager.saveBase64ToLocalFile(
                                                 context,
                                                 videoContent,
-                                                "status_vid_${currentStatus.id}.mp4"
+                                                "status_vid_${pageStatus.id}.mp4"
                                             )
                                             val parsedUri = if (tempFile != null) Uri.fromFile(tempFile) else null
                                             withContext(Dispatchers.Main) {
@@ -2993,9 +3084,17 @@ fun FullScreenStatusViewer(
                                         setVideoURI(videoUri)
                                         setOnPreparedListener { mp ->
                                             mp.isLooping = true
-                                            start()
+                                            if (isCurrentPage && !isPaused) start()
                                         }
-                                        videoViewRef = this
+                                        if (isCurrentPage) videoViewRef = this
+                                    }
+                                },
+                                update = { vView ->
+                                    if (isCurrentPage && !isPaused) {
+                                        if (!vView.isPlaying) vView.start()
+                                        videoViewRef = vView
+                                    } else {
+                                        if (vView.isPlaying) vView.pause()
                                     }
                                 },
                                 modifier = Modifier.fillMaxSize()
@@ -3007,7 +3106,7 @@ fun FullScreenStatusViewer(
                         }
                     }
                     "audio" -> {
-                        val rawCaption = currentStatus.caption.orEmpty()
+                        val rawCaption = pageStatus.caption.orEmpty()
                         val (musicTitle, musicArtist, albumArt, userCaption) = remember(rawCaption) {
                             var art = ""
                             var rest = rawCaption
@@ -3027,7 +3126,7 @@ fun FullScreenStatusViewer(
                         }
 
                         val isMusic = rawCaption.startsWith("🎵") || rawCaption.contains("[art:") || (musicArtist.isNotBlank() && musicTitle != "Música do Flash")
-                        val activeRotation = if (isAudioPlaying && !isPaused) vinylRotation else 0f
+                        val activeRotation = if (isAudioPlaying && isCurrentPage && !isPaused) vinylRotation else 0f
 
                         if (!isMusic) {
                             // Card de Flash de Voz Estilo WhatsApp (Screenshot 2)
@@ -3059,7 +3158,7 @@ fun FullScreenStatusViewer(
                                                 modifier = Modifier.size(52.dp),
                                                 color = Color(0xFFE0E0E0)
                                             ) {
-                                                val authorAvatar = currentStatus.avatarUrl
+                                                val authorAvatar = pageStatus.avatarUrl
                                                 if (!authorAvatar.isNullOrBlank()) {
                                                     AsyncImage(
                                                         model = authorAvatar,
@@ -3117,7 +3216,7 @@ fun FullScreenStatusViewer(
                                             modifier = Modifier.size(40.dp)
                                         ) {
                                             Icon(
-                                                imageVector = if (isAudioPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                imageVector = if (isAudioPlaying && isCurrentPage) Icons.Default.Pause else Icons.Default.PlayArrow,
                                                 contentDescription = if (isAudioPlaying) "Pausar" else "Reproduzir",
                                                 tint = Color(0xFF1E88E5),
                                                 modifier = Modifier.size(32.dp)
@@ -3392,65 +3491,87 @@ fun FullScreenStatusViewer(
                 }
             }
 
+            // Realistic 3D Cube Shadow Scrim (darkens as face rotates away)
+            val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+            val shadowAlpha = (pageOffset.absoluteValue.coerceIn(0f, 1f) * 0.55f)
+            if (shadowAlpha > 0.01f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = shadowAlpha))
+                )
+            }
+
             // Interactive Gesture Overlay (Tap Left = Previous, Tap Right = Next, Hold = Pause, DoubleTap = Zoom Reset)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 90.dp, bottom = if (currentStatus.userId != currentUserId) 90.dp else 50.dp)
-                    .pointerInput(currentIndex) {
-                        detectTapGestures(
-                            onPress = {
-                                isPaused = true
-                                try {
-                                    tryAwaitRelease()
-                                } finally {
-                                    isPaused = false
+                    .padding(top = 90.dp, bottom = if (pageStatus.userId != currentUserId) 90.dp else 50.dp)
+                .pointerInput(page, isCurrentPage) {
+                    if (!isCurrentPage) return@pointerInput
+                    detectTapGestures(
+                        onPress = {
+                            isPaused = true
+                            try {
+                                tryAwaitRelease()
+                            } finally {
+                                isPaused = false
+                            }
+                        },
+                        onTap = { tapOffset ->
+                            if (imageScale > 1.05f) {
+                                imageScale = 1f
+                                imageOffset = Offset.Zero
+                                return@detectTapGestures
+                            }
+                            val screenWidth = size.width
+                            if (tapOffset.x < screenWidth * 0.35f) {
+                                if (pagerState.currentPage > 0) {
+                                    scope.launch {
+                                        pagerState.animateScrollToPage(
+                                            pagerState.currentPage - 1,
+                                            animationSpec = tween(380, easing = FastOutSlowInEasing)
+                                        )
+                                    }
                                 }
-                            },
-                            onTap = { tapOffset ->
-                                if (imageScale > 1.05f) {
-                                    imageScale = 1f
-                                    imageOffset = Offset.Zero
-                                    return@detectTapGestures
-                                }
-                                val screenWidth = size.width
-                                if (tapOffset.x < screenWidth * 0.35f) {
-                                    if (currentIndex > 0) {
-                                        currentIndex--
+                            } else {
+                                if (pagerState.currentPage < statuses.size - 1) {
+                                    scope.launch {
+                                        pagerState.animateScrollToPage(
+                                            pagerState.currentPage + 1,
+                                            animationSpec = tween(380, easing = FastOutSlowInEasing)
+                                        )
                                     }
                                 } else {
-                                    if (currentIndex < statuses.size - 1) {
-                                        currentIndex++
-                                    } else {
-                                        onDismiss()
-                                    }
-                                }
-                            },
-                            onDoubleTap = {
-                                if (imageScale > 1f) {
-                                    imageScale = 1f
-                                    imageOffset = Offset.Zero
-                                } else if (currentStatus.contentType == "image") {
-                                    imageScale = 2.2f
+                                    onDismiss()
                                 }
                             }
-                        )
-                    }
+                        },
+                        onDoubleTap = {
+                            if (imageScale > 1f) {
+                                imageScale = 1f
+                                imageOffset = Offset.Zero
+                            } else if (pageStatus.contentType == "image") {
+                                imageScale = 2.2f
+                            }
+                        }
+                    )
+                }
             )
 
             // Image/Video Caption at bottom
-            if ((currentStatus.contentType == "image" || currentStatus.contentType == "video") && !currentStatus.caption.isNullOrBlank()) {
+            if ((pageStatus.contentType == "image" || pageStatus.contentType == "video") && !pageStatus.caption.isNullOrBlank()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = if (currentStatus.userId != currentUserId) 80.dp else 16.dp)
+                        .padding(bottom = if (pageStatus.userId != currentUserId) 80.dp else 16.dp)
                         .background(Color.Black.copy(alpha = 0.6f))
                         .padding(12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = currentStatus.caption,
+                        text = pageStatus.caption,
                         color = Color.White,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
@@ -3460,9 +3581,9 @@ fun FullScreenStatusViewer(
             }
 
             // Bottom Bar: Reactions & Reply (Other user) or Views (Own status)
-            if (currentStatus.userId != currentUserId) {
-                var reactionSentEmoji by remember(currentStatus.id) { mutableStateOf<String?>(null) }
-                var replyInputText by remember(currentStatus.id) { mutableStateOf("") }
+            if (pageStatus.userId != currentUserId) {
+                var reactionSentEmoji by remember(pageStatus.id) { mutableStateOf<String?>(null) }
+                var replyInputText by remember(pageStatus.id) { mutableStateOf("") }
 
                 LaunchedEffect(reactionSentEmoji) {
                     if (reactionSentEmoji != null) {
@@ -3515,7 +3636,7 @@ fun FullScreenStatusViewer(
                                         .clip(CircleShape)
                                         .clickable {
                                             reactionSentEmoji = emoji
-                                            onReactToStatus?.invoke(currentStatus.id, currentStatus.userId, emoji)
+                                            onReactToStatus?.invoke(pageStatus.id, pageStatus.userId, emoji)
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -3554,7 +3675,7 @@ fun FullScreenStatusViewer(
                                 onClick = {
                                     val textToSend = replyInputText.trim()
                                     if (textToSend.isNotBlank()) {
-                                        onReactToStatus?.invoke(currentStatus.id, currentStatus.userId, "💬 $textToSend")
+                                        onReactToStatus?.invoke(pageStatus.id, pageStatus.userId, "💬 $textToSend")
                                         reactionSentEmoji = "💬"
                                         replyInputText = ""
                                     }
@@ -3570,7 +3691,7 @@ fun FullScreenStatusViewer(
                 }
             } else {
                 // Own Status Bottom Info: Reactions floating badges & Views indicator
-                val rxList = currentStatus.reactions ?: emptyList()
+                val rxList = pageStatus.reactions ?: emptyList()
                 if (rxList.isNotEmpty()) {
                     Row(
                         modifier = Modifier
@@ -3609,7 +3730,7 @@ fun FullScreenStatusViewer(
                 }
 
                 // WhatsApp-style Views pill
-                val viewsList = currentStatus.views ?: emptyList()
+                val viewsList = pageStatus.views ?: emptyList()
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = Color.Black.copy(alpha = 0.65f),
@@ -3617,7 +3738,10 @@ fun FullScreenStatusViewer(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 20.dp)
-                        .clickable { showViewersSheet = true }
+                        .clickable {
+                            isPaused = true
+                            showViewersSheet = true
+                        }
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -3652,6 +3776,115 @@ fun FullScreenStatusViewer(
                     }
                 }
             }
+
+            // Top Progress Bar & Header (Rotates with 3D Cube face)
+            val authorStatuses = remember(pageStatus.userId, statuses) {
+                statuses.filter { it.userId == pageStatus.userId }
+            }
+            val authorStatusIndex = remember(pageStatus.id, authorStatuses) {
+                authorStatuses.indexOfFirst { it.id == pageStatus.id }.coerceAtLeast(0)
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                // Segmented Progress Bars
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 24.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    authorStatuses.forEachIndexed { idx, _ ->
+                        val segProgress = when {
+                            idx < authorStatusIndex -> 1f
+                            idx == authorStatusIndex -> if (isCurrentPage) currentProgress else 0f
+                            else -> 0f
+                        }
+                        LinearProgressIndicator(
+                            progress = { segProgress },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(3.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = Color.White,
+                            trackColor = Color.White.copy(alpha = 0.3f)
+                        )
+                    }
+                }
+
+                // Header Info
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = Color.White)
+                    }
+
+                    val resolvedAvatar = if (pageStatus.userId == currentUserId && !userAvatarUrl.isNullOrEmpty()) {
+                        userAvatarUrl
+                    } else {
+                        pageStatus.avatarUrl
+                    }
+                    val resolvedName = if (pageStatus.userId == currentUserId) "Você" else (prefs.getContactCustomName(pageStatus.userId) ?: pageStatus.displayName)
+
+                    UserAvatarView(
+                        avatarUrl = resolvedAvatar,
+                        displayName = resolvedName,
+                        size = 38.dp,
+                        fontSize = 16.sp
+                    )
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = resolvedName,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = formatRelativeTime(pageStatus.createdAt),
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    if (pageStatus.contentType == "audio" || pageStatus.contentType == "video") {
+                        IconButton(onClick = {
+                            isMuted = !isMuted
+                            try {
+                                statusMediaPlayer?.setVolume(if (isMuted) 0f else 1f, if (isMuted) 0f else 1f)
+                            } catch (e: Exception) {}
+                        }) {
+                            Icon(
+                                imageVector = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                                contentDescription = if (isMuted) "Ativar Som" else "Silenciar Som",
+                                tint = Color.White
+                            )
+                        }
+                    }
+
+                    if (pageStatus.userId == currentUserId) {
+                        IconButton(onClick = {
+                            isPaused = true
+                            showDeleteConfirmDialog = true
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Apagar Flash", tint = DangerRed)
+                        }
+                    }
+                }
+            }
+        }
+    }
 
             if (showViewersSheet) {
                 val viewsList = currentStatus.views ?: emptyList()
@@ -3784,106 +4017,6 @@ fun FullScreenStatusViewer(
                                     Divider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), thickness = 0.5.dp)
                                 }
                             }
-                        }
-                    }
-                }
-            }
-
-            // Top Progress Bar & Header
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                // Segmented Progress Bars
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    statuses.forEachIndexed { idx, _ ->
-                        val segProgress = when {
-                            idx < currentIndex -> 1f
-                            idx == currentIndex -> progress
-                            else -> 0f
-                        }
-                        LinearProgressIndicator(
-                            progress = { segProgress },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(3.dp)
-                                .clip(RoundedCornerShape(2.dp)),
-                            color = Color.White,
-                            trackColor = Color.White.copy(alpha = 0.3f)
-                        )
-                    }
-                }
-
-                // Header Info
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = Color.White)
-                    }
-
-                    val resolvedAvatar = if (currentStatus.userId == currentUserId && !userAvatarUrl.isNullOrEmpty()) {
-                        userAvatarUrl
-                    } else {
-                        currentStatus.avatarUrl
-                    }
-                    val resolvedName = if (currentStatus.userId == currentUserId) "Você" else (com.livrechat.app.LivreChatApp.instance.preferencesManager.getContactCustomName(currentStatus.userId) ?: currentStatus.displayName)
-
-                    UserAvatarView(
-                        avatarUrl = resolvedAvatar,
-                        displayName = resolvedName,
-                        size = 38.dp,
-                        fontSize = 16.sp
-                    )
-
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = resolvedName,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = formatRelativeTime(currentStatus.createdAt),
-                            color = Color.White.copy(alpha = 0.75f),
-                            fontSize = 12.sp
-                        )
-                    }
-
-                    if (currentStatus.contentType == "audio" || currentStatus.contentType == "video") {
-                        IconButton(onClick = {
-                            isMuted = !isMuted
-                            try {
-                                statusMediaPlayer?.setVolume(if (isMuted) 0f else 1f, if (isMuted) 0f else 1f)
-                            } catch (e: Exception) {}
-                        }) {
-                            Icon(
-                                imageVector = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
-                                contentDescription = if (isMuted) "Ativar Som" else "Silenciar Som",
-                                tint = Color.White
-                            )
-                        }
-                    }
-
-                    if (currentStatus.userId == currentUserId) {
-                        IconButton(onClick = {
-                            isPaused = true
-                            showDeleteConfirmDialog = true
-                        }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Apagar Flash", tint = DangerRed)
                         }
                     }
                 }

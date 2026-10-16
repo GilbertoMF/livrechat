@@ -13,6 +13,7 @@ services:
       - key: PORT
         value: 10000
       - key: JWT_SECRET
-        value: livrechat_super_secret_jwt_key_2026_production_change_me
+        sync: false
       - key: DATABASE_URL
-        value: postgresql://neondb_owner:npg_kYGDcIrT5z4C@ep-fancy-base-b6468v7n-pooler.c-2.sa-east-1.aws.neon.tech/neondb?sslmode=require
+        sync: false
+
