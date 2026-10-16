@@ -228,7 +228,7 @@ fun MessageActionMenuDialog(
 
                         ActionMenuItem(
                             icon = Icons.Default.PushPin,
-                            text = "Fixar",
+                            text = if (message.isPinned) "Desafixar" else "Fixar",
                             onClick = {
                                 onPin()
                                 onDismiss()

@@ -100,6 +100,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.SecureFlagPolicy
 import androidx.core.content.FileProvider
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -531,6 +532,8 @@ fun ChatScreen(
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var viewingImageBase64 by remember { mutableStateOf<String?>(null) }
     var viewingVideoMessage by remember { mutableStateOf<MessageEntity?>(null) }
+    var viewingViewOnceMessage by remember { mutableStateOf<MessageEntity?>(null) }
+    var cameraInitialMode by remember { mutableStateOf("Foto") }
     var showWallpaperDialog by remember { mutableStateOf(false) }
     var showUnblockDialog by remember { mutableStateOf(false) }
     var currentWallpaper by remember(conversationId) {
@@ -1788,12 +1791,28 @@ fun ChatScreen(
                                     if (textInput.isBlank()) {
                                         com.livrechat.app.ui.common.TooltipIconButton(
                                             tooltip = "Tirar foto rápida",
-                                            onClick = { showCameraDialog = true }
+                                            onClick = {
+                                                cameraInitialMode = "Foto"
+                                                showCameraDialog = true
+                                            }
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.CameraAlt,
                                                 contentDescription = "Câmera",
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        com.livrechat.app.ui.common.TooltipIconButton(
+                                            tooltip = "Recado de Vídeo (Bolinha)",
+                                            onClick = {
+                                                cameraInitialMode = "Recado de vídeo"
+                                                showCameraDialog = true
+                                            }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Videocam,
+                                                contentDescription = "Recado de Vídeo",
+                                                tint = MaterialTheme.colorScheme.primary
                                             )
                                         }
                                     }
@@ -2001,12 +2020,91 @@ fun ChatScreen(
                 }
             }
 
+            // Pinned Message Banner
+            if (!currentConv?.pinnedMessageId.isNullOrBlank()) {
+                val pinnedId = currentConv?.pinnedMessageId!!
+                val pinnedSnippet = currentConv?.pinnedMessageSnippet ?: "Mensagem Fixada"
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(12.dp),
+                    shadowElevation = 6.dp,
+                    tonalElevation = 4.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .align(Alignment.TopCenter)
+                        .zIndex(15f)
+                        .clickable {
+                            val targetIndex = messages.indexOfFirst { it.id == pinnedId }
+                            if (targetIndex >= 0) {
+                                scope.launch {
+                                    listState.animateScrollToItem(targetIndex)
+                                }
+                            } else {
+                                Toast.makeText(context, "Mensagem fixada não encontrada no histórico visível", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(26.dp)
+                                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Default.PushPin,
+                            contentDescription = "Mensagem Fixada",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Mensagem Fixada",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = pinnedSnippet,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                viewModel.unpinMessage(conversationId, pinnedId)
+                                Toast.makeText(context, "Mensagem desafixada", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Desafixar",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 12.dp),
-                contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
+                contentPadding = PaddingValues(
+                    top = if (!currentConv?.pinnedMessageId.isNullOrBlank()) 56.dp else 8.dp,
+                    bottom = 16.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(messages, key = { it.id }) { message ->
@@ -2021,6 +2119,7 @@ fun ChatScreen(
                         onReactionClick = { viewModel.toggleReaction(it.id, "❤️") },
                         onImageClick = { viewingImageBase64 = it },
                         onVideoClick = { viewingVideoMessage = it },
+                        onViewOnceClick = { viewingViewOnceMessage = it },
                         isGroup = currentConv?.isGroup == true,
                         senderDisplayName = if (currentConv?.isGroup == true) resolveSenderName(message.senderId) else "",
                         senderAvatarUrl = if (currentConv?.isGroup == true) resolveSenderAvatar(message.senderId) else null,
@@ -2152,7 +2251,15 @@ fun ChatScreen(
                         videoPickerLauncher.launch("video/*")
                     }
 
-                    Spacer(modifier = Modifier.width(60.dp))
+                    AttachmentItem(
+                        icon = Icons.Default.PlayCircle,
+                        label = "Recado Vídeo",
+                        color = Color(0xFF00E676)
+                    ) {
+                        showAttachmentSheet = false
+                        cameraInitialMode = "Recado de vídeo"
+                        showCameraDialog = true
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -2163,9 +2270,21 @@ fun ChatScreen(
     if (showCameraDialog) {
         CustomCameraDialog(
             onDismiss = { showCameraDialog = false },
-            onMediaCaptured = { file, mediaType, caption ->
+            initialMode = cameraInitialMode,
+            showViewOnceOption = true,
+            onMediaCaptured = { file, mediaType, caption, isViewOnce ->
                 scope.launch(Dispatchers.IO) {
                     try {
+                        val isVideoNote = mediaType == "video_note"
+                        if (isVideoNote) {
+                            viewModel.sendVideoNote(
+                                conversationId = conversationId,
+                                videoFile = file,
+                                targetUserId = otherUserId
+                            )
+                            return@launch
+                        }
+
                         val bytes = file.readBytes()
                         val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                         val isVideo = mediaType == "video"
@@ -2178,7 +2297,8 @@ fun ChatScreen(
                             fileName = if (isVideo) file.name else null,
                             fileSize = file.length(),
                             caption = caption.ifBlank { null },
-                            targetUserId = otherUserId
+                            targetUserId = otherUserId,
+                            isViewOnce = isViewOnce
                         )
                     } catch (e: Exception) {
                         Log.e("ChatScreen", "Erro ao enviar mídia da câmera", e)
@@ -2284,8 +2404,14 @@ fun ChatScreen(
                 messageActionTarget = null
             },
             onPin = {
-                Toast.makeText(context, "Mensagem fixada 📌", Toast.LENGTH_SHORT).show()
                 messageActionTarget = null
+                if (target.isPinned) {
+                    viewModel.unpinMessage(conversationId, target.id)
+                    Toast.makeText(context, "Mensagem desafixada", Toast.LENGTH_SHORT).show()
+                } else {
+                    viewModel.pinMessage(conversationId, target)
+                    Toast.makeText(context, "Mensagem fixada 📌", Toast.LENGTH_SHORT).show()
+                }
             },
             onInfo = {
                 showCryptoInfoDialog = true
@@ -2337,6 +2463,19 @@ fun ChatScreen(
             onDismiss = { viewingVideoMessage = null }
         )
     }
+
+    if (viewingViewOnceMessage != null) {
+        ViewOnceMediaViewerDialog(
+            message = viewingViewOnceMessage!!,
+            onDismiss = {
+                val targetId = viewingViewOnceMessage?.id
+                viewingViewOnceMessage = null
+                if (targetId != null) {
+                    viewModel.markViewOnceOpened(targetId)
+                }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -2349,6 +2488,7 @@ fun MessageBubble(
     onReactionClick: (MessageEntity) -> Unit,
     onImageClick: (String) -> Unit,
     onVideoClick: (MessageEntity) -> Unit,
+    onViewOnceClick: (MessageEntity) -> Unit = {},
     isGroup: Boolean = false,
     senderDisplayName: String = "",
     senderAvatarUrl: String? = null,
@@ -2454,21 +2594,46 @@ fun MessageBubble(
                             isOutgoing = isOutgoing
                         )
                         Row(
-                        modifier = Modifier.align(Alignment.End).padding(end = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = TimeUtils.formatTime(message.createdAt),
-                            color = OfflineGray,
-                            fontSize = 11.sp
-                        )
-                        if (isOutgoing && !message.isDeleted) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            MessageStatusIcon(status = message.status)
+                            modifier = Modifier.align(Alignment.End).padding(end = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = TimeUtils.formatTime(message.createdAt),
+                                color = OfflineGray,
+                                fontSize = 11.sp
+                            )
+                            if (isOutgoing && !message.isDeleted) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                MessageStatusIcon(status = message.status)
+                            }
                         }
                     }
-                }
-            } else {
+                } else if (message.messageType == "video_note") {
+                    // Video Note (Bolinha de Vídeo) without speech bubble container
+                    Column(
+                        modifier = Modifier.combinedClickable(
+                            onClick = {},
+                            onLongClick = { onLongPress(message) }
+                        )
+                    ) {
+                        if (isGroup && !isOutgoing) {
+                            Text(
+                                text = senderDisplayName.ifBlank { "Membro" },
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = getSenderColor(message.senderId),
+                                modifier = Modifier
+                                    .clickable { onSenderClick?.invoke(message.senderId) }
+                                    .padding(start = 4.dp, bottom = 2.dp)
+                            )
+                        }
+                        VideoNoteMessageBubbleContent(
+                            message = message,
+                            isOutgoing = isOutgoing,
+                            onLongPress = { onLongPress(message) }
+                        )
+                    }
+                } else {
                 val isAudioMsg = message.messageType == "audio" ||
                     message.content.startsWith("data:audio") ||
                     message.content.endsWith(".m4a") ||
@@ -2588,6 +2753,12 @@ fun MessageBubble(
                                     fontSize = 14.sp
                                 )
                             }
+                        } else if (message.isViewOnce || message.messageType.startsWith("view_once")) {
+                            ViewOnceMessageBubbleContent(
+                                message = message,
+                                isOutgoing = isOutgoing,
+                                onOpenClick = { onViewOnceClick(message) }
+                            )
                         } else if (isAudioMsg) {
                             AudioMessageBubbleContent(
                                 message = message,
@@ -2631,6 +2802,16 @@ fun MessageBubble(
                                 modifier = Modifier.align(Alignment.End),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                if (message.isPinned) {
+                                    Icon(
+                                        imageVector = Icons.Default.PushPin,
+                                        contentDescription = "Fixada",
+                                        tint = if (isOutgoing) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                }
+
                                 Text(
                                     text = TimeUtils.formatTime(message.createdAt),
                                     color = if (isOutgoing) Color.White.copy(alpha = 0.7f) else OfflineGray,
@@ -3734,4 +3915,354 @@ fun getSenderColor(senderId: String): Color {
     )
     val hash = Math.abs(senderId.hashCode())
     return colors[hash % colors.size]
+}
+
+@Composable
+fun ViewOnceMessageBubbleContent(
+    message: MessageEntity,
+    isOutgoing: Boolean,
+    onOpenClick: () -> Unit
+) {
+    val isOpened = message.viewOnceOpened
+    val isVideo = message.messageType == "view_once_video" || (message.isViewOnce && message.messageType == "video")
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !isOpened) { onOpenClick() }
+            .padding(horizontal = 4.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(
+                    if (isOpened) Color.Transparent
+                    else if (isOutgoing) Color.White.copy(alpha = 0.25f)
+                    else MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                )
+                .border(
+                    width = 1.5.dp,
+                    color = if (isOpened) {
+                        if (isOutgoing) Color.White.copy(alpha = 0.4f) else OfflineGray.copy(alpha = 0.5f)
+                    } else {
+                        if (isOutgoing) Color.White else MaterialTheme.colorScheme.primary
+                    },
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "1",
+                color = if (isOpened) {
+                    if (isOutgoing) Color.White.copy(alpha = 0.4f) else OfflineGray
+                } else {
+                    if (isOutgoing) Color.White else MaterialTheme.colorScheme.primary
+                },
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Column {
+            Text(
+                text = if (isOpened) {
+                    if (isVideo) "Vídeo reproduzido" else "Foto aberta"
+                } else {
+                    if (isVideo) "Vídeo (Visualização única)" else "Foto (Visualização única)"
+                },
+                fontWeight = if (isOpened) FontWeight.Normal else FontWeight.Bold,
+                fontSize = 14.sp,
+                color = if (isOpened) {
+                    if (isOutgoing) Color.White.copy(alpha = 0.5f) else OfflineGray
+                } else {
+                    if (isOutgoing) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+            if (!isOpened) {
+                Text(
+                    text = "Toque para abrir",
+                    fontSize = 11.sp,
+                    color = if (isOutgoing) Color.White.copy(alpha = 0.75f) else MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ViewOnceMediaViewerDialog(
+    message: MessageEntity,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val isVideo = message.messageType == "view_once_video" || message.content.startsWith("data:video") || message.content.endsWith(".mp4")
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            securePolicy = SecureFlagPolicy.SecureOn
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            if (isVideo) {
+                var videoFile by remember { mutableStateOf<File?>(null) }
+                LaunchedEffect(message.content) {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            val f = if (MediaFileManager.isLocalFilePath(message.content)) {
+                                File(message.content.removePrefix("file://"))
+                            } else {
+                                val clean = if (message.content.contains(",")) message.content.substringAfter(",") else message.content
+                                val bytes = Base64.decode(clean, Base64.DEFAULT)
+                                val tmp = File(context.cacheDir, "vo_${message.id.take(8)}.mp4")
+                                FileOutputStream(tmp).use { it.write(bytes) }
+                                tmp
+                            }
+                            withContext(Dispatchers.Main) { videoFile = f }
+                        } catch (e: Exception) {}
+                    }
+                }
+
+                if (videoFile != null && videoFile!!.exists()) {
+                    AndroidView(
+                        factory = { ctx ->
+                            android.widget.VideoView(ctx).apply {
+                                setVideoPath(videoFile!!.absolutePath)
+                                setOnPreparedListener { mp ->
+                                    mp.isLooping = true
+                                    start()
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+            } else {
+                var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+                LaunchedEffect(message.content) {
+                    withContext(Dispatchers.IO) {
+                        try {
+                            val bmp = MediaFileManager.decodeAndCorrectBitmap(context, message.content)
+                            withContext(Dispatchers.Main) { bitmap = bmp }
+                        } catch (e: Exception) {}
+                    }
+                }
+
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap!!.asImageBitmap(),
+                        contentDescription = "Visualização única",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+            }
+
+            // Top Header: ① Badge, "Visualização única", Close button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF25D366)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "1",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Visualização única",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = "Esta mídia desaparecerá ao fechar",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.5f))
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Fechar",
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun VideoNoteMessageBubbleContent(
+    message: MessageEntity,
+    isOutgoing: Boolean,
+    onLongPress: () -> Unit
+) {
+    val context = LocalContext.current
+    var isMuted by remember { mutableStateOf(false) }
+    var videoFile by remember(message.id) { mutableStateOf<File?>(null) }
+    var mediaPlayerRef by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
+
+    LaunchedEffect(message.content) {
+        withContext(Dispatchers.IO) {
+            try {
+                val f = if (MediaFileManager.isLocalFilePath(message.content)) {
+                    File(message.content.removePrefix("file://"))
+                } else {
+                    val clean = if (message.content.contains(",")) message.content.substringAfter(",") else message.content
+                    val bytes = Base64.decode(clean, Base64.DEFAULT)
+                    val tmp = File(context.cacheDir, "vn_${message.id.take(8)}.mp4")
+                    FileOutputStream(tmp).use { it.write(bytes) }
+                    tmp
+                }
+                withContext(Dispatchers.Main) {
+                    videoFile = f
+                }
+            } catch (e: Exception) {}
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            mediaPlayerRef?.release()
+            mediaPlayerRef = null
+        }
+    }
+
+    Column(
+        horizontalAlignment = if (isOutgoing) Alignment.End else Alignment.Start,
+        modifier = Modifier.padding(vertical = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(200.dp)
+                .clip(CircleShape)
+                .background(Color.Black)
+                .border(
+                    width = 2.dp,
+                    color = if (isOutgoing) MaterialTheme.colorScheme.primary else Color(0xFF00B0FF),
+                    shape = CircleShape
+                )
+                .combinedClickable(
+                    onClick = {
+                        isMuted = !isMuted
+                        mediaPlayerRef?.let { mp ->
+                            val vol = if (isMuted) 0f else 1f
+                            mp.setVolume(vol, vol)
+                        }
+                    },
+                    onLongClick = onLongPress
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (videoFile != null && videoFile!!.exists()) {
+                AndroidView(
+                    factory = { ctx ->
+                        android.widget.VideoView(ctx).apply {
+                            setVideoPath(videoFile!!.absolutePath)
+                            setOnPreparedListener { mp ->
+                                mediaPlayerRef = mp
+                                mp.isLooping = true
+                                val vol = if (isMuted) 0f else 1f
+                                mp.setVolume(vol, vol)
+                                start()
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(36.dp),
+                    strokeWidth = 3.dp
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 10.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                    contentDescription = if (isMuted) "Sem som" else "Com som",
+                    tint = Color.White,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.padding(top = 4.dp, end = 4.dp, start = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (message.isPinned) {
+                Icon(
+                    imageVector = Icons.Default.PushPin,
+                    contentDescription = "Fixada",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(12.dp)
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+            }
+
+            Text(
+                text = TimeUtils.formatTime(message.createdAt),
+                color = OfflineGray,
+                fontSize = 11.sp
+            )
+            if (isOutgoing && !message.isDeleted) {
+                Spacer(modifier = Modifier.width(4.dp))
+                MessageStatusIcon(status = message.status)
+            }
+        }
+    }
 }

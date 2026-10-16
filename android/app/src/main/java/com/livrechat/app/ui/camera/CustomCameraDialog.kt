@@ -59,7 +59,9 @@ import java.util.concurrent.Executors
 @Composable
 fun CustomCameraDialog(
     onDismiss: () -> Unit,
-    onMediaCaptured: (file: File, mediaType: String, caption: String) -> Unit
+    showViewOnceOption: Boolean = true,
+    initialMode: String = "Foto",
+    onMediaCaptured: (file: File, mediaType: String, caption: String, isViewOnce: Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -89,10 +91,16 @@ fun CustomCameraDialog(
 
     if (!hasCameraPermission) return
 
-    var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
+    var lensFacing by remember {
+        mutableIntStateOf(
+            if (initialMode == "Recado de vídeo") CameraSelector.LENS_FACING_FRONT
+            else CameraSelector.LENS_FACING_BACK
+        )
+    }
     var flashMode by remember { mutableIntStateOf(ImageCapture.FLASH_MODE_AUTO) }
-    var selectedMode by remember { mutableStateOf("Foto") } // "Vídeo", "Foto", "Recado de vídeo"
+    var selectedMode by remember { mutableStateOf(initialMode) } // "Vídeo", "Foto", "Recado de vídeo"
     var torchEnabled by remember { mutableStateOf(false) }
+    var isViewOnce by remember { mutableStateOf(false) }
 
     var capturedFile by remember { mutableStateOf<File?>(null) }
     var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -361,14 +369,46 @@ fun CustomCameraDialog(
                                 ),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .padding(end = 12.dp)
+                                    .padding(end = 8.dp)
                             )
+
+                            if (showViewOnceOption) {
+                                Box(
+                                    modifier = Modifier
+                                        .padding(end = 8.dp)
+                                        .size(42.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (isViewOnce) Color(0xFF25D366)
+                                            else Color.White.copy(alpha = 0.15f)
+                                        )
+                                        .border(
+                                            width = 1.5.dp,
+                                            color = if (isViewOnce) Color(0xFF25D366) else Color.White.copy(alpha = 0.6f),
+                                            shape = CircleShape
+                                        )
+                                        .clickable {
+                                            isViewOnce = !isViewOnce
+                                            if (isViewOnce) {
+                                                Toast.makeText(context, "Foto configurada para visualização única", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "1",
+                                        color = Color.White,
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
 
                             IconButton(
                                 onClick = {
                                     val f = capturedFile
                                     if (f != null && f.exists()) {
-                                        onMediaCaptured(f, "image", captionText.trim())
+                                        onMediaCaptured(f, "image", captionText.trim(), isViewOnce)
                                         onDismiss()
                                     }
                                 },
@@ -565,7 +605,8 @@ fun CustomCameraDialog(
                                                     is VideoRecordEvent.Finalize -> {
                                                         isRecording = false
                                                         if (!recordEvent.hasError()) {
-                                                            onMediaCaptured(videoFile, "video", "")
+                                                            val mediaType = if (selectedMode == "Recado de vídeo") "video_note" else "video"
+                                                            onMediaCaptured(videoFile, mediaType, "", false)
                                                             onDismiss()
                                                         } else {
                                                             Toast.makeText(context, "Erro ao gravar vídeo", Toast.LENGTH_SHORT).show()

@@ -25,5 +25,8 @@ data class MessageEntity(
     val isOutgoing: Boolean,
     val isEdited: Boolean = false,
     val isDeleted: Boolean = false,
+    val isViewOnce: Boolean = false,
+    val viewOnceOpened: Boolean = false,
+    val isPinned: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )

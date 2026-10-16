@@ -63,11 +63,18 @@ interface ConversationDao {
 
     @Query("UPDATE conversations SET otherDisplayName = :displayName WHERE otherUserId = :otherUserId")
     suspend fun updateOtherDisplayName(otherUserId: String, displayName: String)
+
+    @Query("UPDATE conversations SET pinnedMessageId = :messageId, pinnedMessageSnippet = :snippet WHERE id = :convId")
+    suspend fun updatePinnedMessage(convId: String, messageId: String?, snippet: String?)
 }
 
 private fun sanitizePreview(content: String?): String? {
     if (content == null) return null
     return when {
+        content.startsWith("[view_once_photo]") || content == "[Foto de visualização única]" -> "① Foto (Visualização única)"
+        content.startsWith("[view_once_video]") || content == "[Vídeo de visualização única]" -> "① Vídeo (Visualização única)"
+        content == "[Mídia expirada]" -> "① Mídia aberta"
+        content.startsWith("[video_note]") || content.contains("video_note_") -> "⭕ Mensagem de vídeo"
         content.startsWith("data:image") -> "📷 Foto"
         content.startsWith("data:audio") || content.endsWith(".m4a") || content.endsWith(".mp3") || content.contains("voice_") -> "🎵 Áudio"
         content.startsWith("data:video") || content.endsWith(".mp4") -> "🎥 Vídeo"

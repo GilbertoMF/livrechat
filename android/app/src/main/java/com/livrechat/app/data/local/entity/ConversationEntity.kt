@@ -22,5 +22,7 @@ data class ConversationEntity(
     val groupAvatar: String? = null,
     val adminOnlyMessage: Boolean = false,
     val adminOnlyEditInfo: Boolean = false,
-    val adminOnlyAddMembers: Boolean = false
+    val adminOnlyAddMembers: Boolean = false,
+    val pinnedMessageId: String? = null,
+    val pinnedMessageSnippet: String? = null
 )

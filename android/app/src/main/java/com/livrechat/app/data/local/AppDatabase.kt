@@ -25,7 +25,7 @@ import com.livrechat.app.data.local.entity.UserEntity
         CallRecordEntity::class,
         ContactEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -61,6 +61,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN isViewOnce INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE messages ADD COLUMN viewOnceOpened INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE messages ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE conversations ADD COLUMN pinnedMessageId TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE conversations ADD COLUMN pinnedMessageSnippet TEXT DEFAULT NULL")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -68,7 +78,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "livrechat.db"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .fallbackToDestructiveMigration()
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {

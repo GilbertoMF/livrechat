@@ -240,18 +240,28 @@ class WebSocketClient(
                             } else {
                                 System.currentTimeMillis()
                             }
+                            val rawMsgType = m.get("message_type").asStringOrDefault("text")
+                            val isViewOnce = m.get("is_view_once").asBooleanOrDefault(false) ||
+                                    rawMsgType == "view_once_image" ||
+                                    rawMsgType == "view_once_video" ||
+                                    m.get("iv")?.asStringOrNull()?.contains("view_once:true") == true
+                            val viewOnceOpened = m.get("view_once_opened").asBooleanOrDefault(false) || m.get("content").asStringOrDefault() == "[Mídia expirada]"
+                            val isPinned = m.get("is_pinned").asBooleanOrDefault(false)
                             val entity = MessageEntity(
                                 id = m.get("id").asStringOrDefault(),
                                 conversationId = m.get("conversation_id").asStringOrDefault(),
                                 senderId = senderId,
                                 content = m.get("content").asStringOrDefault(),
                                 iv = m.get("iv").asStringOrNull(),
-                                messageType = m.get("message_type").asStringOrDefault("text"),
+                                messageType = rawMsgType,
                                 replyToId = m.get("reply_to_id").asStringOrNull(),
                                 status = "delivered",
                                 isOutgoing = senderId == currentUserId,
                                 isEdited = m.get("is_edited").asBooleanOrDefault(false),
                                 isDeleted = m.get("is_deleted").asBooleanOrDefault(false),
+                                isViewOnce = isViewOnce,
+                                viewOnceOpened = viewOnceOpened,
+                                isPinned = isPinned,
                                 createdAt = msgCreatedAt
                             )
                             listener.onMessageReceived(entity)

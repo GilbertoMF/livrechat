@@ -33,7 +33,7 @@ app.get(['/', '/download', '/baixar', '/app'], (req, res) => {
 
 // Latest APK redirect
 app.get(['/apks/livrechat-latest.apk', '/download/latest'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.4-universal.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.5-universal.apk');
 });
 
 // Health check
@@ -46,7 +46,7 @@ app.get('/health', async (req, res) => {
   res.status(200).json({
     status: 'online',
     appName: 'LivreChat Server',
-    version: '1.1.4',
+    version: '1.1.5',
     fcmInitialized: fcmService.isAvailable(),
     registeredFcmDevices,
     timestamp: new Date().toISOString()
@@ -58,14 +58,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 14;
+  const LATEST_CODE = 15;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.4',
+    latestVersion: '1.1.5',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -73,10 +73,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.4 disponível com transição 3D Cube no Flash e melhorias de performance.',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.4-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.4-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.4-universal.apk`,
+      : 'Nova versão 1.1.5 disponível com Fotos/Vídeos de Visualização Única (com bloqueio de print), Mensagens Fixadas e Recados de Vídeo circulares.',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.5-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.5-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.5-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -84,26 +84,38 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.4',
-      versionCode: 14,
+      version: '1.1.5',
+      versionCode: 15,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-16',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Transição 3D Cube no Flash (Stories estilo Instagram), navegação fluida e melhorias gerais.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.4-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.4-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.4-universal.apk`,
+      message: 'Visualização Única de Fotos e Vídeos (com proteção contra print), Mensagens Fixadas com salto rápido e Recados de Vídeo (bolinhas circulares).',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.5-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.5-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.5-universal.apk`,
       downloadPortalUrl: '/download',
-      sizeMbArm64: '25.4 MB',
-      sizeMbUniversal: '32.1 MB'
+      sizeMbArm64: '24.1 MB',
+      sizeMbUniversal: '30.3 MB'
     },
     versions: [
+      {
+        version: '1.1.5',
+        versionCode: 15,
+        releaseDate: '2026-10-16',
+        isLatest: true,
+        changelog: 'Mídia de Visualização Única (FLAG_SECURE que bloqueia captura e gravação de tela), Mensagens Fixadas na conversa com navegação instantânea e Recados de Vídeo circulares estilo Telegram/WhatsApp.',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.1 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.5-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '20.8 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.5-armv7.apk` },
+          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '30.3 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.5-universal.apk` }
+        ]
+      },
       {
         version: '1.1.4',
         versionCode: 14,
         releaseDate: '2026-10-16',
-        isLatest: true,
+        isLatest: false,
         changelog: 'Transição 3D Cube no Flash (Stories estilo Instagram), navegação contínua entre contatos, sombras e perspectiva 3D realistas.',
         downloads: [
           { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '25.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.4-arm64.apk` },

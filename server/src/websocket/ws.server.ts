@@ -8,8 +8,8 @@ import { db, Message } from '../db/database';
 import { fcmService } from '../services/fcm.service';
 
 export const APP_VERSION_RULES = {
-  LATEST_VERSION_NAME: '1.1.2',
-  LATEST_VERSION_CODE: 12,
+  LATEST_VERSION_NAME: '1.1.5',
+  LATEST_VERSION_CODE: 15,
   MIN_SUPPORTED_VERSION_CODE: 12,
   DOWNLOAD_PORTAL_URL: '/download'
 };

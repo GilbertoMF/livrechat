@@ -250,11 +250,18 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             parsedCreatedAt
                         }
 
+                        val isViewOnce = dto.messageType == "view_once_image" ||
+                                dto.messageType == "view_once_video" ||
+                                dto.iv?.contains("view_once:true") == true ||
+                                existingMap[dto.id]?.isViewOnce == true
+                        val viewOnceOpened = existingMap[dto.id]?.viewOnceOpened == true || safeContent == "[Mídia expirada]"
+                        val isPinned = existingMap[dto.id]?.isPinned == true
+
                         MessageEntity(
                             id = dto.id,
                             conversationId = dto.conversationId,
                             senderId = dto.senderId,
-                            content = safeContent,
+                            content = if (viewOnceOpened) "[Mídia expirada]" else safeContent,
                             iv = dto.iv,
                             messageType = dto.messageType,
                             replyToId = dto.replyToId,
@@ -262,6 +269,9 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             isOutgoing = dto.senderId == myId,
                             isEdited = dto.isEdited,
                             isDeleted = dto.isDeleted,
+                            isViewOnce = isViewOnce,
+                            viewOnceOpened = viewOnceOpened,
+                            isPinned = isPinned,
                             createdAt = msgCreatedAt
                         )
                     }
@@ -446,7 +456,8 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         fileName: String? = null,
         fileSize: Long? = null,
         targetUserId: String? = null,
-        networkPayload: String? = null
+        networkPayload: String? = null,
+        isViewOnce: Boolean = false
     ) {
         if (content.isBlank()) return
 
@@ -455,17 +466,23 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         val clientMessageId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
 
+        val actualMessageType = if (isViewOnce) {
+            if (messageType == "video") "view_once_video" else "view_once_image"
+        } else messageType
+
         val metaIv = when (messageType) {
             "file" -> "${fileName ?: "documento"}|${fileSize ?: 0}|${caption ?: ""}"
-            "video" -> "${fileName ?: "video"}|${fileSize ?: 0}|${caption ?: ""}"
-            "image" -> caption
+            "video" -> "${fileName ?: "video"}|${fileSize ?: 0}|${caption ?: ""}${if (isViewOnce) "|view_once:true" else ""}"
+            "image" -> if (isViewOnce) "${caption ?: ""}|view_once:true" else caption
             else -> caption
         }
 
-        val previewText = when (messageType) {
-            "image" -> if (!caption.isNullOrBlank()) "📷 $caption" else "📷 Foto"
-            "video" -> if (!caption.isNullOrBlank()) "🎥 $caption" else "🎥 Vídeo"
-            "file" -> "📄 ${fileName ?: "Documento/Arquivo"}"
+        val previewText = when {
+            isViewOnce && messageType == "video" -> "① Vídeo (Visualização única)"
+            isViewOnce -> "① Foto (Visualização única)"
+            messageType == "image" -> if (!caption.isNullOrBlank()) "📷 $caption" else "📷 Foto"
+            messageType == "video" -> if (!caption.isNullOrBlank()) "🎥 $caption" else "🎥 Vídeo"
+            messageType == "file" -> "📄 ${fileName ?: "Documento/Arquivo"}"
             else -> "📎 Arquivo"
         }
 
@@ -511,11 +528,13 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
             conversationId = conversationId,
             senderId = myId,
             content = localContent,
-            messageType = messageType,
+            messageType = actualMessageType,
             iv = metaIv,
             replyToId = null,
             status = "sending",
             isOutgoing = true,
+            isViewOnce = isViewOnce,
+            viewOnceOpened = false,
             createdAt = now
         )
 
@@ -553,7 +572,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                 conversationId = conversationId,
                 content = finalPayload ?: "",
                 iv = metaIv,
-                messageType = messageType,
+                messageType = actualMessageType,
                 replyToId = null,
                 clientMessageId = clientMessageId,
                 targetUserId = target
@@ -567,7 +586,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             content = finalPayload ?: "",
                             iv = metaIv,
                             clientMessageId = clientMessageId,
-                            messageType = messageType,
+                            messageType = actualMessageType,
                             targetUserId = target
                         )
                     )
@@ -579,6 +598,125 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                 } catch (e: Exception) {
                     // Erro de rede ou sem conexão: mantém 'sending' na caixa de saída (ícone de relógio)
                 }
+            }
+        }
+    }
+
+    fun markViewOnceOpened(messageId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val msg = db.messageDao().getMessageById(messageId) ?: return@launch
+            if (MediaFileManager.isLocalFilePath(msg.content)) {
+                try {
+                    val f = java.io.File(msg.content.removePrefix("file://"))
+                    if (f.exists()) f.delete()
+                } catch (e: Exception) {}
+            }
+            db.messageDao().markViewOnceOpened(messageId)
+        }
+    }
+
+    fun pinMessage(conversationId: String, message: MessageEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            db.messageDao().unpinAllForConversation(conversationId)
+            db.messageDao().setPinned(message.id, true)
+            val snippet = when {
+                message.isViewOnce -> "① Mídia de visualização única"
+                message.messageType == "image" || message.messageType == "view_once_image" -> "📷 Foto"
+                message.messageType == "video" || message.messageType == "view_once_video" -> "🎥 Vídeo"
+                message.messageType == "video_note" -> "⭕ Mensagem de vídeo"
+                message.messageType == "audio" -> "🎤 Mensagem de voz"
+                message.messageType == "sticker" -> "📑 Figurinha"
+                message.messageType == "file" -> "📄 Documento"
+                else -> message.content.take(80)
+            }
+            db.conversationDao().updatePinnedMessage(conversationId, message.id, snippet)
+        }
+    }
+
+    fun unpinMessage(conversationId: String, messageId: String? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (messageId != null) {
+                db.messageDao().setPinned(messageId, false)
+            } else {
+                db.messageDao().unpinAllForConversation(conversationId)
+            }
+            db.conversationDao().updatePinnedMessage(conversationId, null, null)
+        }
+    }
+
+    fun sendVideoNote(
+        conversationId: String,
+        videoFile: java.io.File,
+        targetUserId: String? = null
+    ) {
+        if (!videoFile.exists() || videoFile.length() == 0L) return
+
+        val myId = prefs.currentUserId ?: return
+        val target = targetUserId ?: _currentOtherUserId.value
+        val clientMessageId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+
+        val localMessage = MessageEntity(
+            id = clientMessageId,
+            conversationId = conversationId,
+            senderId = myId,
+            content = videoFile.absolutePath,
+            messageType = "video_note",
+            iv = "video_note|${videoFile.length()}|",
+            replyToId = null,
+            status = "sending",
+            isOutgoing = true,
+            createdAt = now
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            db.messageDao().insertOrUpdate(localMessage)
+            db.conversationDao().updateLastMessage(conversationId, "⭕ Mensagem de vídeo", now)
+
+            val bytes = videoFile.readBytes()
+            val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            var payloadToSend = "data:video/mp4;base64,$b64"
+
+            try {
+                val requestFile = videoFile.asRequestBody("video/mp4".toMediaTypeOrNull())
+                val body = MultipartBody.Part.createFormData("file", "video_note_${clientMessageId}.mp4", requestFile)
+                val folderBody = "videos".toRequestBody("text/plain".toMediaTypeOrNull())
+                val uploadRes = apiService.uploadMedia(body, folderBody)
+                if (uploadRes.isSuccessful && !uploadRes.body()?.url.isNullOrBlank()) {
+                    payloadToSend = uploadRes.body()!!.url
+                }
+            } catch (e: Exception) {
+                Log.w("ChatViewModel", "Upload video_note R2 falhou: ${e.message}")
+            }
+
+            val wsSent = connectionManager.getClient().sendChatMessage(
+                conversationId = conversationId,
+                content = payloadToSend,
+                iv = "video_note|${videoFile.length()}|",
+                messageType = "video_note",
+                replyToId = null,
+                clientMessageId = clientMessageId,
+                targetUserId = target
+            )
+
+            if (!wsSent) {
+                try {
+                    val res = apiService.sendMessage(
+                        SendMessageRequest(
+                            conversationId = conversationId,
+                            content = payloadToSend,
+                            iv = "video_note|${videoFile.length()}|",
+                            clientMessageId = clientMessageId,
+                            messageType = "video_note",
+                            targetUserId = target
+                        )
+                    )
+                    if (res.isSuccessful) {
+                        db.messageDao().updateStatus(clientMessageId, "sent")
+                    } else if (res.code() in 400..499) {
+                        db.messageDao().updateStatus(clientMessageId, "failed")
+                    }
+                } catch (e: Exception) {}
             }
         }
     }

@@ -69,4 +69,16 @@ interface MessageDao {
 
     @Query("UPDATE messages SET createdAt = :newCreatedAt WHERE id = :id")
     suspend fun updateCreatedAt(id: String, newCreatedAt: Long)
+
+    @Query("UPDATE messages SET viewOnceOpened = 1, content = '[Mídia expirada]' WHERE id = :messageId")
+    suspend fun markViewOnceOpened(messageId: String)
+
+    @Query("UPDATE messages SET isPinned = :isPinned WHERE id = :messageId")
+    suspend fun setPinned(messageId: String, isPinned: Boolean)
+
+    @Query("UPDATE messages SET isPinned = 0 WHERE conversationId = :convId")
+    suspend fun unpinAllForConversation(convId: String)
+
+    @Query("SELECT * FROM messages WHERE conversationId = :convId AND isPinned = 1 ORDER BY createdAt DESC")
+    suspend fun getPinnedMessages(convId: String): List<MessageEntity>
 }

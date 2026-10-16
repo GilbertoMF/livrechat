@@ -2136,7 +2136,8 @@ fun HomeScreen(
     if (showStatusCameraDialog) {
         CustomCameraDialog(
             onDismiss = { showStatusCameraDialog = false },
-            onMediaCaptured = { file, mediaType, caption ->
+            showViewOnceOption = false,
+            onMediaCaptured = { file, mediaType, caption, _ ->
                 showStatusCameraDialog = false
                 scope.launch {
                     try {

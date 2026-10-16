@@ -23,15 +23,15 @@ const releaseDir = path.resolve(__dirname, '../../android/app/build/outputs/apk/
 const filesToUpload = [
   {
     localFile: path.join(releaseDir, 'app-arm64-v8a-release.apk'),
-    r2Key: 'apks/livrechat-v1.1.4-arm64.apk',
+    r2Key: 'apks/livrechat-v1.1.5-arm64.apk',
   },
   {
     localFile: path.join(releaseDir, 'app-armeabi-v7a-release.apk'),
-    r2Key: 'apks/livrechat-v1.1.4-armv7.apk',
+    r2Key: 'apks/livrechat-v1.1.5-armv7.apk',
   },
   {
     localFile: path.join(releaseDir, 'app-universal-release.apk'),
-    r2Key: 'apks/livrechat-v1.1.4-universal.apk',
+    r2Key: 'apks/livrechat-v1.1.5-universal.apk',
   },
 ];
 
@@ -58,11 +58,11 @@ async function uploadFile(item) {
 }
 
 async function main() {
-  console.log('Iniciando upload de APKs v1.1.4 para Cloudflare R2...');
+  console.log('Iniciando upload de APKs v1.1.5 para Cloudflare R2...');
   for (const item of filesToUpload) {
     await uploadFile(item);
   }
-  console.log('\nTodos os APKs v1.1.4 foram publicados com sucesso no Cloudflare R2 CDN!');
+  console.log('\nTodos os APKs v1.1.5 foram publicados com sucesso no Cloudflare R2 CDN!');
 }
 
 main().catch(err => {
