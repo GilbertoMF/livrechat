@@ -195,5 +195,13 @@ interface ApiService {
     suspend fun markMessageDelivered(
         @Path("messageId") messageId: String
     ): Response<BaseResponse>
+
+    @retrofit2.http.Multipart
+    @POST("api/media/upload")
+    suspend fun uploadMedia(
+        @retrofit2.http.Part file: okhttp3.MultipartBody.Part,
+        @retrofit2.http.Part("folder") folder: okhttp3.RequestBody? = null
+    ): Response<MediaUploadResponse>
 }
+
 

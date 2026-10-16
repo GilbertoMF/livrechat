@@ -23,6 +23,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
+import android.util.Log
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class ChatViewModel : ViewModel(), WebSocketEventsListener {
     private val app = LivreChatApp.instance
@@ -372,9 +377,29 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
             db.messageDao().insertOrUpdate(localMessage)
             db.conversationDao().updateLastMessage(conversationId, "🎤 Mensagem de voz (${durationSeconds}s)", now)
 
+            var payloadToSend = audioBase64
+            try {
+                val audioFile = if (MediaFileManager.isLocalFilePath(safeLocalContent)) {
+                    java.io.File(safeLocalContent.removePrefix("file://"))
+                } else null
+
+                if (audioFile != null && audioFile.exists()) {
+                    val requestFile = audioFile.asRequestBody("audio/mp4".toMediaTypeOrNull())
+                    val body = MultipartBody.Part.createFormData("file", audioFile.name, requestFile)
+                    val folderBody = "audio".toRequestBody("text/plain".toMediaTypeOrNull())
+                    val uploadRes = apiService.uploadMedia(body, folderBody)
+                    if (uploadRes.isSuccessful && !uploadRes.body()?.url.isNullOrBlank()) {
+                        payloadToSend = uploadRes.body()!!.url
+                        Log.d("ChatViewModel", "Áudio enviado ao R2: $payloadToSend")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("ChatViewModel", "Upload áudio R2 falhou: ${e.message}")
+            }
+
             val wsSent = connectionManager.getClient().sendChatMessage(
                 conversationId = conversationId,
-                content = audioBase64,
+                content = payloadToSend,
                 iv = waveform,
                 messageType = "audio",
                 replyToId = null,
@@ -387,7 +412,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                     val res = apiService.sendMessage(
                         SendMessageRequest(
                             conversationId = conversationId,
-                            content = audioBase64,
+                            content = payloadToSend,
                             iv = waveform,
                             clientMessageId = clientMessageId,
                             messageType = "audio",
@@ -491,9 +516,35 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
             db.messageDao().insertOrUpdate(localMessage)
             db.conversationDao().updateLastMessage(conversationId, previewText, now)
 
+            var finalPayload = payloadToSend
+            try {
+                val fileToUpload = if (MediaFileManager.isLocalFilePath(localContent)) {
+                    java.io.File(localContent.removePrefix("file://"))
+                } else null
+
+                if (fileToUpload != null && fileToUpload.exists()) {
+                    val mime = when (messageType) {
+                        "image" -> "image/jpeg"
+                        "video" -> "video/mp4"
+                        "audio" -> "audio/mp4"
+                        else -> "application/octet-stream"
+                    }
+                    val requestFile = fileToUpload.asRequestBody(mime.toMediaTypeOrNull())
+                    val body = MultipartBody.Part.createFormData("file", fileToUpload.name, requestFile)
+                    val folderBody = (messageType + "s").toRequestBody("text/plain".toMediaTypeOrNull())
+                    val uploadRes = apiService.uploadMedia(body, folderBody)
+                    if (uploadRes.isSuccessful && !uploadRes.body()?.url.isNullOrBlank()) {
+                        finalPayload = uploadRes.body()!!.url
+                        Log.d("ChatViewModel", "Mídia enviada ao R2: $finalPayload")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("ChatViewModel", "Upload R2 falhou: ${e.message}")
+            }
+
             val wsSent = connectionManager.getClient().sendChatMessage(
                 conversationId = conversationId,
-                content = payloadToSend ?: "",
+                content = finalPayload ?: "",
                 iv = metaIv,
                 messageType = messageType,
                 replyToId = null,
@@ -506,7 +557,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                     val res = apiService.sendMessage(
                         SendMessageRequest(
                             conversationId = conversationId,
-                            content = payloadToSend ?: "",
+                            content = finalPayload ?: "",
                             iv = metaIv,
                             clientMessageId = clientMessageId,
                             messageType = messageType,

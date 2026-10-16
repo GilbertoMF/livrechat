@@ -235,3 +235,12 @@ data class SessionDto(
     @SerializedName("created_at", alternate = ["createdAt"]) val createdAt: String = "",
     @SerializedName("is_current", alternate = ["isCurrent"]) val isCurrent: Boolean = false
 )
+
+data class MediaUploadResponse(
+    val url: String = "",
+    val key: String = "",
+    val size: Long = 0L,
+    val mimeType: String = "",
+    val fileName: String? = null
+)
+

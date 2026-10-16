@@ -208,6 +208,26 @@ class AudioPlayerHelper(private val context: Context) {
         val file = File(context.cacheDir, "audio_msg_$messageId.m4a")
         if (file.exists() && file.length() > 0) return file
 
+        if (content.startsWith("http://") || content.startsWith("https://")) {
+            return try {
+                val url = java.net.URL(content)
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 15000
+                conn.readTimeout = 15000
+                conn.doInput = true
+                conn.connect()
+                conn.inputStream.use { input ->
+                    FileOutputStream(file).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                file
+            } catch (e: Exception) {
+                Log.e(TAG, "Erro ao baixar áudio R2: ${e.message}")
+                null
+            }
+        }
+
         return try {
             val base64Data = if (content.contains(",")) {
                 content.substringAfter(",")

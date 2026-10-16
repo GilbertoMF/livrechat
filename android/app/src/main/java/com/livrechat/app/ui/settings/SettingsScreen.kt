@@ -19,6 +19,10 @@ import android.os.PowerManager
 import android.widget.Toast
 import com.livrechat.app.data.remote.model.SessionDto
 import com.livrechat.app.data.remote.model.UserDto
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -470,7 +474,19 @@ fun SettingsScreen(
                             croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 85, fos)
                         }
 
-                        // 2. Encode to Base64 data URI
+                        // 2. Upload avatar to Cloudflare R2
+                        var uploadedAvatarUrl: String? = null
+                        try {
+                            val requestFile = localUserFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
+                            val body = MultipartBody.Part.createFormData("file", "avatar_${userId}.jpg", requestFile)
+                            val folderBody = "avatars".toRequestBody("text/plain".toMediaTypeOrNull())
+                            val res = apiService.uploadMedia(body, folderBody)
+                            if (res.isSuccessful && !res.body()?.url.isNullOrBlank()) {
+                                uploadedAvatarUrl = res.body()!!.url
+                            }
+                        } catch (e: Exception) {}
+
+                        // 3. Encode to Base64 data URI (as fallback)
                         val baos = ByteArrayOutputStream()
                         croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
                         val bytes = baos.toByteArray()
@@ -479,7 +495,7 @@ fun SettingsScreen(
 
                         withContext(Dispatchers.Main) {
                             currentAvatarBitmap = croppedBitmap
-                            newAvatarUrlInput = dataUri
+                            newAvatarUrlInput = uploadedAvatarUrl ?: dataUri
                             showPhotoAdjustDialog = false
                             bitmapToAdjust = null
                             Toast.makeText(context, "Foto ajustada e pronta!", Toast.LENGTH_SHORT).show()

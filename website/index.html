@@ -592,21 +592,21 @@
     <section class="hero">
       <div class="hero-pill">
         <span class="pulse"></span>
-        <span>Versão 1.0.9 Disponível • Arquitetura WhatsApp Completa</span>
+        <span>Versão 1.1.0 Disponível • Cloudflare R2 Media Storage</span>
       </div>
       <h1>Privacidade Real.<br><span class="gradient-text">Sem Número de Telefone.</span></h1>
       <p>Converse, faça chamadas de voz WebRTC criptografadas e envie mídias com quem você quiser com máxima segurança e liberdade.</p>
 
       <div class="cta-box">
         <div class="btn-group">
-          <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.0.9-arm64.apk" class="btn btn-primary" download>
+          <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.1.0-arm64.apk" class="btn btn-primary" download>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
             </svg>
-            <span>Baixar APK Mais Recente (v1.0.9)</span>
+            <span>Baixar APK Mais Recente (v1.1.0)</span>
             <span class="badge-pill">25.4 MB</span>
           </a>
-          <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.0.9-universal.apk" class="btn btn-secondary" download>
+          <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.1.0-universal.apk" class="btn btn-secondary" download>
             <span>APK Universal (Todos os Celulares)</span>
             <span class="badge-pill">32.1 MB</span>
           </a>
@@ -618,7 +618,7 @@
           </span>
           <span>
             <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-            WakeLock & Recibo de Entrega Automático (2 Ticks Cinzas)
+            Cloudflare R2 Integrado (10 GB de Fotos/Áudios com Tráfego Ilimitado)
           </span>
           <span>
             <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
@@ -638,7 +638,7 @@
         <div class="version-card latest">
           <div class="version-header">
             <div class="version-title-group">
-              <span class="version-number">LivreChat v1.0.9</span>
+              <span class="version-number">LivreChat v1.1.0</span>
               <span class="tag-latest">Versão Atual (Recomendada)</span>
             </div>
             <span class="version-date">Lançada em 16 de Outubro de 2026</span>
@@ -648,15 +648,49 @@
           <ul class="changelog-list">
             <li>
               <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-              <span><strong>WakeLock no Processamento do Push:</strong> O serviço segura a CPU ativa via WakeLock durante a recepção do FCM para evitar que o Android entre em suspensão antes do salvamento no Room.</span>
+              <span><strong>Integração com Cloudflare R2:</strong> Fotos, áudios e avatares agora são armazenados em nuvem de alta velocidade na CDN global da Cloudflare (10 GB gratuitos com tráfego ilimitado).</span>
             </li>
             <li>
               <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-              <span><strong>Recibo de Entrega Automático em Background:</strong> Quando o FCM entrega a mensagem no celular fechado, o aparelho dispara um ACK HTTP para o servidor e o remetente ganha 2 ticks cinzas na hora!</span>
+              <span><strong>Banco de Dados Neon 100% Leve:</strong> As mensagens agora salvam links compactos em vez de dados pesados, suportando mais de 1 milhão de mensagens de texto sem estourar limites!</span>
             </li>
             <li>
               <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-              <span><strong>Permissão C2DM Explícita:</strong> Compatibilidade garantida com versões customizadas do Android (HyperOS, MIUI, Moto).</span>
+              <span><strong>Reprodução e Download Otimizados:</strong> O player de áudio e visualizador de imagem agora contam com cache local automático das mídias baixadas do R2.</span>
+            </li>
+          </ul>
+
+          <div class="downloads-row">
+            <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.1.0-arm64.apk" class="download-pill-btn highlight" download>
+              <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+              <span>Baixar APK Leve (ARM64)</span>
+              <span class="file-size-tag">25.4 MB • Recomendado</span>
+            </a>
+            <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.1.0-universal.apk" class="download-pill-btn" download>
+              <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+              <span>Baixar APK Universal</span>
+              <span class="file-size-tag">32.1 MB • Todos os Celulares</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="version-card">
+          <div class="version-header">
+            <div class="version-title-group">
+              <span class="version-number">LivreChat v1.0.9</span>
+            </div>
+            <span class="version-date">16 de Outubro de 2026</span>
+          </div>
+
+          <div class="changelog-title">Novidades e Melhorias desta versão:</div>
+          <ul class="changelog-list">
+            <li>
+              <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+              <span><strong>WakeLock no Processamento do Push:</strong> O serviço segura a CPU ativa via WakeLock durante a recepção do FCM.</span>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+              <span><strong>Recibo de Entrega Automático em Background:</strong> 2 ticks cinzas imediatos via ACK HTTP.</span>
             </li>
           </ul>
 
@@ -664,12 +698,12 @@
             <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.0.9-arm64.apk" class="download-pill-btn highlight" download>
               <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
               <span>Baixar APK Leve (ARM64)</span>
-              <span class="file-size-tag">25.4 MB • Recomendado</span>
+              <span class="file-size-tag">25.4 MB</span>
             </a>
             <a href="https://github.com/GilbertoMF/livrechat/raw/main/server/public/apks/livrechat-v1.0.9-universal.apk" class="download-pill-btn" download>
               <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
               <span>Baixar APK Universal</span>
-              <span class="file-size-tag">32.1 MB • Todos os Celulares</span>
+              <span class="file-size-tag">32.1 MB</span>
             </a>
           </div>
         </div>

@@ -151,7 +151,29 @@ object MediaFileManager {
     fun decodeAndCorrectBitmap(context: Context, content: String): Bitmap? {
         if (content.isBlank()) return null
         return try {
-            if (isLocalFilePath(content)) {
+            if (content.startsWith("http://") || content.startsWith("https://")) {
+                val cacheKey = "cache_" + kotlin.math.abs(content.hashCode()).toString() + ".jpg"
+                val cachedFile = File(getMediaDir(context), cacheKey)
+                if (cachedFile.exists() && cachedFile.length() > 0) {
+                    return decodeFileWithExif(cachedFile)
+                }
+                try {
+                    val url = java.net.URL(content)
+                    val conn = url.openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 15000
+                    conn.readTimeout = 15000
+                    conn.doInput = true
+                    conn.connect()
+                    conn.inputStream.use { input ->
+                        cachedFile.outputStream().use { out ->
+                            input.copyTo(out)
+                        }
+                    }
+                    decodeFileWithExif(cachedFile)
+                } catch (e: Throwable) {
+                    null
+                }
+            } else if (isLocalFilePath(content)) {
                 val local = getLocalFile(content)
                 if (local != null) {
                     decodeFileWithExif(local)
