@@ -271,14 +271,19 @@ class ConnectionManager(
                 }
             }
 
+            val shouldSendReadReceipt = app.preferencesManager.readReceiptsEnabled
             if (isCurrentOpen) {
                 // Mensagem lida imediatamente
-                val readMsg = processedMessage.copy(status = "read")
+                val readMsg = processedMessage.copy(status = if (shouldSendReadReceipt) "read" else "delivered")
                 db.messageDao().insertOrUpdate(readMsg)
                 db.conversationDao().clearUnreadCount(processedMessage.conversationId)
                 db.conversationDao().updateLastMessage(processedMessage.conversationId, previewContent, processedMessage.createdAt)
-                webSocketClient.sendReceipt(processedMessage.id, "read")
-                try { app.apiClient.apiService.markMessageRead(processedMessage.id) } catch (e: Exception) {}
+                if (shouldSendReadReceipt) {
+                    webSocketClient.sendReceipt(processedMessage.id, "read")
+                    try { app.apiClient.apiService.markMessageRead(processedMessage.id) } catch (e: Exception) {}
+                } else {
+                    webSocketClient.sendReceipt(processedMessage.id, "delivered")
+                }
             } else {
                 // Mensagem entregue
                 val deliveredMsg = processedMessage.copy(status = "delivered")

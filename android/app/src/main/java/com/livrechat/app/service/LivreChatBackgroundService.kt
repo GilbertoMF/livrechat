@@ -68,15 +68,28 @@ class LivreChatBackgroundService : Service() {
             return START_STICKY
         }
 
-        val notification = buildPersistentNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        if (action == ACTION_START || action == null) {
+            try {
+                val notification = buildPersistentNotification()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    )
+                } else {
+                    startForeground(NOTIFICATION_ID, notification)
+                }
+                // Instantly remove persistent notification from notification shade like WhatsApp
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } else {
+                    @Suppress("DEPRECATION")
+                    stopForeground(true)
+                }
+                val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                nm?.cancel(NOTIFICATION_ID)
+            } catch (e: Exception) {}
         }
 
         // Ensure WebSocket is connected and listening
@@ -186,7 +199,7 @@ class LivreChatBackgroundService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Conexão em Segundo Plano",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_MIN
             ).apply {
                 description = "Mantém o LivreChat conectado para receber mensagens instantâneas e chamadas"
                 setShowBadge(false)
@@ -211,11 +224,11 @@ class LivreChatBackgroundService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("LivreChat")
-            .setContentText("Conectado para mensagens e chamadas")
+            .setContentText("Conectado")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingOpen)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(false)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
     }
@@ -237,12 +250,14 @@ class LivreChatBackgroundService : Service() {
                 action = ACTION_START
             }
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(intent)
-                } else {
-                    context.startService(intent)
-                }
-            } catch (e: Exception) {}
+                context.startService(intent)
+            } catch (e: Exception) {
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.startForegroundService(intent)
+                    }
+                } catch (e2: Exception) {}
+            }
         }
 
         fun stop(context: Context) {

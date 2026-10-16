@@ -48,6 +48,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.EditText
 import androidx.core.view.ViewCompat
+import com.livrechat.app.LivreChatApp
 import com.livrechat.app.util.TimeUtils
 import coil.compose.AsyncImage
 import com.livrechat.app.data.local.model.ReactionUtils
@@ -2826,6 +2827,8 @@ fun AudioMessageBubbleContent(
 
 @Composable
 fun MessageStatusIcon(status: String) {
+    val prefs = LivreChatApp.instance.preferencesManager
+    val showReadBlue = prefs.readReceiptsEnabled
     when (status) {
         "sending" -> {
             Icon(
@@ -2854,8 +2857,8 @@ fun MessageStatusIcon(status: String) {
         "read" -> {
             Icon(
                 imageVector = Icons.Default.DoneAll,
-                contentDescription = "Lido",
-                tint = Color(0xFF34B7F1),
+                contentDescription = if (showReadBlue) "Lido" else "Entregue",
+                tint = if (showReadBlue) Color(0xFF34B7F1) else Color.White.copy(alpha = 0.7f),
                 modifier = Modifier.size(15.dp)
             )
         }

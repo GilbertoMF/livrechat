@@ -175,5 +175,10 @@ interface ApiService {
         @Path("conversationId") conversationId: String,
         @Body body: Map<String, Boolean>
     ): Response<BaseResponse>
+
+    @PUT("api/users/preferences")
+    suspend fun updatePreferences(
+        @Body body: Map<String, @JvmSuppressWildcards Any>
+    ): Response<BaseResponse>
 }
 

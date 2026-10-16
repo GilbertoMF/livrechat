@@ -83,15 +83,17 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
             } catch (e: Exception) {}
 
             db.conversationDao().clearUnreadCount(conversationId)
-            try {
-                apiService.markConversationRead(conversationId)
-            } catch (e: Exception) {}
-            // Marcar todas as mensagens recebidas como lidas e notificar remetente com 2 ticks azuis
+            // Marcar todas as mensagens recebidas como lidas e notificar remetente com 2 ticks azuis (se ativado)
             val unreadList = db.messageDao().getUnreadIncomingMessages(conversationId)
             db.messageDao().markAllIncomingAsRead(conversationId)
-            for (msg in unreadList) {
-                connectionManager.getClient().sendReceipt(msg.id, "read")
-                try { apiService.markMessageRead(msg.id) } catch (e: Exception) {}
+            if (prefs.readReceiptsEnabled) {
+                try {
+                    apiService.markConversationRead(conversationId)
+                } catch (e: Exception) {}
+                for (msg in unreadList) {
+                    connectionManager.getClient().sendReceipt(msg.id, "read")
+                    try { apiService.markMessageRead(msg.id) } catch (e: Exception) {}
+                }
             }
             syncMessagesForConversation(conversationId)
         }
@@ -253,13 +255,15 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                     }
                     db.messageDao().insertAll(entities)
 
-                    // For every incoming message that wasn't previously marked read, send read receipts!
-                    for (dto in dtoList) {
-                        if (dto.senderId != myId) {
-                            val wasRead = existingMap[dto.id]?.status == "read" || dto.receipts?.any { it.status == "read" && it.userId == myId } == true
-                            if (!wasRead) {
-                                connectionManager.getClient().sendReceipt(dto.id, "read")
-                                try { apiService.markMessageRead(dto.id) } catch (e: Exception) {}
+                    // For every incoming message that wasn't previously marked read, send read receipts if enabled!
+                    if (prefs.readReceiptsEnabled) {
+                        for (dto in dtoList) {
+                            if (dto.senderId != myId) {
+                                val wasRead = existingMap[dto.id]?.status == "read" || dto.receipts?.any { it.status == "read" && it.userId == myId } == true
+                                if (!wasRead) {
+                                    connectionManager.getClient().sendReceipt(dto.id, "read")
+                                    try { apiService.markMessageRead(dto.id) } catch (e: Exception) {}
+                                }
                             }
                         }
                     }
@@ -535,8 +539,10 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
 
     fun markMessageRead(messageId: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            connectionManager.getClient().sendReceipt(messageId, "read")
-            apiService.markMessageRead(messageId)
+            if (prefs.readReceiptsEnabled) {
+                connectionManager.getClient().sendReceipt(messageId, "read")
+                try { apiService.markMessageRead(messageId) } catch (e: Exception) {}
+            }
         }
     }
 

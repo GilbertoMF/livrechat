@@ -288,11 +288,20 @@ export class WebSocketManager {
 
       case 'chat:receipt': {
         const { messageId, status } = event; // 'delivered' or 'read'
+        let finalStatus = status;
+
+        if (status === 'read') {
+          const prefs = await db.getPreferences(senderId);
+          if (prefs && prefs.read_receipts_enabled === false) {
+            finalStatus = 'delivered';
+          }
+        }
+
         await db.addReceipt({
           id: uuidv4(),
           message_id: messageId,
           user_id: senderId,
-          status,
+          status: finalStatus,
           timestamp: new Date().toISOString()
         });
 
@@ -300,7 +309,7 @@ export class WebSocketManager {
         this.broadcast({
           type: 'chat:receipt',
           messageId,
-          status,
+          status: finalStatus,
           userId: senderId
         });
         break;

@@ -1029,6 +1029,11 @@ fun SettingsScreen(
                             onCheckedChange = {
                                 readReceipts = it
                                 prefs.readReceiptsEnabled = it
+                                scope.launch(Dispatchers.IO) {
+                                    try {
+                                        apiService.updatePreferences(mapOf("read_receipts_enabled" to it))
+                                    } catch (e: Exception) {}
+                                }
                             }
                         )
                     }
@@ -1067,7 +1072,18 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                Button(onClick = { showPrivacyDialog = false }) {
+                Button(onClick = {
+                    showPrivacyDialog = false
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            apiService.updatePreferences(mapOf(
+                                "read_receipts_enabled" to readReceipts,
+                                "last_seen_visibility" to lastSeen
+                            ))
+                        } catch (e: Exception) {}
+                    }
+                    Toast.makeText(context, "Configurações salvas", Toast.LENGTH_SHORT).show()
+                }) {
                     Text("Salvar")
                 }
             }

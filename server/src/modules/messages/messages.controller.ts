@@ -85,12 +85,27 @@ export class MessagesController {
       const blockedSenderIds = new Set(blockedList.map(b => b.blocked_id));
       const visibleMessages = messages.filter(m => !blockedSenderIds.has(m.sender_id));
 
+      const userPrefs = await db.getPreferences(userId);
+      const userReadReceiptsEnabled = userPrefs?.read_receipts_enabled !== false;
+
       // Attach receipts & consolidated status
       const enriched = await Promise.all(
         visibleMessages.map(async m => {
           const receipts = await db.getReceiptsForMessage(m.id);
           const otherReceipts = receipts.filter(r => r.user_id !== m.sender_id);
-          const hasRead = otherReceipts.some(r => r.status === 'read');
+
+          let hasRead = false;
+          if (userReadReceiptsEnabled) {
+            for (const r of otherReceipts) {
+              if (r.status === 'read') {
+                const readerPrefs = await db.getPreferences(r.user_id);
+                if (readerPrefs?.read_receipts_enabled !== false) {
+                  hasRead = true;
+                  break;
+                }
+              }
+            }
+          }
           const hasDelivered = otherReceipts.some(r => r.status === 'delivered');
           const status = hasRead ? 'read' : (hasDelivered ? 'delivered' : 'sent');
           const senderProfile = await db.getProfile(m.sender_id);
@@ -260,6 +275,11 @@ export class MessagesController {
       const userId = req.user!.userId;
       const { messageId } = req.params;
 
+      const prefs = await db.getPreferences(userId);
+      if (prefs && prefs.read_receipts_enabled === false) {
+        return res.status(200).json({ success: true, read_receipts: false });
+      }
+
       await db.addReceipt({
         id: uuidv4(),
         message_id: messageId,
@@ -285,6 +305,11 @@ export class MessagesController {
     try {
       const userId = req.user!.userId;
       const { conversationId } = req.params;
+
+      const prefs = await db.getPreferences(userId);
+      if (prefs && prefs.read_receipts_enabled === false) {
+        return res.status(200).json({ success: true, read_receipts: false });
+      }
 
       await db.markConversationAsRead(conversationId, userId);
 
