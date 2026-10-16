@@ -227,7 +227,7 @@ fun HomeScreen(
             override fun onMessageReceived(message: com.livrechat.app.data.local.entity.MessageEntity) {}
             override fun onMessageAck(messageId: String, clientMessageId: String?, status: String) {}
             override fun onMessageReceipt(messageId: String, status: String, userId: String) {}
-            override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean) {}
+            override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean, displayName: String?) {}
             override fun onIncomingCall(callerId: String, callerUsername: String, callerDisplayName: String, callerAvatarUrl: String?, sdp: String) {}
             override fun onCallAnswered(calleeId: String, sdp: String) {}
             override fun onIceCandidateReceived(fromUserId: String, candidate: com.google.gson.JsonObject) {}

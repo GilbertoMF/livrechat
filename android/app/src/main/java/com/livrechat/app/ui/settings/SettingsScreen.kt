@@ -1759,6 +1759,14 @@ fun SettingsScreen(
                 TextButton(
                     onClick = {
                         showLogoutDialog = false
+                        val currentFcm = prefs.fcmToken
+                        if (!currentFcm.isNullOrBlank()) {
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    LivreChatApp.instance.apiService.removeFcmToken(mapOf("token" to currentFcm))
+                                } catch (e: Exception) {}
+                            }
+                        }
                         com.livrechat.app.service.LivreChatBackgroundService.stop(context)
                         connectionManager.disconnect()
                         prefs.clearAuth()

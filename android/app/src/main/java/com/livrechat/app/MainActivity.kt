@@ -73,6 +73,7 @@ class MainActivity : FragmentActivity() {
 
         if (prefs.isLoggedIn()) {
             com.livrechat.app.service.LivreChatBackgroundService.start(this)
+            com.livrechat.app.service.LivreChatFirebaseService.syncToken(this)
         }
 
         if (prefs.blockScreenshots) {

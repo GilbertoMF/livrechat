@@ -31,6 +31,9 @@ class LivreChatApp : Application() {
     lateinit var connectionManager: ConnectionManager
         private set
 
+    val apiService: com.livrechat.app.data.remote.ApiService
+        get() = apiClient.apiService
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -61,6 +64,7 @@ class LivreChatApp : Application() {
 
         if (preferencesManager.isLoggedIn()) {
             com.livrechat.app.service.LivreChatBackgroundService.start(this)
+            com.livrechat.app.service.LivreChatFirebaseService.syncToken(this)
             connectionManager.connect()
         }
 

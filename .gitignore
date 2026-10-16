@@ -3,6 +3,10 @@ node_modules/
 server/data/
 dist/
 .env
+*firebase-adminsdk*.json
+*firebase-service-account*.json
+firebase-service-account.json
+
 
 # Android
 .gradle/

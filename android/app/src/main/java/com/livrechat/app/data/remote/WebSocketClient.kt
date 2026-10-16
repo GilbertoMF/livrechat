@@ -26,7 +26,7 @@ interface WebSocketEventsListener {
     fun onMessageReceived(message: MessageEntity)
     fun onMessageAck(messageId: String, clientMessageId: String?, status: String)
     fun onMessageReceipt(messageId: String, status: String, userId: String)
-    fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean, displayName: String? = null)
+    fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean, displayName: String? = null) {}
     fun onRecordingAudio(conversationId: String, userId: String, username: String, isRecording: Boolean, displayName: String? = null) {}
     // WebRTC Signaling
     fun onIncomingCall(callerId: String, callerUsername: String, callerDisplayName: String, callerAvatarUrl: String?, sdp: String)

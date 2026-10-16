@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { CONFIG } from '../config/env';
 import { db, Message } from '../db/database';
+import { fcmService } from '../services/fcm.service';
 
 export type AuthenticatedSocket = WebSocket & {
   userId?: string;
@@ -246,6 +247,18 @@ export class WebSocketManager {
                 type: 'chat:message',
                 message: payloadWithSender
               });
+
+              // Send FCM High Priority Push (wakes up receiver's Android phone even if killed)
+              fcmService.sendNewMessagePush(memberId, {
+                id: msgId,
+                conversationId,
+                senderId,
+                senderName: senderProfile?.display_name || senderUser?.username || 'LivreChat',
+                senderAvatar: senderProfile?.avatar_url || '',
+                content,
+                type: messageType || 'text',
+                createdAt: now
+              }).catch(() => {});
 
               // If recipient is currently online, mark delivered (2 ticks)
               if (delivered) {
@@ -506,19 +519,31 @@ export class WebSocketManager {
           return;
         }
 
+        const callerDisplayName = callerProfile?.display_name || senderWs.username || '';
+        const callerAvatarUrl = callerProfile?.avatar_url || '';
+
         const online = this.sendToUser(calleeId, {
           type: 'call:incoming',
           callerId: senderId,
           callerUsername: senderWs.username,
-          callerDisplayName: callerProfile?.display_name || senderWs.username,
-          callerAvatarUrl: callerProfile?.avatar_url || "",
+          callerDisplayName,
+          callerAvatarUrl,
           sdp
         });
+
+        // Always send High Priority FCM Push for incoming calls so recipient phone rings even if killed
+        fcmService.sendIncomingCallPush(calleeId, {
+          callerId: senderId,
+          callerUsername: senderWs.username || '',
+          callerDisplayName,
+          callerAvatarUrl,
+          sdp
+        }).catch(() => {});
 
         if (!online) {
           senderWs.send(JSON.stringify({
             type: 'call:offline',
-            message: 'O contato está offline no momento.'
+            message: 'O contato está offline no momento. Chamando via notificação push...'
           }));
         }
         break;

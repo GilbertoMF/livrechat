@@ -180,5 +180,15 @@ interface ApiService {
     suspend fun updatePreferences(
         @Body body: Map<String, @JvmSuppressWildcards Any>
     ): Response<BaseResponse>
+
+    @POST("api/users/fcm-token")
+    suspend fun registerFcmToken(
+        @Body body: Map<String, String>
+    ): Response<BaseResponse>
+
+    @retrofit2.http.HTTP(method = "DELETE", path = "api/users/fcm-token", hasBody = true)
+    suspend fun removeFcmToken(
+        @Body body: Map<String, String>
+    ): Response<BaseResponse>
 }
 

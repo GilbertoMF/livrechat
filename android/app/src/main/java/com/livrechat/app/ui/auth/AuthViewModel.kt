@@ -89,6 +89,8 @@ class AuthViewModel : ViewModel() {
                     userDao.insertOrUpdate(userEntity)
 
                     app.connectionManager.connect()
+                    com.livrechat.app.service.LivreChatBackgroundService.start(app)
+                    com.livrechat.app.service.LivreChatFirebaseService.syncToken(app)
 
                     _uiState.value = AuthUiState.RegisterSuccess(userEntity, body.recoveryKey)
                 } else {
@@ -152,6 +154,8 @@ class AuthViewModel : ViewModel() {
                     userDao.insertOrUpdate(userEntity)
 
                     app.connectionManager.connect()
+                    com.livrechat.app.service.LivreChatBackgroundService.start(app)
+                    com.livrechat.app.service.LivreChatFirebaseService.syncToken(app)
 
                     _uiState.value = AuthUiState.LoginSuccess(userEntity)
                 } else {
@@ -297,6 +301,8 @@ class AuthViewModel : ViewModel() {
                     }
 
                     app.connectionManager.connect()
+                    com.livrechat.app.service.LivreChatBackgroundService.start(app)
+                    com.livrechat.app.service.LivreChatFirebaseService.syncToken(app)
 
                     _uiState.value = AuthUiState.LoginSuccess(userEntity)
                 } else {

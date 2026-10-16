@@ -3,6 +3,7 @@ import { AuthRequest } from '../../middleware/auth';
 import { db, Message, MessageReceipt } from '../../db/database';
 import { v4 as uuidv4 } from 'uuid';
 import { WebSocketManager } from '../../websocket/ws.server';
+import { fcmService } from '../../services/fcm.service';
 
 export class MessagesController {
   public static async getConversations(req: AuthRequest, res: Response) {
@@ -202,22 +203,37 @@ export class MessagesController {
         sender_avatar_url: senderProfile?.avatar_url || null
       };
 
-      // Forward to online recipients via WebSocket
+      // Forward to recipients via WebSocket and FCM High Priority Push
+      let membersToNotify = await db.getConversationMembers(conversationId);
+      if (targetUserId && !membersToNotify.includes(targetUserId)) {
+        membersToNotify.push(targetUserId);
+      }
+
       const wsManager = WebSocketManager.getInstance();
-      if (wsManager) {
-        let members = await db.getConversationMembers(conversationId);
-        if (targetUserId && !members.includes(targetUserId)) {
-          members.push(targetUserId);
-        }
-        for (const memberId of members) {
-          if (memberId !== senderId) {
-            const blocked = await db.isBlocked(senderId, memberId);
-            if (blocked) continue;
+      for (const memberId of membersToNotify) {
+        if (memberId !== senderId) {
+          const blocked = await db.isBlocked(senderId, memberId);
+          if (blocked) continue;
+
+          // 1. WebSocket if online
+          if (wsManager) {
             wsManager.sendToUser(memberId, {
               type: 'chat:message',
               message: payloadMessage
             });
           }
+
+          // 2. High-priority FCM push (wakes up Android background process immediately)
+          fcmService.sendNewMessagePush(memberId, {
+            id: saved.id,
+            conversationId: saved.conversation_id,
+            senderId: saved.sender_id,
+            senderName: senderName || 'LivreChat',
+            senderAvatar: senderProfile?.avatar_url || '',
+            content: saved.content,
+            type: saved.message_type,
+            createdAt: saved.created_at
+          }).catch(() => {});
         }
       }
 

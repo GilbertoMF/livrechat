@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "801698503840",
+    "project_id": "livrechat-e3727",
+    "storage_bucket": "livrechat-e3727.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:801698503840:android:e05016d04fb194ced57dc5",
+        "android_client_info": {
+          "package_name": "com.livrechat.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAUKpgaMfaMGhDeSH507QUV_ZJfUEq0AY8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

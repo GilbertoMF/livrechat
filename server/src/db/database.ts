@@ -164,9 +164,17 @@ export interface StatusRecord {
   views?: StatusViewRecord[];
 }
 
+export interface UserFcmToken {
+  user_id: string;
+  token: string;
+  device_name?: string;
+  updated_at: string;
+}
+
 class DatabaseService {
   private pgPool: Pool | null = null;
   private localDataFile: string;
+
   private memoryStore: {
     users: User[];
     profiles: UserProfile[];
@@ -182,6 +190,7 @@ class DatabaseService {
     preferences: UserPreferences[];
     backup_metadata: BackupMetadata[];
     statuses: StatusRecord[];
+    fcm_tokens: UserFcmToken[];
   };
 
   constructor() {
@@ -205,7 +214,8 @@ class DatabaseService {
       reports: [],
       preferences: [],
       backup_metadata: [],
-      statuses: []
+      statuses: [],
+      fcm_tokens: []
     };
 
     this.loadFromLocal();
@@ -269,6 +279,15 @@ class DatabaseService {
           await client.query('ALTER TABLE statuses ADD COLUMN IF NOT EXISTS views JSONB DEFAULT \'[]\'::jsonb;').catch(() => {});
           await client.query('ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS phone_number VARCHAR(50);').catch(() => {});
           await client.query('CREATE INDEX IF NOT EXISTS idx_user_profiles_phone ON user_profiles(phone_number);').catch(() => {});
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS user_fcm_tokens (
+              user_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              token TEXT PRIMARY KEY,
+              device_name VARCHAR(100),
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_fcm_tokens_user ON user_fcm_tokens(user_id);
+          `).catch(() => {});
           console.log(`[Database] PostgreSQL (${CONFIG.DATABASE_URL.includes('neon.tech') ? 'Neon.tech' : 'Cloud'}) conectado e tabelas migradas com sucesso.`);
         } else {
           console.log('[Database] PostgreSQL conectado.');
@@ -2353,6 +2372,82 @@ class DatabaseService {
       }
     }
     return true;
+  }
+
+  // FCM TOKENS
+  public async saveFcmToken(userId: string, token: string, deviceName?: string): Promise<void> {
+    if (!userId || !token) return;
+
+    if (!this.memoryStore.fcm_tokens) this.memoryStore.fcm_tokens = [];
+    const idx = this.memoryStore.fcm_tokens.findIndex(t => t.token === token);
+    const entry: UserFcmToken = {
+      user_id: userId,
+      token,
+      device_name: deviceName,
+      updated_at: new Date().toISOString()
+    };
+
+    if (idx >= 0) {
+      this.memoryStore.fcm_tokens[idx] = entry;
+    } else {
+      this.memoryStore.fcm_tokens.push(entry);
+    }
+    this.saveToLocal();
+
+    if (this.pgPool) {
+      try {
+        await this.pgPool.query(
+          `INSERT INTO user_fcm_tokens (user_id, token, device_name, updated_at)
+           VALUES ($1, $2, $3, NOW())
+           ON CONFLICT (token) DO UPDATE
+           SET user_id = EXCLUDED.user_id, device_name = EXCLUDED.device_name, updated_at = NOW()`,
+          [userId, token, deviceName || null]
+        );
+      } catch (e) {
+        this.handlePgError(e);
+        console.warn('[Database] Erro PG saveFcmToken:', e);
+      }
+    }
+  }
+
+  public async getFcmTokensByUserId(userId: string): Promise<string[]> {
+    if (!userId) return [];
+
+    if (this.pgPool) {
+      try {
+        const res = await this.pgPool.query(
+          'SELECT token FROM user_fcm_tokens WHERE user_id = $1 ORDER BY updated_at DESC',
+          [userId]
+        );
+        return res.rows.map(r => r.token);
+      } catch (e) {
+        this.handlePgError(e);
+        console.warn('[Database] Erro PG getFcmTokensByUserId:', e);
+      }
+    }
+
+    if (!this.memoryStore.fcm_tokens) this.memoryStore.fcm_tokens = [];
+    return this.memoryStore.fcm_tokens
+      .filter(t => t.user_id === userId)
+      .map(t => t.token);
+  }
+
+  public async removeFcmToken(token: string): Promise<void> {
+    if (!token) return;
+
+    if (this.memoryStore.fcm_tokens) {
+      this.memoryStore.fcm_tokens = this.memoryStore.fcm_tokens.filter(t => t.token !== token);
+      this.saveToLocal();
+    }
+
+    if (this.pgPool) {
+      try {
+        await this.pgPool.query('DELETE FROM user_fcm_tokens WHERE token = $1', [token]);
+      } catch (e) {
+        this.handlePgError(e);
+        console.warn('[Database] Erro PG removeFcmToken:', e);
+      }
+    }
   }
 }
 

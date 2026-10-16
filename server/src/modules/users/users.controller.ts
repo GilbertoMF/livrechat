@@ -492,4 +492,32 @@ export class UsersController {
       return res.status(500).json({ error: e.message });
     }
   }
+
+  public static async registerFcmToken(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const { token, deviceName } = req.body;
+      if (!token) {
+        return res.status(400).json({ error: 'Token FCM é obrigatório.' });
+      }
+      await db.saveFcmToken(userId, token, deviceName);
+      return res.status(200).json({ success: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  public static async removeFcmToken(req: AuthRequest, res: Response) {
+    try {
+      const { token } = req.body;
+      if (!token) {
+        return res.status(400).json({ error: 'Token FCM é obrigatório.' });
+      }
+      await db.removeFcmToken(token);
+      return res.status(200).json({ success: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
 }
+
