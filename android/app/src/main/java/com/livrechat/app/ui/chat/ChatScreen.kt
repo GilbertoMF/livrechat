@@ -797,11 +797,63 @@ fun ChatScreen(
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "Personalize o fundo das conversas com uma foto da galeria ou uma cor sólida:",
+                        text = "Personalize o fundo das conversas com desenhos, padrões exclusivos, cores ou foto da galeria:",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text("Padrões com Desenhos (Estilo WhatsApp):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        for (preset in WALLPAPER_PATTERNS) {
+                            val isSelected = currentWallpaper == preset.id
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = preset.previewColor,
+                                border = if (isSelected) BorderStroke(2.5.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                                modifier = Modifier
+                                    .width(110.dp)
+                                    .height(72.dp)
+                                    .clickable {
+                                        if (applyToAll) {
+                                            prefs.setChatWallpaper(null, preset.id)
+                                        }
+                                        prefs.setChatWallpaper(conversationId, preset.id)
+                                        currentWallpaper = preset.id
+                                        showWallpaperDialog = false
+                                        Toast.makeText(context, "${preset.name} aplicado!", Toast.LENGTH_SHORT).show()
+                                    }
+                            ) {
+                                Box(modifier = Modifier.fillMaxSize().padding(6.dp)) {
+                                    Text(
+                                        text = preset.name,
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.align(Alignment.BottomStart)
+                                    )
+                                    if (isSelected) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp).align(Alignment.TopEnd)
+                                        ) {
+                                            Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     OutlinedButton(
                         onClick = {
@@ -816,7 +868,7 @@ fun ChatScreen(
                         Text("Escolher da Galeria")
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     Text("Cores Sólidas:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -862,7 +914,7 @@ fun ChatScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Row(
                         modifier = Modifier
@@ -1137,18 +1189,21 @@ fun ChatScreen(
                             )
                         }
                     } else {
-                        IconButton(onClick = {
-                            if (isContactBlocked) {
-                                Toast.makeText(context, "Desbloqueie o contato para fazer chamadas", Toast.LENGTH_SHORT).show()
-                                return@IconButton
+                        com.livrechat.app.ui.common.TooltipIconButton(
+                            tooltip = "Chamada de Voz WebRTC",
+                            onClick = {
+                                if (isContactBlocked) {
+                                    Toast.makeText(context, "Desbloqueie o contato para fazer chamadas", Toast.LENGTH_SHORT).show()
+                                    return@TooltipIconButton
+                                }
+                                onStartCall(
+                                    otherUserId,
+                                    otherDisplayName,
+                                    currentConv?.otherUsername ?: "",
+                                    currentConv?.otherAvatarUrl
+                                )
                             }
-                            onStartCall(
-                                otherUserId,
-                                otherDisplayName,
-                                currentConv?.otherUsername ?: "",
-                                currentConv?.otherAvatarUrl
-                            )
-                        }) {
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.Phone,
                                 contentDescription = "Chamada de Voz WebRTC",
@@ -1158,7 +1213,10 @@ fun ChatScreen(
                     }
 
                     Box {
-                        IconButton(onClick = { showMenu = true }) {
+                        com.livrechat.app.ui.common.TooltipIconButton(
+                            tooltip = "Opções da conversa",
+                            onClick = { showMenu = true }
+                        ) {
                             Icon(Icons.Default.MoreVert, contentDescription = "Opções")
                         }
                         DropdownMenu(
@@ -1670,7 +1728,10 @@ fun ChatScreen(
                                 )
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { showAttachmentSheet = true }) {
+                                    com.livrechat.app.ui.common.TooltipIconButton(
+                                        tooltip = "Anexar arquivo ou mídia",
+                                        onClick = { showAttachmentSheet = true }
+                                    ) {
                                         Icon(
                                             imageVector = Icons.Default.AttachFile,
                                             contentDescription = "Anexar",
@@ -1678,7 +1739,10 @@ fun ChatScreen(
                                         )
                                     }
                                     if (textInput.isBlank()) {
-                                        IconButton(onClick = { showCameraDialog = true }) {
+                                        com.livrechat.app.ui.common.TooltipIconButton(
+                                            tooltip = "Tirar foto rápida",
+                                            onClick = { showCameraDialog = true }
+                                        ) {
                                             Icon(
                                                 imageVector = Icons.Default.CameraAlt,
                                                 contentDescription = "Câmera",
@@ -1794,7 +1858,9 @@ fun ChatScreen(
         ) {
             // Custom chat wallpaper
             if (!currentWallpaper.isNullOrBlank()) {
-                if (currentWallpaper!!.startsWith("#")) {
+                if (currentWallpaper!!.startsWith("pattern:")) {
+                    ChatWallpaperCanvas(currentWallpaper!!, modifier = Modifier.fillMaxSize())
+                } else if (currentWallpaper!!.startsWith("#")) {
                     val color = try {
                         Color(android.graphics.Color.parseColor(currentWallpaper))
                     } catch (e: Exception) {

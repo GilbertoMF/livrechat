@@ -55,7 +55,8 @@ export class AuthController {
   public static async getSessions(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.userId;
-      const sessions = await AuthService.getSessions(userId);
+      const currentSessionId = req.user?.sessionId;
+      const sessions = await AuthService.getSessions(userId, currentSessionId);
       return res.status(200).json(sessions);
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
@@ -67,6 +68,16 @@ export class AuthController {
       const userId = req.user!.userId;
       const { sessionId } = req.params;
       const success = await AuthService.revokeSession(userId, sessionId);
+
+      try {
+        const { wsManager } = await import('../../index');
+        wsManager?.sendToUser(userId, {
+          type: 'session:revoked',
+          sessionId,
+          reason: 'Esta sessão foi desconectada pelo aparelho principal.'
+        });
+      } catch (e) {}
+
       return res.status(200).json({ success });
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
@@ -76,8 +87,20 @@ export class AuthController {
   public static async revokeOtherSessions(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.userId;
-      const count = await AuthService.revokeAllOtherSessions(userId, '');
-      return res.status(200).json({ revokedCount: count });
+      const currentSessionId = req.user?.sessionId || (req.body?.currentSessionId as string) || '';
+      const count = await AuthService.revokeAllOtherSessions(userId, currentSessionId);
+
+      // Notify other connected WebSockets for this user
+      try {
+        const { wsManager } = await import('../../index');
+        wsManager?.sendToUser(userId, {
+          type: 'session:revoked_others',
+          keepSessionId: currentSessionId,
+          reason: 'Outras sessões foram desconectadas pelo aparelho principal.'
+        });
+      } catch (e) {}
+
+      return res.status(200).json({ revokedCount: count, success: true });
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
     }

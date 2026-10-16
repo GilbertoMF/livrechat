@@ -45,12 +45,16 @@ export class StatusController {
 
       const created = await db.createStatus(status);
 
-      // Notifica todos os clientes conectados imediatamente
+      // Notifica os contatos e o próprio usuário
       try {
-        wsManager?.broadcast({
-          type: 'status:new',
-          status: created
-        });
+        const contacts = await db.getContacts(userId);
+        const targetUserIds = new Set<string>([userId, ...contacts.map(c => c.contact_user_id)]);
+        for (const targetId of targetUserIds) {
+          wsManager?.sendToUser(targetId, {
+            type: 'status:new',
+            status: created
+          });
+        }
       } catch (e) {}
 
       res.status(201).json(created);

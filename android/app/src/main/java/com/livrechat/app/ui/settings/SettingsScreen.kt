@@ -1401,29 +1401,79 @@ fun SettingsScreen(
                             CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         }
                     } else {
-                        val otherSessions = activeSessionsList.filter { !it.deviceName.contains(Build.MODEL, ignoreCase = true) }
+                        val otherSessions = activeSessionsList.filter {
+                            if (it.isCurrent != null) !it.isCurrent else !it.deviceName.contains(Build.MODEL, ignoreCase = true)
+                        }
                         if (otherSessions.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text("Outros Aparelhos Conectados:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Outros Aparelhos Conectados (${otherSessions.size}):", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(6.dp))
-                            LazyColumn(modifier = Modifier.heightIn(max = 160.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            LazyColumn(modifier = Modifier.heightIn(max = 200.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(otherSessions) { session ->
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.Devices, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                                        Row(
+                                            modifier = Modifier.padding(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Devices,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(24.dp)
+                                            )
                                             Spacer(modifier = Modifier.width(10.dp))
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(session.deviceName, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                                Text("Último acesso: ${session.lastActive.take(10)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                val dateText = if (session.lastActive.length >= 16) {
+                                                    session.lastActive.replace("T", " ").take(16)
+                                                } else {
+                                                    session.lastActive.take(10)
+                                                }
+                                                Text(
+                                                    "Última atividade: $dateText",
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    scope.launch(Dispatchers.IO) {
+                                                        try {
+                                                            apiService.revokeSession(session.id)
+                                                            val refreshed = apiService.getSessions()
+                                                            if (refreshed.isSuccessful && refreshed.body() != null) {
+                                                                withContext(Dispatchers.Main) {
+                                                                    activeSessionsList = refreshed.body()!!
+                                                                }
+                                                            }
+                                                        } catch (e: Exception) {}
+                                                    }
+                                                    Toast.makeText(context, "Aparelho desconectado", Toast.LENGTH_SHORT).show()
+                                                },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = "Desconectar este aparelho",
+                                                    tint = DangerRed,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
                                             }
                                         }
                                     }
                                 }
                             }
+                        } else {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                "Nenhum outro aparelho conectado nesta conta.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
 
@@ -1433,11 +1483,15 @@ fun SettingsScreen(
                             scope.launch(Dispatchers.IO) {
                                 try {
                                     apiService.revokeOtherSessions()
-                                    activeSessionsList = emptyList()
+                                    val refreshed = apiService.getSessions()
+                                    if (refreshed.isSuccessful && refreshed.body() != null) {
+                                        withContext(Dispatchers.Main) {
+                                            activeSessionsList = refreshed.body()!!
+                                        }
+                                    }
                                 } catch (e: Exception) {}
                             }
-                            Toast.makeText(context, "Todas as outras sessões foram encerradas com sucesso.", Toast.LENGTH_LONG).show()
-                            showDevicesDialog = false
+                            Toast.makeText(context, "Todas as outras sessões foram desconectadas.", Toast.LENGTH_LONG).show()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = DangerRed.copy(alpha = 0.15f)),
                         modifier = Modifier.fillMaxWidth()

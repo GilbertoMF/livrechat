@@ -29,6 +29,14 @@ fun IncomingCallScreen(
     val callState by viewModel.callState.collectAsState()
     var hasNavigated by remember { mutableStateOf(false) }
 
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+    }
+
     LaunchedEffect(callState) {
         if (callState == CallState.CONNECTED || callState == CallState.CONNECTING) {
             if (!hasNavigated) {

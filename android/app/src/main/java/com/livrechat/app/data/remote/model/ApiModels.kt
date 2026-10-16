@@ -224,10 +224,11 @@ data class AddMembersRequest(
 )
 
 data class SessionDto(
-    val id: String,
-    @SerializedName("user_id") val userId: String,
-    @SerializedName("device_name") val deviceName: String,
-    @SerializedName("ip_address") val ipAddress: String,
-    @SerializedName("last_active") val lastActive: String,
-    @SerializedName("created_at") val createdAt: String
+    val id: String = "",
+    @SerializedName("user_id", alternate = ["userId"]) val userId: String = "",
+    @SerializedName("device_name", alternate = ["deviceName"]) val deviceName: String = "Aparelho Conectado",
+    @SerializedName("ip_address", alternate = ["ipAddress"]) val ipAddress: String = "",
+    @SerializedName("last_active", alternate = ["lastActive"]) val lastActive: String = "",
+    @SerializedName("created_at", alternate = ["createdAt"]) val createdAt: String = "",
+    @SerializedName("is_current", alternate = ["isCurrent"]) val isCurrent: Boolean = false
 )

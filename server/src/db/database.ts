@@ -581,17 +581,15 @@ class DatabaseService {
     if (this.pgPool) {
       try {
         const res = await this.pgPool.query('SELECT * FROM user_sessions WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
-        if (res.rows.length > 0) {
-          return res.rows.map(r => ({
-            id: r.id,
-            user_id: r.user_id,
-            device_name: r.device_name,
-            ip_address: r.ip_address,
-            refresh_token_hash: r.refresh_token_hash,
-            last_active: r.last_active?.toISOString?.() || r.last_active,
-            created_at: r.created_at?.toISOString?.() || r.created_at
-          }));
-        }
+        return res.rows.map(r => ({
+          id: r.id,
+          user_id: r.user_id,
+          device_name: r.device_name,
+          ip_address: r.ip_address,
+          refresh_token_hash: r.refresh_token_hash,
+          last_active: r.last_active?.toISOString?.() || r.last_active,
+          created_at: r.created_at?.toISOString?.() || r.created_at
+        }));
       } catch (e) {
         console.warn('[Database] Erro PG getSessionsByUserId:', e);
       }
@@ -2232,8 +2230,9 @@ class DatabaseService {
       }
     }
 
-    // Fallback in-memory
-    const active = this.memoryStore.statuses.filter(s => s.expires_at > now);
+    // Fallback in-memory (filter only user's own statuses and saved contacts)
+    const userContacts = new Set(this.memoryStore.contacts.filter(c => c.user_id === userId).map(c => c.contact_user_id));
+    const active = this.memoryStore.statuses.filter(s => s.expires_at > now && (s.user_id === userId || userContacts.has(s.user_id)));
     return active.map(s => {
       const prof = this.memoryStore.profiles.find(p => p.user_id === s.user_id);
       return {

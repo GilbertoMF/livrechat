@@ -6,6 +6,7 @@ export interface AuthRequest extends Request {
   user?: {
     userId: string;
     username: string;
+    sessionId?: string;
   };
 }
 
@@ -17,11 +18,15 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
     return res.status(401).json({ error: 'Token de autenticação não fornecido.' });
   }
 
-  jwt.verify(token, CONFIG.JWT_SECRET, (err, decoded) => {
+  jwt.verify(token, CONFIG.JWT_SECRET, (err, decoded: any) => {
     if (err) {
       return res.status(403).json({ error: 'Token inválido ou expirado.' });
     }
-    req.user = decoded as { userId: string; username: string };
+    req.user = {
+      userId: decoded.userId,
+      username: decoded.username,
+      sessionId: decoded.sessionId
+    };
     next();
   });
 }

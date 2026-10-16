@@ -29,6 +29,9 @@ interface ApiService {
     @GET("api/auth/sessions")
     suspend fun getSessions(): Response<List<SessionDto>>
 
+    @DELETE("api/auth/sessions/{sessionId}")
+    suspend fun revokeSession(@Path("sessionId") sessionId: String): Response<Map<String, Any>>
+
     @POST("api/auth/sessions/revoke-others")
     suspend fun revokeOtherSessions(): Response<Map<String, Any>>
 

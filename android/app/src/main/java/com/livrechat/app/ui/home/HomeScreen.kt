@@ -157,11 +157,16 @@ fun HomeScreen(
     var newMusicStatusBgColor by remember { mutableStateOf("#075E54") }
     var isPostingStatus by remember { mutableStateOf(false) }
 
+    val contactsList by db.contactDao().getAllContactsFlow().collectAsState(initial = emptyList())
+    val contactUserIds = remember(contactsList, conversations) {
+        (contactsList.map { it.contactUserId } + conversations.mapNotNull { it.otherUserId }).toSet()
+    }
+
     val myStatuses = remember(statusesList, currentUserId) {
         statusesList.filter { it.userId == currentUserId }
     }
-    val contactsStatuses = remember(statusesList, currentUserId) {
-        statusesList.filter { it.userId != currentUserId }
+    val contactsStatuses = remember(statusesList, currentUserId, contactUserIds) {
+        statusesList.filter { it.userId != currentUserId && it.userId in contactUserIds }
     }
 
     fun loadStatuses() {
@@ -2180,21 +2185,36 @@ fun HomeScreen(
                 },
                 actions = {
                     if (selectedTab == 1) {
-                        IconButton(onClick = { loadStatuses() }) {
+                        com.livrechat.app.ui.common.TooltipIconButton(
+                            tooltip = "Atualizar Flash",
+                            onClick = { loadStatuses() }
+                        ) {
                             Icon(Icons.Default.Refresh, contentDescription = "Atualizar Flash")
                         }
                     } else if (selectedTab == 2 && callHistory.isNotEmpty()) {
-                        IconButton(onClick = { showClearCallHistoryDialog = true }) {
+                        com.livrechat.app.ui.common.TooltipIconButton(
+                            tooltip = "Limpar Histórico de Chamadas",
+                            onClick = { showClearCallHistoryDialog = true }
+                        ) {
                             Icon(Icons.Default.DeleteSweep, contentDescription = "Limpar Histórico", tint = DangerRed)
                         }
                     }
-                    IconButton(onClick = onNavigateToSearch) {
+                    com.livrechat.app.ui.common.TooltipIconButton(
+                        tooltip = "Pesquisar conversas e contatos",
+                        onClick = onNavigateToSearch
+                    ) {
                         Icon(Icons.Default.Search, contentDescription = "Pesquisar")
                     }
-                    IconButton(onClick = onNavigateToQRCode) {
+                    com.livrechat.app.ui.common.TooltipIconButton(
+                        tooltip = "Meu QR Code",
+                        onClick = onNavigateToQRCode
+                    ) {
                         Icon(Icons.Default.QrCode, contentDescription = "Meu QR Code")
                     }
-                    IconButton(onClick = onNavigateToSettings) {
+                    com.livrechat.app.ui.common.TooltipIconButton(
+                        tooltip = "Configurações",
+                        onClick = onNavigateToSettings
+                    ) {
                         Icon(Icons.Default.Settings, contentDescription = "Configurações")
                     }
                 }

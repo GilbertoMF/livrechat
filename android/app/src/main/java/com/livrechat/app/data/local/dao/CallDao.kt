@@ -12,8 +12,14 @@ interface CallDao {
     @Query("SELECT * FROM call_records ORDER BY timestamp DESC")
     fun getAllCallsFlow(): Flow<List<CallRecordEntity>>
 
+    @Query("SELECT * FROM call_records ORDER BY timestamp DESC")
+    suspend fun getAllCalls(): List<CallRecordEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCall(call: CallRecordEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(calls: List<CallRecordEntity>)
 
     @Query("DELETE FROM call_records WHERE id = :id")
     suspend fun deleteCall(id: String)

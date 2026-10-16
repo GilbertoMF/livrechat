@@ -114,10 +114,17 @@ fun LivreChatNavGraph(
         }
     }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(callState, callInfo) {
         if (callState == CallState.RINGING && callInfo != null && !callInfo!!.isOutgoing) {
             val currentRoute = navController.currentBackStackEntry?.destination?.route
             if (currentRoute != Routes.INCOMING_CALL && currentRoute != Routes.ACTIVE_CALL) {
+                try {
+                    val act = context as? android.app.Activity
+                    val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+                    imm?.hideSoftInputFromWindow(act?.currentFocus?.windowToken, 0)
+                    act?.currentFocus?.clearFocus()
+                } catch (e: Exception) {}
                 navController.navigate(Routes.INCOMING_CALL)
             }
         }

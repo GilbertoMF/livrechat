@@ -206,8 +206,23 @@ export class AuthService {
     return { success: true, message: 'Senha redefinida com sucesso. Faça login com a nova senha.' };
   }
 
-  public static async getSessions(userId: string) {
-    return db.getSessionsByUserId(userId);
+  public static async getSessions(userId: string, currentSessionId?: string) {
+    const list = await db.getSessionsByUserId(userId);
+    return list.map(s => ({
+      id: s.id,
+      user_id: s.user_id,
+      userId: s.user_id,
+      device_name: s.device_name || 'Aparelho Conectado',
+      deviceName: s.device_name || 'Aparelho Conectado',
+      ip_address: s.ip_address || '',
+      ipAddress: s.ip_address || '',
+      last_active: s.last_active || '',
+      lastActive: s.last_active || '',
+      created_at: s.created_at || '',
+      createdAt: s.created_at || '',
+      is_current: currentSessionId ? s.id === currentSessionId : false,
+      isCurrent: currentSessionId ? s.id === currentSessionId : false
+    }));
   }
 
   public static async revokeSession(userId: string, sessionId: string) {

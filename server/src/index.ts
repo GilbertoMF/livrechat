@@ -48,20 +48,31 @@ app.get('/health', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.0.1',
-      versionCode: 2,
-      releaseDate: '2026-10-15',
-      apkArm64Url: '/apks/livrechat-v1.0.1-arm64.apk',
-      apkUniversalUrl: '/apks/livrechat-v1.0.1-universal.apk',
+      version: '1.0.2',
+      versionCode: 3,
+      releaseDate: '2026-10-16',
+      apkArm64Url: '/apks/livrechat-v1.0.2-arm64.apk',
+      apkUniversalUrl: '/apks/livrechat-v1.0.2-universal.apk',
       sizeMbArm64: '23.8 MB',
       sizeMbUniversal: '30.0 MB'
     },
     versions: [
       {
+        version: '1.0.2',
+        versionCode: 3,
+        releaseDate: '2026-10-16',
+        isLatest: true,
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '23.8 MB', url: '/apks/livrechat-v1.0.2-arm64.apk' },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '20.5 MB', url: '/apks/livrechat-v1.0.2-armv7.apk' },
+          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '30.0 MB', url: '/apks/livrechat-v1.0.2-universal.apk' }
+        ]
+      },
+      {
         version: '1.0.1',
         versionCode: 2,
         releaseDate: '2026-10-15',
-        isLatest: true,
+        isLatest: false,
         downloads: [
           { type: 'arm64', name: 'APK Leve ARM64', size: '23.8 MB', url: '/apks/livrechat-v1.0.1-arm64.apk' },
           { type: 'universal', name: 'APK Universal', size: '30.0 MB', url: '/apks/livrechat-v1.0.1-universal.apk' }

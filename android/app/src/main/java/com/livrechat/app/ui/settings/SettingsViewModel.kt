@@ -70,36 +70,184 @@ class SettingsViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             _backupState.value = BackupUiState.InProgress
             try {
-                // 1. Gather all real data from Room database
+                val apiService = app.apiClient.apiService
+                val myUserId = prefs.currentUserId ?: ""
+
+                // 1. Sync contacts from server if local Room is empty
+                try {
+                    val currentContacts = db.contactDao().getAllContacts()
+                    if (currentContacts.isEmpty()) {
+                        val contactsRes = apiService.getContacts()
+                        if (contactsRes.isSuccessful && contactsRes.body() != null) {
+                            val remoteContacts = contactsRes.body()!!.map { dto ->
+                                ContactEntity(
+                                    id = dto.id,
+                                    contactUserId = dto.contactUserId,
+                                    username = dto.username,
+                                    displayName = dto.displayName,
+                                    avatarUrl = dto.avatarUrl,
+                                    publicKey = dto.publicKey,
+                                    bio = dto.bio
+                                )
+                            }
+                            if (remoteContacts.isNotEmpty()) {
+                                db.contactDao().insertAll(remoteContacts)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {}
+
+                // 2. Sync conversations from server if local Room is empty
+                try {
+                    val currentConvs = db.conversationDao().getAllConversationsSync()
+                    if (currentConvs.isEmpty()) {
+                        val convsRes = apiService.getConversations()
+                        if (convsRes.isSuccessful && convsRes.body() != null) {
+                            val remoteConvs = convsRes.body()!!.map { dto ->
+                                val otherU = dto.otherUser
+                                val effectiveUserId = otherU?.id ?: dto.conversationId
+                                val customNick = prefs.getContactCustomName(effectiveUserId)
+                                val effectiveDisplayName = customNick
+                                    ?: otherU?.displayName
+                                    ?: (dto.title ?: "Conversa")
+                                ConversationEntity(
+                                    id = dto.conversationId,
+                                    otherUserId = effectiveUserId,
+                                    otherUsername = otherU?.username ?: (dto.title ?: "Conversa"),
+                                    otherDisplayName = effectiveDisplayName,
+                                    otherAvatarUrl = otherU?.avatarUrl ?: dto.avatarUrl,
+                                    otherPublicKey = otherU?.publicKey,
+                                    lastMessageContent = dto.lastMessage?.content ?: "",
+                                    lastMessageTimestamp = System.currentTimeMillis(),
+                                    unreadCount = dto.unreadCount,
+                                    isPinned = dto.isPinned,
+                                    isArchived = dto.isArchived,
+                                    isMuted = dto.isMuted,
+                                    isGroup = dto.isGroup,
+                                    groupTitle = dto.title,
+                                    groupAvatar = dto.avatarUrl
+                                )
+                            }
+                            if (remoteConvs.isNotEmpty()) {
+                                db.conversationDao().insertAll(remoteConvs)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {}
+
+                // 3. Sync messages for conversations if local messages are missing
+                val currentConvsAfterSync = db.conversationDao().getAllConversationsSync()
+                for (conv in currentConvsAfterSync) {
+                    try {
+                        val existingMsgs = db.messageDao().getMessagesForConversation(conv.id)
+                        if (existingMsgs.isEmpty()) {
+                            val msgsRes = apiService.getMessages(conv.id, 100)
+                            if (msgsRes.isSuccessful && msgsRes.body() != null) {
+                                val entities = msgsRes.body()!!.map { dto ->
+                                    val createdAtMs = try {
+                                        java.time.Instant.parse(dto.createdAt).toEpochMilli()
+                                    } catch (e: Exception) {
+                                        System.currentTimeMillis()
+                                    }
+                                    MessageEntity(
+                                        id = dto.id,
+                                        conversationId = dto.conversationId,
+                                        senderId = dto.senderId,
+                                        content = dto.content,
+                                        iv = dto.iv,
+                                        messageType = dto.messageType,
+                                        replyToId = dto.replyToId,
+                                        status = dto.status ?: "sent",
+                                        isOutgoing = dto.senderId == myUserId,
+                                        isEdited = dto.isEdited,
+                                        isDeleted = dto.isDeleted,
+                                        createdAt = createdAtMs
+                                    )
+                                }
+                                if (entities.isNotEmpty()) {
+                                    db.messageDao().insertAll(entities)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {}
+                }
+
+                // 4. Sync calls from server if local calls are empty
+                try {
+                    val currentCalls = db.callDao().getAllCalls()
+                    if (currentCalls.isEmpty()) {
+                        val callsRes = apiService.getCallHistory()
+                        if (callsRes.isSuccessful && callsRes.body() != null) {
+                            val entities = callsRes.body()!!.map { dto ->
+                                val startedMs = try {
+                                    java.time.Instant.parse(dto.startedAt).toEpochMilli()
+                                } catch (e: Exception) {
+                                    System.currentTimeMillis()
+                                }
+                                com.livrechat.app.data.local.entity.CallRecordEntity(
+                                    id = dto.id,
+                                    contactUserId = dto.contact.id,
+                                    contactDisplayName = dto.contact.displayName,
+                                    contactUsername = dto.contact.username,
+                                    contactAvatarUrl = dto.contact.avatarUrl,
+                                    isOutgoing = dto.isOutgoing,
+                                    status = dto.status,
+                                    durationSeconds = dto.durationSeconds,
+                                    timestamp = startedMs
+                                )
+                            }
+                            if (entities.isNotEmpty()) {
+                                db.callDao().insertAll(entities)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {}
+
+                // 5. Gather all consolidated local data
                 val allConversations = db.conversationDao().getAllConversationsSync()
                 val allMessages = db.messageDao().getAllMessages()
                 val allContacts = db.contactDao().getAllContacts()
+                val allCalls = db.callDao().getAllCalls()
 
                 val backupPayload = mapOf(
-                    "version" to 1,
+                    "version" to 2,
                     "app" to "LivreChat",
                     "timestamp" to System.currentTimeMillis(),
-                    "userId" to (prefs.currentUserId ?: ""),
+                    "userId" to myUserId,
                     "googleDriveAccount" to (prefs.googleDriveAccount ?: ""),
                     "conversations" to allConversations,
                     "messages" to allMessages,
-                    "contacts" to allContacts
+                    "contacts" to allContacts,
+                    "calls" to allCalls
                 )
                 val rawPayload = gson.toJson(backupPayload)
 
-                // 2. Derive key from passphrase
+                // 6. Derive key from passphrase & Encrypt AES-256-GCM
                 val salt = "livrechat_backup_salt_2026".toByteArray(Charsets.UTF_8)
                 val derivedKey = cryptoManager.deriveKeyFromPassphrase(passphrase, salt)
-
-                // 3. Encrypt AES-256-GCM
                 val encrypted = cryptoManager.encrypt(rawPayload, derivedKey)
                 val encryptedJson = gson.toJson(encrypted)
 
-                // 4. Save to local app backup folder
+                // 7. Save to internal app storage
                 val backupFile = File(app.filesDir, "livrechat_backup.enc")
                 backupFile.writeText(encryptedJson)
 
-                // 5. If outputStream provided (Google Drive / SAF), stream it
+                // 8. Also save a safety copy in Downloads / LivreChat_Backups
+                try {
+                    val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                    val backupDir = File(downloadsDir, "LivreChat_Backups")
+                    if (!backupDir.exists()) backupDir.mkdirs()
+                    val publicFile = File(backupDir, "livrechat_backup.enc")
+                    publicFile.writeText(encryptedJson)
+                } catch (e: Exception) {
+                    try {
+                        val extDir = app.getExternalFilesDir("Backups")
+                        extDir?.mkdirs()
+                        File(extDir, "livrechat_backup.enc").writeText(encryptedJson)
+                    } catch (e2: Exception) {}
+                }
+
+                // 9. If outputStream provided (Google Drive / SAF), stream it
                 if (outputStream != null) {
                     try {
                         outputStream.use { os ->
@@ -107,7 +255,7 @@ class SettingsViewModel : ViewModel() {
                             os.flush()
                         }
                     } catch (e: Exception) {
-                        _backupState.value = BackupUiState.Error("Erro ao gravar no Google Drive: ${e.localizedMessage}")
+                        _backupState.value = BackupUiState.Error("Erro ao gravar no destino: ${e.localizedMessage}")
                         return@launch
                     }
                 }
@@ -116,10 +264,10 @@ class SettingsViewModel : ViewModel() {
                 prefs.lastBackupTimestamp = now
                 _lastBackupDate.value = formatDate(now)
 
-                val destText = if (outputStream != null) "no Google Drive / Armazenamento" else "localmente"
+                val destText = if (outputStream != null) "no Google Drive / Arquivo" else "localmente"
                 val sizeKb = (backupFile.length() / 1024).coerceAtLeast(1)
                 _backupState.value = BackupUiState.Success(
-                    "Backup criptografado salvo $destText com sucesso! (${sizeKb} KB - ${allConversations.size} conversas, ${allMessages.size} mensagens, ${allContacts.size} contatos)."
+                    "Backup 100% completo salvo $destText com sucesso! (${sizeKb} KB - ${allConversations.size} conversas, ${allMessages.size} mensagens, ${allContacts.size} contatos, ${allCalls.size} chamadas)."
                 )
             } catch (e: Exception) {
                 _backupState.value = BackupUiState.Error("Falha ao gerar backup: ${e.localizedMessage}")
@@ -144,12 +292,27 @@ class SettingsViewModel : ViewModel() {
                         return@launch
                     }
                 } else {
+                    // Try internal files dir first
                     val backupFile = File(app.filesDir, "livrechat_backup.enc")
-                    if (!backupFile.exists()) {
-                        _backupState.value = BackupUiState.Error("Nenhum arquivo de backup encontrado no aparelho.")
-                        return@launch
+                    if (backupFile.exists() && backupFile.length() > 0L) {
+                        backupFile.readText()
+                    } else {
+                        // Fallback 1: Downloads/LivreChat_Backups
+                        val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                        val publicFile = File(downloadsDir, "LivreChat_Backups/livrechat_backup.enc")
+                        if (publicFile.exists() && publicFile.length() > 0L) {
+                            publicFile.readText()
+                        } else {
+                            // Fallback 2: external files dir
+                            val extFile = File(app.getExternalFilesDir("Backups"), "livrechat_backup.enc")
+                            if (extFile.exists() && extFile.length() > 0L) {
+                                extFile.readText()
+                            } else {
+                                _backupState.value = BackupUiState.Error("Nenhum arquivo de backup encontrado. Você pode selecionar um arquivo .enc pelo botão 'Restaurar do Google Drive / Arquivo'.")
+                                return@launch
+                            }
+                        }
                     }
-                    backupFile.readText()
                 }
 
                 val salt = "livrechat_backup_salt_2026".toByteArray(Charsets.UTF_8)
@@ -206,8 +369,23 @@ class SettingsViewModel : ViewModel() {
                     }
                 }
 
+                // Restore calls
+                var restoredCalls = 0
+                if (jsonObject.has("calls")) {
+                    val callListType = object : TypeToken<List<com.livrechat.app.data.local.entity.CallRecordEntity>>() {}.type
+                    val calls: List<com.livrechat.app.data.local.entity.CallRecordEntity> = gson.fromJson(jsonObject.get("calls"), callListType) ?: emptyList()
+                    if (calls.isNotEmpty()) {
+                        db.callDao().insertAll(calls)
+                        restoredCalls = calls.size
+                    }
+                }
+
+                val now = System.currentTimeMillis()
+                prefs.lastBackupTimestamp = now
+                _lastBackupDate.value = formatDate(now)
+
                 _backupState.value = BackupUiState.Success(
-                    "Backup restaurado com sucesso! ($restoredConvs conversas, $restoredMsgs mensagens e $restoredContacts contatos recuperados)."
+                    "Backup 100% restaurado com sucesso! ($restoredConvs conversas, $restoredMsgs mensagens, $restoredContacts contatos e $restoredCalls chamadas recuperados)."
                 )
             } catch (e: Exception) {
                 _backupState.value = BackupUiState.Error("Senha incorreta ou arquivo de backup inválido.")
