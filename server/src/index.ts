@@ -31,7 +31,7 @@ app.get(['/', '/download', '/baixar', '/app'], (req, res) => {
 
 // Latest APK redirect
 app.get(['/apks/livrechat-latest.apk', '/download/latest'], (req, res) => {
-  res.redirect('/apks/livrechat-v1.0.8-arm64.apk');
+  res.redirect('/apks/livrechat-v1.0.9-arm64.apk');
 });
 
 // Health check
@@ -39,7 +39,7 @@ app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'online',
     appName: 'LivreChat Server',
-    version: '1.0.8',
+    version: '1.0.9',
     timestamp: new Date().toISOString()
   });
 });
@@ -48,24 +48,35 @@ app.get('/health', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.0.8',
-      versionCode: 8,
+      version: '1.0.9',
+      versionCode: 9,
       releaseDate: '2026-10-16',
-      apkArm64Url: '/apks/livrechat-v1.0.8-arm64.apk',
-      apkUniversalUrl: '/apks/livrechat-v1.0.8-universal.apk',
+      apkArm64Url: '/apks/livrechat-v1.0.9-arm64.apk',
+      apkUniversalUrl: '/apks/livrechat-v1.0.9-universal.apk',
       sizeMbArm64: '25.4 MB',
       sizeMbUniversal: '32.1 MB'
     },
     versions: [
       {
-        version: '1.0.8',
-        versionCode: 8,
+        version: '1.0.9',
+        versionCode: 9,
         releaseDate: '2026-10-16',
         isLatest: true,
         downloads: [
-          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '25.4 MB', url: '/apks/livrechat-v1.0.8-arm64.apk' },
-          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '22.0 MB', url: '/apks/livrechat-v1.0.8-armv7.apk' },
-          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '32.1 MB', url: '/apks/livrechat-v1.0.8-universal.apk' }
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '25.4 MB', url: '/apks/livrechat-v1.0.9-arm64.apk' },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '22.0 MB', url: '/apks/livrechat-v1.0.9-armv7.apk' },
+          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '32.1 MB', url: '/apks/livrechat-v1.0.9-universal.apk' }
+        ]
+      },
+      {
+        version: '1.0.8',
+        versionCode: 8,
+        releaseDate: '2026-10-16',
+        isLatest: false,
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64', size: '25.4 MB', url: '/apks/livrechat-v1.0.8-arm64.apk' },
+          { type: 'armv7', name: 'APK 32-bit ARMv7', size: '22.0 MB', url: '/apks/livrechat-v1.0.8-armv7.apk' },
+          { type: 'universal', name: 'APK Universal', size: '32.1 MB', url: '/apks/livrechat-v1.0.8-universal.apk' }
         ]
       },
       {
@@ -219,6 +230,7 @@ app.get('/api/messages/:conversationId', authenticateToken, MessagesController.g
 app.post('/api/messages', authenticateToken, MessagesController.sendMessage);
 app.put('/api/messages/:messageId', authenticateToken, MessagesController.editMessage);
 app.delete('/api/messages/:messageId', authenticateToken, MessagesController.deleteMessage);
+app.post('/api/messages/:messageId/delivered', authenticateToken, MessagesController.markAsDelivered);
 app.post('/api/messages/:messageId/read', authenticateToken, MessagesController.markAsRead);
 app.post('/api/messages/conversations/:conversationId/read', authenticateToken, MessagesController.markConversationAsRead);
 app.delete('/api/messages/conversations/:conversationId/clear', authenticateToken, MessagesController.clearConversation);

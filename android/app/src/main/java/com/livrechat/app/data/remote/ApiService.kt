@@ -190,5 +190,10 @@ interface ApiService {
     suspend fun removeFcmToken(
         @Body body: Map<String, String>
     ): Response<BaseResponse>
+
+    @POST("api/messages/{messageId}/delivered")
+    suspend fun markMessageDelivered(
+        @Path("messageId") messageId: String
+    ): Response<BaseResponse>
 }
 

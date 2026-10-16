@@ -1,6 +1,8 @@
 package com.livrechat.app.service
 
+import android.content.Context
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -11,6 +13,7 @@ import com.livrechat.app.notification.LivreChatNotificationManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class LivreChatFirebaseService : FirebaseMessagingService() {
 
@@ -40,19 +43,37 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
 
-        val data = remoteMessage.data
-        if (data.isEmpty()) {
-            Log.d(TAG, "FCM recebido sem payload de dados.")
-            return
+        // 1. WhatsApp Pattern: Segura um WakeLock explícito para o processador não dormir durante o processamento
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val wakeLock = powerManager?.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "LivreChat:PushWakeLock"
+        )?.apply {
+            setReferenceCounted(false)
+            acquire(10000L) // 10 segundos de garantia de CPU ativa
         }
 
-        Log.d(TAG, "FCM High-Priority Data recebido: $data")
-        val type = data["type"] ?: "new_message"
+        try {
+            val data = remoteMessage.data
+            if (data.isEmpty()) {
+                Log.d(TAG, "FCM recebido sem payload de dados.")
+                return
+            }
 
-        when (type) {
-            "new_message" -> handleNewMessage(data)
-            "incoming_call" -> handleIncomingCall(data)
-            else -> Log.d(TAG, "Tipo de evento FCM desconhecido: $type")
+            Log.d(TAG, "FCM High-Priority Data recebido: $data")
+            val type = data["type"] ?: "new_message"
+
+            when (type) {
+                "new_message" -> handleNewMessage(data)
+                "incoming_call" -> handleIncomingCall(data)
+                else -> Log.d(TAG, "Tipo de evento FCM desconhecido: $type")
+            }
+        } finally {
+            try {
+                if (wakeLock?.isHeld == true) {
+                    wakeLock.release()
+                }
+            } catch (e: Exception) {}
         }
     }
 
@@ -68,12 +89,13 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
         val prefs = LivreChatApp.instance.preferencesManager
         val myUserId = prefs.currentUserId
 
-        // Não notificar mensagens enviadas por mim mesmo
+        // Não notificar mensagens enviadas pelo próprio usuário
         if (myUserId != null && myUserId == senderId) {
             return
         }
 
-        CoroutineScope(Dispatchers.IO).launch {
+        // WhatsApp Pattern: Executa a persistência e ack de entrega de forma garantida antes da CPU dormir
+        runBlocking(Dispatchers.IO) {
             try {
                 val db = LivreChatApp.instance.database
                 val existing = db.messageDao().getMessageById(messageId)
@@ -108,6 +130,18 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
                         db.conversationDao().insertOrUpdate(newConv)
                     }
                 }
+
+                // WhatsApp Pattern: Envia o ACK de entrega (Delivered Receipt) de volta ao servidor
+                // Isso faz a mensagem mudar de 1 tick para 2 ticks cinzas no celular do remetente na hora!
+                if (prefs.isLoggedIn()) {
+                    try {
+                        LivreChatApp.instance.apiService.markMessageDelivered(messageId)
+                        Log.d(TAG, "ACK de entrega enviado ao servidor para mensagem: $messageId")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Falha ao enviar ACK de entrega (offline)", e)
+                    }
+                }
+                Unit
             } catch (e: Exception) {
                 Log.e(TAG, "Erro ao salvar mensagem FCM no Room", e)
             }

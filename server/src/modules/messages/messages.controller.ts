@@ -286,6 +286,35 @@ export class MessagesController {
     }
   }
 
+  public static async markAsDelivered(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const { messageId } = req.params;
+
+      await db.addReceipt({
+        id: uuidv4(),
+        message_id: messageId,
+        user_id: userId,
+        status: 'delivered',
+        timestamp: new Date().toISOString()
+      });
+
+      const msg = await db.getMessageById(messageId);
+      if (msg) {
+        WebSocketManager.getInstance()?.sendToUser(msg.sender_id, {
+          type: 'chat:receipt',
+          messageId,
+          status: 'delivered',
+          userId
+        });
+      }
+
+      return res.status(200).json({ success: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   public static async markAsRead(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.userId;
