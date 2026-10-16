@@ -73,8 +73,8 @@ class ConnectionManager(
             cm?.registerNetworkCallback(request, object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
                     val prefs = LivreChatApp.instance.preferencesManager
-                    if (prefs.isLoggedIn()) {
-                        Log.d(TAG, "Rede de internet disponível. Conectando WebSocket e descarregando outbox...")
+                    if (prefs.isLoggedIn() && LivreChatApp.instance.isAppInForeground) {
+                        Log.d(TAG, "Rede de internet disponível e app em primeiro plano. Conectando WebSocket e descarregando outbox...")
                         connect()
                         flushOutbox()
                     }
@@ -256,10 +256,13 @@ class ConnectionManager(
                         val userRes = app.apiClient.apiService.getUserProfile(processedMessage.senderId)
                         if (userRes.isSuccessful && userRes.body() != null) {
                             val userDto = userRes.body()!!
+                            val localCustom = app.preferencesManager.getContactCustomName(processedMessage.senderId)
+                            val savedName = db.contactDao().getContactByUserId(processedMessage.senderId)?.displayName?.takeIf { it.isNotBlank() }
+                            val effectiveDisplayName = localCustom ?: savedName ?: (userDto.displayName?.takeIf { it.isNotBlank() && it != processedMessage.senderId && !it.startsWith("ID ") }) ?: userDto.username
                             db.conversationDao().insertOrUpdate(
                                 newConv.copy(
                                     otherUsername = userDto.username,
-                                    otherDisplayName = userDto.displayName?.takeIf { it.isNotBlank() } ?: userDto.username,
+                                    otherDisplayName = effectiveDisplayName,
                                     otherAvatarUrl = userDto.avatarUrl,
                                     otherPublicKey = userDto.publicKey
                                 )
@@ -292,8 +295,11 @@ class ConnectionManager(
                 db.conversationDao().updateLastMessage(processedMessage.conversationId, previewContent, processedMessage.createdAt)
                 webSocketClient.sendReceipt(processedMessage.id, "delivered")
 
-                // Obter nome para notificação
-                val senderTitle = conv.otherDisplayName.ifBlank { conv.otherUsername.ifBlank { "LivreChat" } }
+                // Obter nome para notificação usando nome salvo localmente
+                val localCustom = app.preferencesManager.getContactCustomName(processedMessage.senderId)
+                val savedName = db.contactDao().getContactByUserId(processedMessage.senderId)?.displayName?.takeIf { it.isNotBlank() }
+                val convTitle = conv.otherDisplayName.takeIf { it.isNotBlank() && it != processedMessage.senderId && !it.startsWith("ID ") }
+                val senderTitle = localCustom ?: savedName ?: convTitle ?: conv.otherDisplayName.ifBlank { conv.otherUsername.ifBlank { "LivreChat" } }
 
                 LivreChatNotificationManager.showMessageNotification(
                     context = context,

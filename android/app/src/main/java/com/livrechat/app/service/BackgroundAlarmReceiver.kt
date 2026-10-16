@@ -13,48 +13,23 @@ import com.livrechat.app.LivreChatApp
 class BackgroundAlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        val prefs = LivreChatApp.instance.preferencesManager
-        if (!prefs.isLoggedIn()) return
-
-        Log.d("BackgroundAlarmReceiver", "Watchdog disparado: garantindo serviço em segundo plano ativo...")
-
-        var wakeLock: PowerManager.WakeLock? = null
-        try {
-            val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-            wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LivreChat:AlarmReceiverWake")?.apply {
-                setReferenceCounted(false)
-                acquire(10000L) // 10s max
-            }
-        } catch (e: Exception) {}
-
-        try {
-            LivreChatBackgroundService.start(context)
-            if (!LivreChatApp.instance.connectionManager.isConnected.value) {
-                LivreChatApp.instance.connectionManager.connect()
-            }
-        } catch (e: Exception) {
-            Log.e("BackgroundAlarmReceiver", "Erro ao reiniciar serviço: ${e.message}")
-        } finally {
-            try {
-                if (wakeLock?.isHeld == true) wakeLock?.release()
-            } catch (e: Exception) {}
-        }
-
-        // Reagendar próximo watchdog para garantir continuidade
-        scheduleWatchdog(context, 10 * 60 * 1000L)
+        Log.d("BackgroundAlarmReceiver", "Watchdog cancelado: FCM gerencia push notifications.")
+        cancelWatchdog(context)
     }
 
     companion object {
         const val ACTION_RESTART = "com.livrechat.app.action.RESTART_BACKGROUND"
 
         fun scheduleImmediate(context: Context) {
-            scheduleWatchdog(context, 1000L)
+            cancelWatchdog(context)
         }
 
         fun scheduleWatchdog(context: Context, delayMs: Long) {
-            val prefs = LivreChatApp.instance.preferencesManager
-            if (!prefs.isLoggedIn()) return
+            // No-op: FCM push substitui o alarme periódico para economia de bateria
+            cancelWatchdog(context)
+        }
 
+        fun cancelWatchdog(context: Context) {
             try {
                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
                 val intent = Intent(context, BackgroundAlarmReceiver::class.java).apply {
@@ -66,15 +41,9 @@ class BackgroundAlarmReceiver : BroadcastReceiver() {
                     intent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
-
-                val triggerAt = System.currentTimeMillis() + delayMs
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
-                } else {
-                    alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
-                }
+                alarmManager.cancel(pendingIntent)
             } catch (e: Exception) {
-                Log.w("BackgroundAlarmReceiver", "Não foi possível agendar watchdog: ${e.message}")
+                Log.w("BackgroundAlarmReceiver", "Erro ao cancelar watchdog: ${e.message}")
             }
         }
     }

@@ -26,4 +26,7 @@ interface ContactDao {
 
     @Query("SELECT * FROM contacts WHERE contactUserId = :contactUserId LIMIT 1")
     suspend fun getContactByUserId(contactUserId: String): ContactEntity?
+
+    @Query("SELECT * FROM contacts WHERE contactUserId = :contactUserId LIMIT 1")
+    fun getContactByUserIdBlocking(contactUserId: String): ContactEntity?
 }

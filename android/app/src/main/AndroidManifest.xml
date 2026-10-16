@@ -108,13 +108,12 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
-        <!-- Persistent Background Service to keep WebSocket alive 24/7 for instant delivery and calls -->
+        <!-- Background Service for playback and temporary tasks -->
         <service
             android:name=".service.LivreChatBackgroundService"
             android:enabled="true"
             android:exported="false"
-            android:stopWithTask="false"
-            android:foregroundServiceType="dataSync" />
+            android:stopWithTask="true" />
 
         <!-- Firebase Cloud Messaging Receiver (High-Priority Background Handler) -->
         <service

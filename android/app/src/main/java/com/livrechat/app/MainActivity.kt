@@ -72,7 +72,6 @@ class MainActivity : FragmentActivity() {
         com.livrechat.app.sync.ContactSyncHelper.getOrCreateAccount(this)
 
         if (prefs.isLoggedIn()) {
-            com.livrechat.app.service.LivreChatBackgroundService.start(this)
             com.livrechat.app.service.LivreChatFirebaseService.syncToken(this)
         }
 
@@ -171,7 +170,6 @@ class MainActivity : FragmentActivity() {
         }
 
         if (prefs.isLoggedIn()) {
-            com.livrechat.app.service.LivreChatBackgroundService.start(this)
             if (!LivreChatApp.instance.connectionManager.isConnected.value) {
                 LivreChatApp.instance.connectionManager.connect()
             }

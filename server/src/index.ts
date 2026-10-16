@@ -40,7 +40,7 @@ app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'online',
     appName: 'LivreChat Server',
-    version: '1.1.0',
+    version: '1.1.1',
     timestamp: new Date().toISOString()
   });
 });
@@ -49,20 +49,32 @@ app.get('/health', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.0',
-      versionCode: 10,
+      version: '1.1.1',
+      versionCode: 11,
       releaseDate: '2026-10-16',
-      apkArm64Url: '/apks/livrechat-v1.1.0-arm64.apk',
-      apkUniversalUrl: '/apks/livrechat-v1.1.0-universal.apk',
+      apkArm64Url: '/apks/livrechat-v1.1.1-arm64.apk',
+      apkUniversalUrl: '/apks/livrechat-v1.1.1-universal.apk',
       sizeMbArm64: '25.4 MB',
       sizeMbUniversal: '32.1 MB'
     },
     versions: [
       {
+        version: '1.1.1',
+        versionCode: 11,
+        releaseDate: '2026-10-16',
+        isLatest: true,
+        changelog: 'Removida notificação persistente "Serviço ativo" (economia de bateria), status Online/Offline sincronizado com abertura/fechamento do app (estilo WhatsApp) e correção na exibição de nomes salvos de contatos em notificações e no perfil.',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '25.4 MB', url: '/apks/livrechat-v1.1.1-arm64.apk' },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '22.0 MB', url: '/apks/livrechat-v1.1.1-armv7.apk' },
+          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '32.1 MB', url: '/apks/livrechat-v1.1.1-universal.apk' }
+        ]
+      },
+      {
         version: '1.1.0',
         versionCode: 10,
         releaseDate: '2026-10-16',
-        isLatest: true,
+        isLatest: false,
         downloads: [
           { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '25.4 MB', url: '/apks/livrechat-v1.1.0-arm64.apk' },
           { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '22.0 MB', url: '/apks/livrechat-v1.1.0-armv7.apk' },

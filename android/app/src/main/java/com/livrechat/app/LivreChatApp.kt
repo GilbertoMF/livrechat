@@ -17,6 +17,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+
 class LivreChatApp : Application() {
 
     lateinit var database: AppDatabase
@@ -29,6 +33,9 @@ class LivreChatApp : Application() {
         private set
 
     lateinit var connectionManager: ConnectionManager
+        private set
+
+    var isAppInForeground: Boolean = false
         private set
 
     val apiService: com.livrechat.app.data.remote.ApiService
@@ -62,11 +69,36 @@ class LivreChatApp : Application() {
         connectionManager = ConnectionManager(this, ws)
         ws.setListener(connectionManager)
 
+        // Clear any lingering persistent notification or background service from previous versions
+        com.livrechat.app.service.LivreChatBackgroundService.stop(this)
+        com.livrechat.app.service.BackgroundAlarmReceiver.cancelWatchdog(this)
+
         if (preferencesManager.isLoggedIn()) {
-            com.livrechat.app.service.LivreChatBackgroundService.start(this)
             com.livrechat.app.service.LivreChatFirebaseService.syncToken(this)
-            connectionManager.connect()
         }
+
+        // WhatsApp Lifecycle Management:
+        // When app is in foreground -> connect WebSocket and show Online
+        // When app is in background -> disconnect WebSocket so server emits user:offline
+        // Incoming messages while in background are delivered seamlessly via Google FCM High Priority Push!
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+                isAppInForeground = true
+                android.util.Log.d("LivreChatApp", "App em primeiro plano -> Conectando WebSocket")
+                if (preferencesManager.isLoggedIn()) {
+                    connectionManager.connect()
+                    connectionManager.flushOutbox()
+                }
+            }
+
+            override fun onStop(owner: LifecycleOwner) {
+                isAppInForeground = false
+                android.util.Log.d("LivreChatApp", "App em segundo plano -> Desconectando WebSocket")
+                if (preferencesManager.isLoggedIn()) {
+                    connectionManager.disconnect()
+                }
+            }
+        })
 
         // Non-blocking background initialization on Dispatchers.IO
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {

@@ -10,8 +10,7 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED || intent.action == "android.intent.action.QUICKBOOT_POWERON") {
             val prefs = LivreChatApp.instance.preferencesManager
             if (prefs.isLoggedIn()) {
-                LivreChatBackgroundService.start(context)
-                LivreChatApp.instance.connectionManager.connect()
+                LivreChatFirebaseService.syncToken(context)
             }
         }
     }

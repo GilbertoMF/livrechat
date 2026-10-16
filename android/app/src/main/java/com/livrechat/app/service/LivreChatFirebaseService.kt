@@ -94,10 +94,23 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
             return
         }
 
+        var resolvedSenderName = senderName
+
         // WhatsApp Pattern: Executa a persistência e ack de entrega de forma garantida antes da CPU dormir
         runBlocking(Dispatchers.IO) {
             try {
                 val db = LivreChatApp.instance.database
+                val localCustomName = prefs.getContactCustomName(senderId)
+                val savedContactName = db.contactDao().getContactByUserId(senderId)?.displayName?.takeIf { it.isNotBlank() }
+                val existingConv = db.conversationDao().getConversationById(conversationId)
+                val existingConvName = existingConv?.otherDisplayName?.takeIf { it.isNotBlank() && it != senderId && !it.startsWith("ID ") }
+
+                resolvedSenderName = localCustomName
+                    ?: savedContactName
+                    ?: existingConvName
+                    ?: (if (senderName.isNotBlank() && senderName != senderId && !senderName.startsWith("ID ")) senderName else null)
+                    ?: "Contato"
+
                 val existing = db.messageDao().getMessageById(messageId)
                 if (existing == null) {
                     val entity = MessageEntity(
@@ -113,16 +126,18 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
                     db.messageDao().insertOrUpdate(entity)
 
                     // Atualiza a conversa localmente para que já apareça no topo da lista
-                    val conv = db.conversationDao().getConversationById(conversationId)
-                    if (conv != null) {
+                    if (existingConv != null) {
                         db.conversationDao().updateLastMessage(conversationId, content, createdAt)
                         db.conversationDao().recalculateUnreadCount(conversationId)
+                        if (existingConv.otherDisplayName.isBlank() || existingConv.otherDisplayName == senderId || existingConv.otherDisplayName.startsWith("ID ")) {
+                            db.conversationDao().insertOrUpdate(existingConv.copy(otherDisplayName = resolvedSenderName))
+                        }
                     } else {
                         val newConv = ConversationEntity(
                             id = conversationId,
                             otherUserId = senderId,
                             otherUsername = senderName,
-                            otherDisplayName = senderName,
+                            otherDisplayName = resolvedSenderName,
                             lastMessageContent = content,
                             lastMessageTimestamp = createdAt,
                             unreadCount = 1
@@ -147,11 +162,11 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
             }
         }
 
-        // 3. Dispara a notificação heads-up personalizada
+        // 3. Dispara a notificação heads-up personalizada com o nome salvo localmente
         LivreChatNotificationManager.showMessageNotification(
             context = applicationContext,
             conversationId = conversationId,
-            senderName = senderName,
+            senderName = resolvedSenderName,
             content = content,
             messageId = messageId,
             messageType = messageType
@@ -161,12 +176,23 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
     private fun handleIncomingCall(data: Map<String, String>) {
         val callerId = data["callerId"] ?: return
         val callerUsername = data["callerUsername"] ?: "Usuário"
-        val callerDisplayName = data["callerDisplayName"] ?: callerUsername
+        val rawCallerDisplayName = data["callerDisplayName"] ?: callerUsername
+
+        val prefs = LivreChatApp.instance.preferencesManager
+        val localCustomName = prefs.getContactCustomName(callerId)
+        val savedContactName = try {
+            LivreChatApp.instance.database.contactDao().getContactByUserIdBlocking(callerId)?.displayName?.takeIf { it.isNotBlank() }
+        } catch (e: Exception) { null }
+
+        val resolvedCallerName = localCustomName
+            ?: savedContactName
+            ?: (if (rawCallerDisplayName.isNotBlank() && rawCallerDisplayName != callerId && !rawCallerDisplayName.startsWith("ID ")) rawCallerDisplayName else null)
+            ?: callerUsername
 
         LivreChatNotificationManager.showIncomingCallNotification(
             context = applicationContext,
             callerId = callerId,
-            callerDisplayName = callerDisplayName,
+            callerDisplayName = resolvedCallerName,
             callerUsername = callerUsername
         )
     }

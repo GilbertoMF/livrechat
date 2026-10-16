@@ -420,10 +420,23 @@ fun ContactProfileDialog(
         }
     }
 
+    val savedContact = remember(savedContacts, otherUserId) {
+        savedContacts.find { it.contactUserId == otherUserId }
+    }
+
     val displayTitle = if (isGroup) {
         currentGroupTitle?.ifBlank { null } ?: otherDisplayName.ifBlank { "Grupo" }
     } else {
+        val remoteName = userProfile?.displayName?.takeIf {
+            it.isNotBlank() && it != otherUserId && !it.startsWith("ID ") && it != userProfile?.username
+        }
+        val convName = otherDisplayName.takeIf {
+            it.isNotBlank() && it != otherUserId && !it.startsWith("ID ")
+        }
         localCustomName
+            ?: savedContact?.displayName?.takeIf { it.isNotBlank() }
+            ?: convName
+            ?: remoteName
             ?: userProfile?.displayName?.ifBlank { null }
             ?: otherDisplayName.ifBlank { "Contato" }
     }

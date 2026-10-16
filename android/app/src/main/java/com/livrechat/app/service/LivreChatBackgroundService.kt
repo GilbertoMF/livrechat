@@ -34,23 +34,20 @@ class LivreChatBackgroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        try {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
-            wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LivreChat:BackgroundSyncCpu")?.apply {
-                setReferenceCounted(false)
-            }
-            wakeLock?.acquire(24 * 3600 * 1000L) // Crucial! Keeps CPU alive for real-time WebSocket events
-        } catch (e: Exception) {}
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
-        if (action == ACTION_STOP) {
+        if (action == ACTION_STOP || action == ACTION_START || action == null) {
             stopAudio()
             try {
                 if (wakeLock?.isHeld == true) wakeLock?.release()
             } catch (e: Exception) {}
-            stopForeground(STOP_FOREGROUND_REMOVE)
+            try {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                nm?.cancel(NOTIFICATION_ID)
+            } catch (e: Exception) {}
             stopSelf()
             return START_NOT_STICKY
         }
@@ -61,38 +58,18 @@ class LivreChatBackgroundService : Service() {
             val msgId = intent.getStringExtra(EXTRA_MESSAGE_ID) ?: ""
             val audioPath = intent.getStringExtra(EXTRA_AUDIO_PATH)
             playNotificationAudio(convId, sender, msgId, audioPath)
-            return START_STICKY
+            return START_NOT_STICKY
         } else if (action == ACTION_STOP_AUDIO) {
             val convId = intent.getStringExtra(EXTRA_CONVERSATION_ID) ?: ""
             val sender = intent.getStringExtra(EXTRA_SENDER_NAME) ?: "LivreChat"
             val msgId = intent.getStringExtra(EXTRA_MESSAGE_ID) ?: ""
             stopNotificationAudio(convId, sender, msgId)
-            return START_STICKY
+            stopSelf()
+            return START_NOT_STICKY
         }
 
-        if (action == ACTION_START || action == null) {
-            try {
-                val notification = buildPersistentNotification()
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    startForeground(
-                        NOTIFICATION_ID,
-                        notification,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                    )
-                } else {
-                    startForeground(NOTIFICATION_ID, notification)
-                }
-            } catch (e: Exception) {}
-        }
-
-        // Ensure WebSocket is connected and listening
-        val prefs = LivreChatApp.instance.preferencesManager
-        if (prefs.isLoggedIn()) {
-            LivreChatApp.instance.connectionManager.connect()
-            BackgroundAlarmReceiver.scheduleWatchdog(applicationContext, 10 * 60 * 1000L)
-        }
-
-        return START_STICKY
+        stopSelf()
+        return START_NOT_STICKY
     }
 
     private fun playNotificationAudio(convId: String, senderName: String, messageId: String, audioPath: String?) {
@@ -165,35 +142,10 @@ class LivreChatBackgroundService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        val prefs = LivreChatApp.instance.preferencesManager
-        if (prefs.isLoggedIn()) {
-            try {
-                val restartIntent = Intent(applicationContext, LivreChatBackgroundService::class.java).apply {
-                    action = ACTION_START
-                }
-                val pendingIntent = PendingIntent.getService(
-                    applicationContext,
-                    101,
-                    restartIntent,
-                    PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-                )
-                val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    alarmManager?.setExactAndAllowWhileIdle(
-                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                        SystemClock.elapsedRealtime() + 500L,
-                        pendingIntent
-                    )
-                } else {
-                    alarmManager?.set(
-                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                        SystemClock.elapsedRealtime() + 500L,
-                        pendingIntent
-                    )
-                }
-                BackgroundAlarmReceiver.scheduleWatchdog(applicationContext, 1000L)
-            } catch (e: Exception) {}
-        }
+        try {
+            LivreChatApp.instance.connectionManager.disconnect()
+        } catch (e: Exception) {}
+        stopSelf()
     }
 
     override fun onDestroy() {
@@ -202,35 +154,6 @@ class LivreChatBackgroundService : Service() {
             if (wakeLock?.isHeld == true) wakeLock?.release()
         } catch (e: Exception) {}
         super.onDestroy()
-        val prefs = LivreChatApp.instance.preferencesManager
-        if (prefs.isLoggedIn()) {
-            try {
-                val restartIntent = Intent(applicationContext, LivreChatBackgroundService::class.java).apply {
-                    action = ACTION_START
-                }
-                val pendingIntent = PendingIntent.getService(
-                    applicationContext,
-                    102,
-                    restartIntent,
-                    PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-                )
-                val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    alarmManager?.setExactAndAllowWhileIdle(
-                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                        SystemClock.elapsedRealtime() + 500L,
-                        pendingIntent
-                    )
-                } else {
-                    alarmManager?.set(
-                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                        SystemClock.elapsedRealtime() + 500L,
-                        pendingIntent
-                    )
-                }
-                BackgroundAlarmReceiver.scheduleWatchdog(applicationContext, 1000L)
-            } catch (e: Exception) {}
-        }
     }
 
     private fun createNotificationChannel() {
@@ -240,7 +163,7 @@ class LivreChatBackgroundService : Service() {
                 "Conexão em Segundo Plano",
                 NotificationManager.IMPORTANCE_MIN
             ).apply {
-                description = "Mantém o LivreChat conectado para receber mensagens instantâneas e chamadas"
+                description = "Notificação de áudio e conexões pontuais"
                 setShowBadge(false)
                 enableVibration(false)
                 setSound(null, null)
@@ -249,30 +172,6 @@ class LivreChatBackgroundService : Service() {
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
-    }
-
-    private fun buildPersistentNotification(): Notification {
-        val openAppIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val pendingOpen = PendingIntent.getActivity(
-            this,
-            0,
-            openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("LivreChat")
-            .setContentText("Serviço ativo")
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentIntent(pendingOpen)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
-            .setShowWhen(false)
-            .build()
     }
 
     companion object {
@@ -288,25 +187,18 @@ class LivreChatBackgroundService : Service() {
         const val EXTRA_MESSAGE_ID = "extra_message_id"
 
         fun start(context: Context) {
-            val intent = Intent(context, LivreChatBackgroundService::class.java).apply {
-                action = ACTION_START
-            }
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(intent)
-                } else {
-                    context.startService(intent)
-                }
-            } catch (e: Exception) {}
+            // No-op: Persistent foreground service has been retired in favor of Google FCM high priority push.
+            // Cancels any lingering notification from prior versions.
+            stop(context)
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, LivreChatBackgroundService::class.java).apply {
-                action = ACTION_STOP
-            }
             try {
                 val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 nm?.cancel(NOTIFICATION_ID)
+                val intent = Intent(context, LivreChatBackgroundService::class.java).apply {
+                    action = ACTION_STOP
+                }
                 context.stopService(intent)
             } catch (e: Exception) {}
         }
