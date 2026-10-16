@@ -4074,17 +4074,29 @@ fun CallHistoryItem(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
+                val icon = when {
+                    call.status == "missed" -> Icons.Default.CallMissed
+                    call.isOutgoing -> Icons.Default.CallMade
+                    else -> Icons.Default.CallReceived
+                }
+                val iconTint = if (call.status == "missed" || call.status == "rejected") DangerRed else SuccessGreen
                 Icon(
-                    imageVector = if (call.isOutgoing) Icons.Default.CallMade else Icons.Default.CallReceived,
+                    imageVector = icon,
                     contentDescription = null,
-                    tint = if (call.status == "rejected" || call.status == "missed") DangerRed else SuccessGreen,
+                    tint = iconTint,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
+                val subtitleText = when {
+                    call.status == "missed" -> "Chamada perdida • " + formatTimestamp(call.timestamp)
+                    call.status == "rejected" -> "Recusada • " + formatTimestamp(call.timestamp)
+                    call.durationSeconds > 0 -> formatTimestamp(call.timestamp) + " (${call.durationSeconds}s)"
+                    else -> formatTimestamp(call.timestamp)
+                }
                 Text(
-                    text = formatTimestamp(call.timestamp) + if (call.durationSeconds > 0) " (${call.durationSeconds}s)" else "",
+                    text = subtitleText,
                     fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (call.status == "missed") DangerRed else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

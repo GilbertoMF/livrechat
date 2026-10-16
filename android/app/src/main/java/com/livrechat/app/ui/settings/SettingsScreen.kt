@@ -15,7 +15,10 @@ import android.util.Base64
 import android.app.Activity
 import android.content.Intent
 import android.media.RingtoneManager
+import android.os.PowerManager
 import android.widget.Toast
+import com.livrechat.app.data.remote.model.SessionDto
+import com.livrechat.app.data.remote.model.UserDto
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -147,6 +150,43 @@ fun SettingsScreen(
     var showRecoveryPhraseDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+
+    var activeSessionsList by remember { mutableStateOf<List<SessionDto>>(emptyList()) }
+    var isLoadingSessions by remember { mutableStateOf(false) }
+    var blockedUsersList by remember { mutableStateOf<List<UserDto>>(emptyList()) }
+    var isLoadingBlockedUsers by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showDevicesDialog) {
+        if (showDevicesDialog) {
+            isLoadingSessions = true
+            withContext(Dispatchers.IO) {
+                try {
+                    val res = apiService.getSessions()
+                    if (res.isSuccessful && res.body() != null) {
+                        activeSessionsList = res.body()!!
+                    }
+                } catch (e: Exception) {} finally {
+                    isLoadingSessions = false
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(showBlockedDialog) {
+        if (showBlockedDialog) {
+            isLoadingBlockedUsers = true
+            withContext(Dispatchers.IO) {
+                try {
+                    val res = apiService.getBlockedUsers()
+                    if (res.isSuccessful && res.body() != null) {
+                        blockedUsersList = res.body()!!
+                    }
+                } catch (e: Exception) {} finally {
+                    isLoadingBlockedUsers = false
+                }
+            }
+        }
+    }
 
     // Edit profile state
     var userPhone by remember { mutableStateOf(prefs.currentUserPhone ?: "") }
@@ -1342,18 +1382,61 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Smartphone, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                            Icon(Icons.Default.Smartphone, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(28.dp))
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(deviceName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text(if (isConnected) "Sessão Ativa Agora • Online" else "Conectando...", fontSize = 12.sp, color = if (isConnected) SuccessGreen else DangerRed)
+                                Text("Este aparelho ($deviceName)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(modifier = Modifier.size(8.dp).background(SuccessGreen, CircleShape))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Sessão Ativa • Online", fontSize = 12.sp, color = SuccessGreen, fontWeight = FontWeight.SemiBold)
+                                }
                             }
                         }
                     }
+
+                    if (isLoadingSessions) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        }
+                    } else {
+                        val otherSessions = activeSessionsList.filter { !it.deviceName.contains(Build.MODEL, ignoreCase = true) }
+                        if (otherSessions.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Outros Aparelhos Conectados:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            LazyColumn(modifier = Modifier.heightIn(max = 160.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(otherSessions) { session ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Devices, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(session.deviceName, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                                Text("Último acesso: ${session.lastActive.take(10)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(14.dp))
                     Button(
                         onClick = {
-                            Toast.makeText(context, "Todas as outras sessões foram encerradas.", Toast.LENGTH_LONG).show()
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    apiService.revokeOtherSessions()
+                                    activeSessionsList = emptyList()
+                                } catch (e: Exception) {}
+                            }
+                            Toast.makeText(context, "Todas as outras sessões foram encerradas com sucesso.", Toast.LENGTH_LONG).show()
                             showDevicesDialog = false
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = DangerRed.copy(alpha = 0.15f)),
@@ -1468,19 +1551,80 @@ fun SettingsScreen(
                 }
             },
             text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(Icons.Default.CheckCircleOutline, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(48.dp))
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Nenhum contato bloqueado", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Quando você bloqueia um contato, ele não pode te enviar mensagens nem ligar para o seu ID Virtual.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (isLoadingBlockedUsers) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                    }
+                } else if (blockedUsersList.isEmpty()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.CheckCircleOutline, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(48.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Nenhum contato bloqueado", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Quando você bloqueia um contato, ele não pode te enviar mensagens nem ligar para o seu ID Virtual.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 350.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(blockedUsersList, key = { it.id }) { blockedUser ->
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    UserAvatarView(
+                                        avatarUrl = blockedUser.avatarUrl,
+                                        displayName = blockedUser.displayName.ifBlank { blockedUser.username },
+                                        size = 40.dp,
+                                        fontSize = 16.sp
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = blockedUser.displayName.ifBlank { blockedUser.username },
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
+                                        Text(
+                                            text = "@${blockedUser.username}",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Button(
+                                        onClick = {
+                                            val targetId = blockedUser.id
+                                            scope.launch(Dispatchers.IO) {
+                                                try {
+                                                    apiService.unblockUser(targetId)
+                                                } catch (e: Exception) {}
+                                            }
+                                            prefs.setUserBlocked(targetId, false)
+                                            blockedUsersList = blockedUsersList.filter { it.id != targetId }
+                                            Toast.makeText(context, "Contato desbloqueado", Toast.LENGTH_SHORT).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text("Desbloquear", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showBlockedDialog = false }) { Text("OK") }
+                TextButton(onClick = { showBlockedDialog = false }) { Text("Fechar") }
             }
         )
     }
@@ -1768,6 +1912,32 @@ fun SettingsScreen(
                         title = "Notificações & Sons",
                         subtitle = "Notificações heads-up no topo, toques e vibração",
                         onClick = { showNotificationsDialog = true }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    SettingsRowItem(
+                        icon = Icons.Default.BatteryChargingFull,
+                        title = "Segundo Plano Sem Restrições",
+                        subtitle = "Garantir chegada de chamadas e mensagens com tela desligada",
+                        onClick = {
+                            try {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                    val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                                    if (pm != null && !pm.isIgnoringBatteryOptimizations(context.packageName)) {
+                                        val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                            data = Uri.parse("package:${context.packageName}")
+                                        }
+                                        context.startActivity(intent)
+                                    } else {
+                                        Toast.makeText(context, "Segundo plano sem restrições já está ativo!", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                try {
+                                    val intent = Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                    context.startActivity(intent)
+                                } catch (ex: Exception) {}
+                            }
+                        }
                     )
                 }
             }

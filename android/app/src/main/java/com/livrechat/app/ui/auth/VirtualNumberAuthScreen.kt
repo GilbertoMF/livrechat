@@ -52,6 +52,7 @@ fun VirtualNumberAuthScreen(
 
     var step by remember { mutableStateOf(1) } // 1: Inserir/Gerar número 8 dígitos, 2: Confirmar SMS 4 dígitos
     var virtualNumber by remember { mutableStateOf("") }
+    var displayName by remember { mutableStateOf("") }
     var smsCode by remember { mutableStateOf("") }
     var incomingSmsPreview by remember { mutableStateOf<String?>(null) }
     var countdown by remember { mutableStateOf(30) }
@@ -63,6 +64,7 @@ fun VirtualNumberAuthScreen(
     }
 
     LaunchedEffect(Unit) {
+        viewModel.resetState()
         if (virtualNumber.isBlank()) {
             virtualNumber = generateRandom8Digits()
         }
@@ -255,7 +257,31 @@ fun VirtualNumberAuthScreen(
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
 
-                Spacer(modifier = Modifier.height(28.dp))
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Campo do Nome de Exibição
+                OutlinedTextField(
+                    value = displayName,
+                    onValueChange = { displayName = it },
+                    label = { Text("Nome de Exibição (Apelido ou Nome)") },
+                    placeholder = { Text("Ex: Carlos Silva") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Nome",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Campo do número virtual (8 dígitos)
                 OutlinedTextField(
@@ -428,7 +454,7 @@ fun VirtualNumberAuthScreen(
                             smsCode = digits
                             if (digits.length == 4) {
                                 focusManager.clearFocus()
-                                viewModel.verifyVirtualNumberCode(virtualNumber, digits)
+                                viewModel.verifyVirtualNumberCode(virtualNumber, digits, displayName)
                             }
                         }
                     },
@@ -447,7 +473,7 @@ fun VirtualNumberAuthScreen(
                 Button(
                     onClick = {
                         focusManager.clearFocus()
-                        viewModel.verifyVirtualNumberCode(virtualNumber, smsCode)
+                        viewModel.verifyVirtualNumberCode(virtualNumber, smsCode, displayName)
                     },
                     enabled = smsCode.length == 4 && uiState !is AuthUiState.Loading,
                     modifier = Modifier

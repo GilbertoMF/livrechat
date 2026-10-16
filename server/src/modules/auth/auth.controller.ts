@@ -105,13 +105,14 @@ export class AuthController {
 
   public static async verifyVirtualNumberCode(req: Request, res: Response) {
     try {
-      const { virtualNumber, code, deviceName } = req.body;
+      const { virtualNumber, code, deviceName, displayName } = req.body;
       const ipAddress = req.ip || req.socket.remoteAddress;
       const result = await AuthService.verifyVirtualNumberCode({
         virtualNumber,
         code,
         deviceName,
-        ipAddress
+        ipAddress,
+        displayName
       });
       return res.status(200).json(result);
     } catch (error: any) {

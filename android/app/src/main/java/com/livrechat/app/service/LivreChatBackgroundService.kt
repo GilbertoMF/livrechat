@@ -8,17 +8,24 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.livrechat.app.LivreChatApp
 import com.livrechat.app.MainActivity
 import com.livrechat.app.R
+import com.livrechat.app.notification.LivreChatNotificationManager
+import java.io.File
 
 class LivreChatBackgroundService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var activeAudioPlayer: MediaPlayer? = null
+    private var currentPlayingMsgId: String? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -30,18 +37,35 @@ class LivreChatBackgroundService : Service() {
             wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LivreChat:BackgroundSyncCpu")?.apply {
                 setReferenceCounted(false)
             }
+            wakeLock?.acquire(24 * 3600 * 1000L) // Crucial! Keeps CPU alive for real-time WebSocket events
         } catch (e: Exception) {}
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         if (action == ACTION_STOP) {
+            stopAudio()
             try {
                 if (wakeLock?.isHeld == true) wakeLock?.release()
             } catch (e: Exception) {}
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
+        }
+
+        if (action == ACTION_PLAY_AUDIO) {
+            val convId = intent.getStringExtra(EXTRA_CONVERSATION_ID) ?: ""
+            val sender = intent.getStringExtra(EXTRA_SENDER_NAME) ?: "LivreChat"
+            val msgId = intent.getStringExtra(EXTRA_MESSAGE_ID) ?: ""
+            val audioPath = intent.getStringExtra(EXTRA_AUDIO_PATH)
+            playNotificationAudio(convId, sender, msgId, audioPath)
+            return START_STICKY
+        } else if (action == ACTION_STOP_AUDIO) {
+            val convId = intent.getStringExtra(EXTRA_CONVERSATION_ID) ?: ""
+            val sender = intent.getStringExtra(EXTRA_SENDER_NAME) ?: "LivreChat"
+            val msgId = intent.getStringExtra(EXTRA_MESSAGE_ID) ?: ""
+            stopNotificationAudio(convId, sender, msgId)
+            return START_STICKY
         }
 
         val notification = buildPersistentNotification()
@@ -65,23 +89,91 @@ class LivreChatBackgroundService : Service() {
         return START_STICKY
     }
 
+    private fun playNotificationAudio(convId: String, senderName: String, messageId: String, audioPath: String?) {
+        stopAudio()
+
+        if (audioPath.isNullOrBlank()) return
+        val file = File(audioPath)
+        if (!file.exists() || file.length() == 0L) return
+
+        LivreChatNotificationManager.showMessageNotification(
+            context = applicationContext,
+            conversationId = convId,
+            senderName = senderName,
+            content = "▶ Reproduzindo áudio...",
+            messageId = messageId,
+            messageType = "audio",
+            isPlayingAudio = true
+        )
+
+        try {
+            val mp = MediaPlayer().apply {
+                setWakeMode(applicationContext, PowerManager.PARTIAL_WAKE_LOCK)
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                setDataSource(file.absolutePath)
+                setOnCompletionListener {
+                    stopNotificationAudio(convId, senderName, messageId)
+                }
+                setOnErrorListener { _, what, extra ->
+                    Log.e("LivreChatBgService", "Erro no MediaPlayer de notificação: what=$what, extra=$extra")
+                    stopNotificationAudio(convId, senderName, messageId)
+                    true
+                }
+                prepare()
+                start()
+            }
+            activeAudioPlayer = mp
+            currentPlayingMsgId = messageId
+        } catch (e: Exception) {
+            Log.e("LivreChatBgService", "Erro ao iniciar MediaPlayer de notificação: ${e.message}")
+            stopNotificationAudio(convId, senderName, messageId)
+        }
+    }
+
+    private fun stopNotificationAudio(convId: String, senderName: String, messageId: String) {
+        stopAudio()
+        LivreChatNotificationManager.showMessageNotification(
+            context = applicationContext,
+            conversationId = convId,
+            senderName = senderName,
+            content = "🎤 Mensagem de voz",
+            messageId = messageId,
+            messageType = "audio",
+            isPlayingAudio = false
+        )
+    }
+
+    private fun stopAudio() {
+        try {
+            activeAudioPlayer?.stop()
+            activeAudioPlayer?.release()
+        } catch (e: Exception) {}
+        activeAudioPlayer = null
+        currentPlayingMsgId = null
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         val prefs = LivreChatApp.instance.preferencesManager
         if (prefs.isLoggedIn()) {
-            // Immediate revive via AlarmManager when task is swiped away from recents
             BackgroundAlarmReceiver.scheduleImmediate(applicationContext)
+            start(applicationContext)
         }
     }
 
     override fun onDestroy() {
+        stopAudio()
         try {
             if (wakeLock?.isHeld == true) wakeLock?.release()
         } catch (e: Exception) {}
         super.onDestroy()
         val prefs = LivreChatApp.instance.preferencesManager
         if (prefs.isLoggedIn()) {
-            // Auto-restart service to ensure continuous message delivery
             BackgroundAlarmReceiver.scheduleImmediate(applicationContext)
             start(applicationContext)
         }
@@ -131,6 +223,12 @@ class LivreChatBackgroundService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ACTION_START = "ACTION_START_BG"
         const val ACTION_STOP = "ACTION_STOP_BG"
+        const val ACTION_PLAY_AUDIO = "com.livrechat.app.ACTION_BG_PLAY_AUDIO"
+        const val ACTION_STOP_AUDIO = "com.livrechat.app.ACTION_BG_STOP_AUDIO"
+        const val EXTRA_AUDIO_PATH = "extra_audio_path"
+        const val EXTRA_CONVERSATION_ID = "extra_conversation_id"
+        const val EXTRA_SENDER_NAME = "extra_sender_name"
+        const val EXTRA_MESSAGE_ID = "extra_message_id"
 
         fun start(context: Context) {
             val intent = Intent(context, LivreChatBackgroundService::class.java).apply {
@@ -142,9 +240,7 @@ class LivreChatBackgroundService : Service() {
                 } else {
                     context.startService(intent)
                 }
-            } catch (e: Exception) {
-                // Ignore if background restrictions apply
-            }
+            } catch (e: Exception) {}
         }
 
         fun stop(context: Context) {

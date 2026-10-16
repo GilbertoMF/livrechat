@@ -26,6 +26,12 @@ interface ApiService {
     @POST("api/auth/virtual-number/verify")
     suspend fun verifyVirtualNumberCode(@Body body: Map<String, String>): Response<LoginResponse>
 
+    @GET("api/auth/sessions")
+    suspend fun getSessions(): Response<List<SessionDto>>
+
+    @POST("api/auth/sessions/revoke-others")
+    suspend fun revokeOtherSessions(): Response<Map<String, Any>>
+
     @GET("api/messages/conversations")
     suspend fun getConversations(): Response<List<ConversationDto>>
 

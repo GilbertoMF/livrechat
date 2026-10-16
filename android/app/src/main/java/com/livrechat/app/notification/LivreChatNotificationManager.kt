@@ -313,6 +313,42 @@ object LivreChatNotificationManager {
         } catch (e: Exception) {}
     }
 
+    fun showMissedCallNotification(
+        context: Context,
+        callerName: String,
+        callerUserId: String
+    ) {
+        try {
+            val intent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("targetUserId", callerUserId)
+                putExtra("targetDisplayName", callerName)
+                putExtra("isVoiceCall", true)
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                (callerUserId + "_missed").hashCode(),
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_CALLS)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle("Chamada perdida")
+                .setContentText("Você perdeu uma chamada de $callerName")
+                .setStyle(NotificationCompat.BigTextStyle().bigText("Chamada perdida de $callerName. Toque para retornar."))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_MISSED_CALL)
+                .setAutoCancel(true)
+                .setSound(soundUri)
+                .setContentIntent(pendingIntent)
+
+            NotificationManagerCompat.from(context).notify((callerUserId + "_missed").hashCode(), builder.build())
+        } catch (e: Exception) {}
+    }
+
     fun showVirtualSmsNotification(
         context: Context,
         virtualNumber: String,

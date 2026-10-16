@@ -222,3 +222,12 @@ data class GroupMemberDto(
 data class AddMembersRequest(
     val memberIds: List<String>
 )
+
+data class SessionDto(
+    val id: String,
+    @SerializedName("user_id") val userId: String,
+    @SerializedName("device_name") val deviceName: String,
+    @SerializedName("ip_address") val ipAddress: String,
+    @SerializedName("last_active") val lastActive: String,
+    @SerializedName("created_at") val createdAt: String
+)

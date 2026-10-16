@@ -255,6 +255,7 @@ export class AuthService {
     code: string;
     deviceName?: string;
     ipAddress?: string;
+    displayName?: string;
   }) {
     const cleanNumber = data.virtualNumber.replace(/\D/g, '');
     if (cleanNumber.length !== 8) {
@@ -291,11 +292,17 @@ export class AuthService {
 
       const profile: UserProfile = {
         user_id: userId,
-        display_name: `ID ${cleanNumber}`,
+        display_name: data.displayName?.trim() || `ID ${cleanNumber}`,
         updated_at: now
       };
       await db.upsertProfile(profile);
       await db.getPreferences(userId);
+    } else if (data.displayName?.trim()) {
+      await db.upsertProfile({
+        user_id: user.id,
+        display_name: data.displayName.trim(),
+        updated_at: new Date().toISOString()
+      });
     }
 
     const profile = await db.getProfile(user.id);

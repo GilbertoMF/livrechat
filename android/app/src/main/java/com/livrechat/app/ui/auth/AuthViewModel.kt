@@ -223,7 +223,7 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    fun verifyVirtualNumberCode(virtualNumber: String, code: String) {
+    fun verifyVirtualNumberCode(virtualNumber: String, code: String, displayName: String? = null) {
         val cleanNumber = virtualNumber.replace(Regex("\\D"), "")
         val cleanCode = code.trim()
         if (cleanNumber.length != 8) {
@@ -238,13 +238,16 @@ class AuthViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
             try {
-                val res = apiService.verifyVirtualNumberCode(
-                    mapOf(
-                        "virtualNumber" to cleanNumber,
-                        "code" to cleanCode,
-                        "deviceName" to "Android ${android.os.Build.MODEL}"
-                    )
+                val payload = mutableMapOf(
+                    "virtualNumber" to cleanNumber,
+                    "code" to cleanCode,
+                    "deviceName" to "Android ${android.os.Build.MODEL}"
                 )
+                if (!displayName.isNullOrBlank()) {
+                    payload["displayName"] = displayName.trim()
+                }
+
+                val res = apiService.verifyVirtualNumberCode(payload)
                 if (res.isSuccessful && res.body() != null) {
                     val body = res.body()!!
 

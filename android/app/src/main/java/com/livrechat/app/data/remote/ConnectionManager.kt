@@ -384,6 +384,8 @@ class ConnectionManager(
         }
     }
 
+    private var lastIncomingCallerInfo: Triple<String, String, String>? = null // id, username, displayName
+
     override fun onIncomingCall(
         callerId: String,
         callerUsername: String,
@@ -391,6 +393,7 @@ class ConnectionManager(
         callerAvatarUrl: String?,
         sdp: String
     ) {
+        lastIncomingCallerInfo = Triple(callerId, callerUsername, callerDisplayName)
         LivreChatNotificationManager.showIncomingCallNotification(
             context = context,
             callerId = callerId,
@@ -408,6 +411,7 @@ class ConnectionManager(
     }
 
     override fun onCallAnswered(calleeId: String, sdp: String, startedAt: Long) {
+        lastIncomingCallerInfo = null
         LivreChatNotificationManager.cancelCallNotification(context)
         synchronized(listeners) {
             listeners.forEach { it.onCallAnswered(calleeId, sdp, startedAt) }
@@ -427,6 +431,7 @@ class ConnectionManager(
     }
 
     override fun onCallRejected(fromUserId: String, reason: String) {
+        lastIncomingCallerInfo = null
         LivreChatNotificationManager.cancelCallNotification(context)
         synchronized(listeners) {
             listeners.forEach { it.onCallRejected(fromUserId, reason) }
@@ -435,6 +440,31 @@ class ConnectionManager(
 
     override fun onCallEnded(fromUserId: String) {
         LivreChatNotificationManager.cancelCallNotification(context)
+        val incoming = lastIncomingCallerInfo
+        if (incoming != null && incoming.first == fromUserId) {
+            val (cId, cUser, cName) = incoming
+            lastIncomingCallerInfo = null
+            scope.launch {
+                val db = LivreChatApp.instance.database
+                val record = com.livrechat.app.data.local.entity.CallRecordEntity(
+                    id = java.util.UUID.randomUUID().toString(),
+                    contactUserId = cId,
+                    contactDisplayName = cName,
+                    contactUsername = cUser,
+                    contactAvatarUrl = null,
+                    isOutgoing = false,
+                    status = "missed",
+                    durationSeconds = 0,
+                    timestamp = System.currentTimeMillis()
+                )
+                db.callDao().insertCall(record)
+                LivreChatNotificationManager.showMissedCallNotification(
+                    context = context,
+                    callerName = cName,
+                    callerUserId = cId
+                )
+            }
+        }
         synchronized(listeners) {
             listeners.forEach { it.onCallEnded(fromUserId) }
         }

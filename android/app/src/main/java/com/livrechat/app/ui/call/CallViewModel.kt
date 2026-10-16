@@ -182,7 +182,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     }
 
     private fun cleanupCall() {
-        if (_callState.value != CallState.IDLE && _callInfo.value != null) {
+        if (_callState.value == CallState.CONNECTED) {
             playCallEndedTone()
         }
         LivreChatNotificationManager.cancelCallNotification(app)
@@ -307,7 +307,15 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     override fun onCallEnded(fromUserId: String) {
         val info = _callInfo.value
         if (info != null) {
-            recordCall(info, "completed", _durationSeconds.value)
+            val status = if (!info.isOutgoing && callStartTimeMs == 0L) "missed" else "completed"
+            recordCall(info, status, _durationSeconds.value)
+            if (status == "missed") {
+                LivreChatNotificationManager.showMissedCallNotification(
+                    context = app,
+                    callerName = info.contactDisplayName,
+                    callerUserId = info.contactUserId
+                )
+            }
         }
         webRTCManager?.endCall()
         cleanupCall()

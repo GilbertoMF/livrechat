@@ -189,19 +189,6 @@ class NotificationActionReceiver : BroadcastReceiver() {
         senderName: String,
         messageId: String
     ) {
-        stopAudioPlayback()
-
-        // Immediate UI update to show playing status and stop button
-        LivreChatNotificationManager.showMessageNotification(
-            context = context,
-            conversationId = conversationId,
-            senderName = senderName,
-            content = "▶ Reproduzindo áudio...",
-            messageId = messageId,
-            messageType = "audio",
-            isPlayingAudio = true
-        )
-
         val pendingResult = goAsync()
         receiverScope.launch {
             try {
@@ -218,40 +205,16 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                withContext(Dispatchers.Main) {
-                    try {
-                        val mp = MediaPlayer().apply {
-                            setWakeMode(context.applicationContext, PowerManager.PARTIAL_WAKE_LOCK)
-                            setAudioAttributes(
-                                AudioAttributes.Builder()
-                                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                                    .build()
-                            )
-                            setDataSource(audioFile.absolutePath)
-                            setOnCompletionListener {
-                                stopAudioPlayback()
-                                resetAudioNotification(context, conversationId, senderName, messageId)
-                            }
-                            setOnErrorListener { _, what, extra ->
-                                Log.e(TAG, "MediaPlayer error na notificação: what=$what, extra=$extra")
-                                stopAudioPlayback()
-                                resetAudioNotification(context, conversationId, senderName, messageId)
-                                true
-                            }
-                            prepare()
-                            start()
-                        }
-                        activeMediaPlayer = mp
-                        currentPlayingMessageId = messageId
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Erro ao iniciar MediaPlayer na notificação", e)
-                        stopAudioPlayback()
-                        resetAudioNotification(context, conversationId, senderName, messageId)
-                    }
+                val intent = Intent(context, com.livrechat.app.service.LivreChatBackgroundService::class.java).apply {
+                    action = com.livrechat.app.service.LivreChatBackgroundService.ACTION_PLAY_AUDIO
+                    putExtra(com.livrechat.app.service.LivreChatBackgroundService.EXTRA_CONVERSATION_ID, conversationId)
+                    putExtra(com.livrechat.app.service.LivreChatBackgroundService.EXTRA_SENDER_NAME, senderName)
+                    putExtra(com.livrechat.app.service.LivreChatBackgroundService.EXTRA_MESSAGE_ID, messageId)
+                    putExtra(com.livrechat.app.service.LivreChatBackgroundService.EXTRA_AUDIO_PATH, audioFile.absolutePath)
                 }
+                context.startService(intent)
             } catch (e: Exception) {
-                Log.e(TAG, "Erro ao carregar áudio para reprodução", e)
+                Log.e(TAG, "Erro ao repassar áudio para LivreChatBackgroundService", e)
                 resetAudioNotification(context, conversationId, senderName, messageId)
             } finally {
                 pendingResult.finish()
@@ -265,8 +228,13 @@ class NotificationActionReceiver : BroadcastReceiver() {
         senderName: String,
         messageId: String?
     ) {
-        stopAudioPlayback()
-        resetAudioNotification(context, conversationId, senderName, messageId)
+        val intent = Intent(context, com.livrechat.app.service.LivreChatBackgroundService::class.java).apply {
+            action = com.livrechat.app.service.LivreChatBackgroundService.ACTION_STOP_AUDIO
+            putExtra(com.livrechat.app.service.LivreChatBackgroundService.EXTRA_CONVERSATION_ID, conversationId)
+            putExtra(com.livrechat.app.service.LivreChatBackgroundService.EXTRA_SENDER_NAME, senderName)
+            putExtra(com.livrechat.app.service.LivreChatBackgroundService.EXTRA_MESSAGE_ID, messageId ?: "")
+        }
+        context.startService(intent)
     }
 
     private fun resetAudioNotification(

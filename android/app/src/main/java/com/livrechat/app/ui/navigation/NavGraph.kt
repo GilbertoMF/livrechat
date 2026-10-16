@@ -152,6 +152,9 @@ fun LivreChatNavGraph(
         }
     ) {
         composable(Routes.WELCOME) {
+            LaunchedEffect(Unit) {
+                authViewModel.resetState()
+            }
             WelcomeScreen(
                 onNavigateToVirtualNumber = { navController.navigate(Routes.VIRTUAL_NUMBER_AUTH) },
                 onNavigateToLogin = { navController.navigate(Routes.LOGIN) },
@@ -315,6 +318,7 @@ fun LivreChatNavGraph(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToBackup = { navController.navigate(Routes.BACKUP_RESTORE) },
                 onLogout = {
+                    authViewModel.resetState()
                     navController.navigate(Routes.WELCOME) {
                         popUpTo(0) { inclusive = true }
                     }
