@@ -1,5 +1,6 @@
 package com.livrechat.app.service
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -13,6 +14,7 @@ import android.media.MediaPlayer
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.livrechat.app.LivreChatApp
@@ -80,15 +82,6 @@ class LivreChatBackgroundService : Service() {
                 } else {
                     startForeground(NOTIFICATION_ID, notification)
                 }
-                // Instantly remove persistent notification from notification shade like WhatsApp
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                } else {
-                    @Suppress("DEPRECATION")
-                    stopForeground(true)
-                }
-                val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-                nm?.cancel(NOTIFICATION_ID)
             } catch (e: Exception) {}
         }
 
@@ -175,7 +168,30 @@ class LivreChatBackgroundService : Service() {
         val prefs = LivreChatApp.instance.preferencesManager
         if (prefs.isLoggedIn()) {
             try {
-                BackgroundAlarmReceiver.scheduleWatchdog(applicationContext, 30 * 1000L)
+                val restartIntent = Intent(applicationContext, LivreChatBackgroundService::class.java).apply {
+                    action = ACTION_START
+                }
+                val pendingIntent = PendingIntent.getService(
+                    applicationContext,
+                    101,
+                    restartIntent,
+                    PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager?.setExactAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + 500L,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager?.set(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + 500L,
+                        pendingIntent
+                    )
+                }
+                BackgroundAlarmReceiver.scheduleWatchdog(applicationContext, 1000L)
             } catch (e: Exception) {}
         }
     }
@@ -189,7 +205,30 @@ class LivreChatBackgroundService : Service() {
         val prefs = LivreChatApp.instance.preferencesManager
         if (prefs.isLoggedIn()) {
             try {
-                BackgroundAlarmReceiver.scheduleWatchdog(applicationContext, 10 * 1000L)
+                val restartIntent = Intent(applicationContext, LivreChatBackgroundService::class.java).apply {
+                    action = ACTION_START
+                }
+                val pendingIntent = PendingIntent.getService(
+                    applicationContext,
+                    102,
+                    restartIntent,
+                    PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager?.setExactAndAllowWhileIdle(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + 500L,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager?.set(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + 500L,
+                        pendingIntent
+                    )
+                }
+                BackgroundAlarmReceiver.scheduleWatchdog(applicationContext, 1000L)
             } catch (e: Exception) {}
         }
     }
@@ -205,6 +244,7 @@ class LivreChatBackgroundService : Service() {
                 setShowBadge(false)
                 enableVibration(false)
                 setSound(null, null)
+                lockscreenVisibility = Notification.VISIBILITY_SECRET
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -224,12 +264,14 @@ class LivreChatBackgroundService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("LivreChat")
-            .setContentText("Conectado")
+            .setContentText("Serviço ativo")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingOpen)
-            .setOngoing(false)
+            .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .setShowWhen(false)
             .build()
     }
 
@@ -250,14 +292,12 @@ class LivreChatBackgroundService : Service() {
                 action = ACTION_START
             }
             try {
-                context.startService(intent)
-            } catch (e: Exception) {
-                try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        context.startForegroundService(intent)
-                    }
-                } catch (e2: Exception) {}
-            }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {}
         }
 
         fun stop(context: Context) {
