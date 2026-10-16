@@ -10,10 +10,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface MessageDao {
-    @Query("SELECT * FROM messages WHERE conversationId = :convId ORDER BY createdAt ASC")
+    @Query("SELECT * FROM messages WHERE conversationId = :convId ORDER BY createdAt ASC, rowid ASC")
     fun getMessagesForConversationFlow(convId: String): Flow<List<MessageEntity>>
 
-    @Query("SELECT * FROM messages WHERE conversationId = :convId ORDER BY createdAt ASC")
+    @Query("SELECT * FROM messages WHERE conversationId = :convId ORDER BY createdAt ASC, rowid ASC")
     suspend fun getMessagesForConversation(convId: String): List<MessageEntity>
 
     @Query("SELECT * FROM messages WHERE id = :id LIMIT 1")
@@ -63,4 +63,10 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages")
     suspend fun getAllMessages(): List<MessageEntity>
+
+    @Query("SELECT * FROM messages WHERE conversationId = :convId AND createdAt > :threshold")
+    suspend fun getFutureMessages(convId: String, threshold: Long): List<MessageEntity>
+
+    @Query("UPDATE messages SET createdAt = :newCreatedAt WHERE id = :id")
+    suspend fun updateCreatedAt(id: String, newCreatedAt: Long)
 }

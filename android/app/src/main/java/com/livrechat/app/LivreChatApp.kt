@@ -47,7 +47,7 @@ class LivreChatApp : Application() {
             override fun onMessageReceived(message: MessageEntity) {}
             override fun onMessageAck(messageId: String, clientMessageId: String?, status: String) {}
             override fun onMessageReceipt(messageId: String, status: String, userId: String) {}
-            override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean) {}
+            override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean, displayName: String?) {}
             override fun onIncomingCall(callerId: String, callerUsername: String, callerDisplayName: String, callerAvatarUrl: String?, sdp: String) {}
             override fun onCallAnswered(calleeId: String, sdp: String) {}
             override fun onIceCandidateReceived(fromUserId: String, candidate: JsonObject) {}
@@ -69,6 +69,14 @@ class LivreChatApp : Application() {
             try {
                 database.openHelper.writableDatabase.execSQL(
                     "UPDATE messages SET content = '[Arquivo transferido / salvo]' WHERE length(content) > 250000 AND (content NOT LIKE 'file://%' AND content NOT LIKE '/%')"
+                )
+            } catch (e: Exception) {}
+            try {
+                val now = System.currentTimeMillis()
+                // Fix any messages saved with corrupted future timestamps (> now + 30s)
+                // due to the previous UTC without timezone parsing bug (+3h / 10,800,000ms)
+                database.openHelper.writableDatabase.execSQL(
+                    "UPDATE messages SET createdAt = CASE WHEN (createdAt - 10800000) > $now THEN ($now - 1000) ELSE (createdAt - 10800000) END WHERE createdAt > ${now + 30000}"
                 )
             } catch (e: Exception) {}
         }

@@ -17,6 +17,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import com.livrechat.app.util.TimeUtils
 import java.util.concurrent.TimeUnit
 
 interface WebSocketEventsListener {
@@ -200,6 +201,12 @@ class WebSocketClient(
                                 Log.d(TAG, "Mensagem descartada de usuário bloqueado: $senderId")
                                 return@launch
                             }
+                            val createdAtStr = m.get("created_at")?.asStringOrNull()
+                            val msgCreatedAt = if (!createdAtStr.isNullOrBlank()) {
+                                TimeUtils.parseIsoTimestamp(createdAtStr)
+                            } else {
+                                System.currentTimeMillis()
+                            }
                             val entity = MessageEntity(
                                 id = m.get("id").asStringOrDefault(),
                                 conversationId = m.get("conversation_id").asStringOrDefault(),
@@ -212,7 +219,7 @@ class WebSocketClient(
                                 isOutgoing = senderId == currentUserId,
                                 isEdited = m.get("is_edited").asBooleanOrDefault(false),
                                 isDeleted = m.get("is_deleted").asBooleanOrDefault(false),
-                                createdAt = System.currentTimeMillis()
+                                createdAt = msgCreatedAt
                             )
                             listener.onMessageReceived(entity)
                         }
@@ -330,18 +337,7 @@ class WebSocketClient(
                             val uid = json.get("userId").asStringOrNull()
                             val status = json.get("status").asStringOrDefault()
                             val timestampStr = json.get("timestamp").asStringOrNull()
-                            val ts = if (timestampStr != null) {
-                                try {
-                                    val instant = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                                        java.time.Instant.parse(timestampStr).toEpochMilli()
-                                    } else {
-                                        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).parse(timestampStr.take(19))?.time ?: System.currentTimeMillis()
-                                    }
-                                    instant
-                                } catch (e: Exception) {
-                                    System.currentTimeMillis()
-                                }
-                            } else System.currentTimeMillis()
+                            val ts = TimeUtils.parseIsoTimestamp(timestampStr)
                             if (uid != null) {
                                 val isOnline = (status == "online") && !preferencesManager.isUserBlocked(uid)
                                 listener.onUserStatus(uid, isOnline, ts)

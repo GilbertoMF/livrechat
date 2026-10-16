@@ -12,6 +12,7 @@ import com.livrechat.app.data.remote.WebSocketEventsListener
 import com.livrechat.app.data.remote.model.SendMessageRequest
 import com.livrechat.app.util.ChatSoundManager
 import com.livrechat.app.util.MediaFileManager
+import com.livrechat.app.util.TimeUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -71,6 +72,16 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         _messagesFlow.value = db.messageDao().getMessagesForConversationFlow(conversationId)
 
         viewModelScope.launch(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            try {
+                val futureList = db.messageDao().getFutureMessages(conversationId, now + 30_000L)
+                for (m in futureList) {
+                    val corrected = m.createdAt - 10_800_000L
+                    val safeTime = if (corrected > now) now - 1000L else corrected
+                    db.messageDao().updateCreatedAt(m.id, safeTime)
+                }
+            } catch (e: Exception) {}
+
             db.conversationDao().clearUnreadCount(conversationId)
             try {
                 apiService.markConversationRead(conversationId)
@@ -218,12 +229,12 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             }
                         }
 
-                        val parsedCreatedAt = try {
-                            java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).parse(dto.createdAt.take(19))?.time ?: System.currentTimeMillis()
-                        } catch (e: Exception) {
-                            System.currentTimeMillis()
+                        val parsedCreatedAt = TimeUtils.parseIsoTimestamp(dto.createdAt)
+                        val msgCreatedAt = if (existing != null && Math.abs(existing.createdAt - parsedCreatedAt) < 5_000) {
+                            existing.createdAt
+                        } else {
+                            parsedCreatedAt
                         }
-                        val msgCreatedAt = existing?.createdAt ?: parsedCreatedAt
 
                         MessageEntity(
                             id = dto.id,

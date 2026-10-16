@@ -10,6 +10,7 @@ import com.livrechat.app.crypto.CryptoManager
 import com.livrechat.app.data.local.entity.ContactEntity
 import com.livrechat.app.data.local.entity.ConversationEntity
 import com.livrechat.app.data.local.entity.MessageEntity
+import com.livrechat.app.util.TimeUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -144,11 +145,7 @@ class SettingsViewModel : ViewModel() {
                             val msgsRes = apiService.getMessages(conv.id, 100)
                             if (msgsRes.isSuccessful && msgsRes.body() != null) {
                                 val entities = msgsRes.body()!!.map { dto ->
-                                    val createdAtMs = try {
-                                        java.time.Instant.parse(dto.createdAt).toEpochMilli()
-                                    } catch (e: Exception) {
-                                        System.currentTimeMillis()
-                                    }
+                                    val createdAtMs = TimeUtils.parseIsoTimestamp(dto.createdAt)
                                     MessageEntity(
                                         id = dto.id,
                                         conversationId = dto.conversationId,
