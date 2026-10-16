@@ -33,7 +33,7 @@ app.get(['/', '/download', '/baixar', '/app'], (req, res) => {
 
 // Latest APK redirect
 app.get(['/apks/livrechat-latest.apk', '/download/latest'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.2-universal.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.3-universal.apk');
 });
 
 // Health check
@@ -46,37 +46,37 @@ app.get('/health', async (req, res) => {
   res.status(200).json({
     status: 'online',
     appName: 'LivreChat Server',
-    version: '1.1.2',
+    version: '1.1.3',
     fcmInitialized: fcmService.isAvailable(),
     registeredFcmDevices,
     timestamp: new Date().toISOString()
   });
 });
 
-const CDN_V112_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks';
+const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks';
 
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 12;
+  const LATEST_CODE = 13;
   const MIN_SUPPORTED = 12;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.2',
+    latestVersion: '1.1.3',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
     isMandatory,
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
-      ? 'Versões diferentes não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão disponível com melhorias de segurança e estabilidade.',
-    apkArm64Url: `${CDN_V112_BASE}/livrechat-v1.1.2-arm64.apk`,
-    apkArmv7Url: `${CDN_V112_BASE}/livrechat-v1.1.2-armv7.apk`,
-    apkUniversalUrl: `${CDN_V112_BASE}/livrechat-v1.1.2-universal.apk`,
+      ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
+      : 'Nova versão 1.1.3 disponível com correção de rotação de tela e download direto.',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.3-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.3-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.3-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -84,31 +84,43 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.2',
-      versionCode: 12,
+      version: '1.1.3',
+      versionCode: 13,
       minSupportedVersionCode: 12,
       releaseDate: '2026-10-16',
-      mandatory: true,
-      title: 'Atualização Obrigatória',
-      message: 'Versões diferentes não podem se comunicar por segurança. Atualize para a versão mais recente.',
-      apkArm64Url: `${CDN_V112_BASE}/livrechat-v1.1.2-arm64.apk`,
-      apkArmv7Url: `${CDN_V112_BASE}/livrechat-v1.1.2-armv7.apk`,
-      apkUniversalUrl: `${CDN_V112_BASE}/livrechat-v1.1.2-universal.apk`,
+      mandatory: false,
+      title: 'Atualização Disponível',
+      message: 'Correção de rotação de tela e links de download direto sem bloqueio no Chrome celular.',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.3-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.3-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.3-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '25.4 MB',
       sizeMbUniversal: '32.1 MB'
     },
     versions: [
       {
+        version: '1.1.3',
+        versionCode: 13,
+        releaseDate: '2026-10-16',
+        isLatest: true,
+        changelog: 'Correção definitiva na rotação de tela (não desativa mais o travamento vertical do sistema) e download direto de APKs via CDN Cloudflare sem bloqueio no Chrome de celular.',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '25.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.3-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '22.0 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.3-armv7.apk` },
+          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '32.1 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.3-universal.apk` }
+        ]
+      },
+      {
         version: '1.1.2',
         versionCode: 12,
         releaseDate: '2026-10-16',
-        isLatest: true,
+        isLatest: false,
         changelog: 'Banner de atualização obrigatória, trava de segurança entre versões diferentes e compatibilidade garantida de protocolo de mensagens e chamadas.',
         downloads: [
-          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '25.4 MB', url: `${CDN_V112_BASE}/livrechat-v1.1.2-arm64.apk` },
-          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '22.0 MB', url: `${CDN_V112_BASE}/livrechat-v1.1.2-armv7.apk` },
-          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '32.1 MB', url: `${CDN_V112_BASE}/livrechat-v1.1.2-universal.apk` }
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '25.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.2-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '22.0 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.2-armv7.apk` },
+          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '32.1 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.2-universal.apk` }
         ]
       },
       {
