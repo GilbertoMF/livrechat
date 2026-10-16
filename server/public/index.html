@@ -567,6 +567,217 @@
         justify-content: center;
       }
     }
+
+    /* Device Detector & Smart Recommender */
+    .device-detector-card {
+      background: linear-gradient(135deg, rgba(21, 26, 35, 0.95) 0%, rgba(28, 35, 48, 0.95) 100%);
+      border: 1px solid rgba(0, 230, 118, 0.35);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 24px rgba(0, 230, 118, 0.12);
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .device-detector-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #00E676, #2979FF, #00E676);
+      background-size: 200% 100%;
+      animation: gradientShift 4s ease infinite;
+    }
+
+    @keyframes gradientShift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .device-detector-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .detector-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0, 230, 118, 0.12);
+      border: 1px solid rgba(0, 230, 118, 0.3);
+      padding: 6px 14px;
+      border-radius: var(--radius-full);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .detector-pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--primary);
+      box-shadow: 0 0 10px var(--primary);
+      animation: pulseAnim 2s infinite;
+    }
+
+    .compatibility-tag {
+      font-size: 12px;
+      font-weight: 600;
+      color: #94A3B8;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+    }
+
+    .detector-body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .rec-box {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .rec-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      font-weight: 800;
+      color: var(--primary);
+    }
+
+    .rec-name {
+      font-size: 18px;
+      font-weight: 800;
+      color: #FFFFFF;
+      letter-spacing: -0.3px;
+    }
+
+    .rec-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .btn-smart-download {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: linear-gradient(135deg, #00E676 0%, #00C853 100%);
+      color: #07170F;
+      font-size: 16px;
+      font-weight: 800;
+      padding: 16px 28px;
+      border-radius: var(--radius-md);
+      text-decoration: none;
+      box-shadow: 0 6px 24px rgba(0, 230, 118, 0.35);
+      transition: all 0.25s ease;
+      cursor: pointer;
+      border: none;
+      width: 100%;
+    }
+
+    .btn-smart-download:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(0, 230, 118, 0.5);
+      background: linear-gradient(135deg, #1DE9B6 0%, #00E676 100%);
+    }
+
+    .btn-smart-download svg {
+      width: 22px;
+      height: 22px;
+      fill: currentColor;
+    }
+
+    .manual-picker-section {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px dashed rgba(255, 255, 255, 0.1);
+    }
+
+    .manual-picker-title {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+    }
+
+    .manual-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .manual-pill {
+      flex: 1;
+      min-width: 140px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 12px 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      color: var(--text);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .manual-pill:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
+    }
+
+    .manual-pill.is-recommended {
+      border-color: rgba(0, 230, 118, 0.6);
+      background: rgba(0, 230, 118, 0.08);
+    }
+
+    .manual-pill-rec-tag {
+      position: absolute;
+      top: -9px;
+      right: 10px;
+      font-size: 10px;
+      font-weight: 800;
+      background: #00E676;
+      color: #07170F;
+      padding: 1px 7px;
+      border-radius: var(--radius-full);
+      box-shadow: 0 2px 8px rgba(0, 230, 118, 0.4);
+    }
+
+    .manual-pill-size {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
   </style>
 </head>
 <body>
@@ -598,23 +809,58 @@
       <p>Converse, faça chamadas de voz WebRTC criptografadas e envie mídias com quem você quiser com máxima segurança e liberdade.</p>
 
       <div class="cta-box">
-        <div class="btn-group">
-          <a href="https://github.com/GilbertoMF/livrechat/releases/download/v1.1.2/livrechat-v1.1.2-arm64.apk" class="btn btn-primary" download>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
-            </svg>
-            <span>Baixar APK Mais Recente (v1.1.2 ARM64)</span>
-            <span class="badge-pill">25.4 MB</span>
-          </a>
-          <a href="https://github.com/GilbertoMF/livrechat/releases/download/v1.1.2/livrechat-v1.1.2-armv7.apk" class="btn btn-secondary" download>
-            <span>APK 32-bit (Moto e6i / Básicos)</span>
-            <span class="badge-pill">22.0 MB</span>
-          </a>
-          <a href="https://github.com/GilbertoMF/livrechat/releases/download/v1.1.2/livrechat-v1.1.2-universal.apk" class="btn btn-secondary" download>
-            <span>APK Universal (Todos os Aparelhos)</span>
-            <span class="badge-pill">32.1 MB</span>
-          </a>
+        <div class="device-detector-card" id="deviceDetectorCard">
+          <div class="device-detector-header">
+            <div class="detector-chip">
+              <span class="detector-pulse"></span>
+              <span id="detectorChipText">Identificando seu dispositivo...</span>
+            </div>
+            <span class="compatibility-tag" id="compatibilityTag">Verificando Android...</span>
+          </div>
+
+          <div class="detector-body">
+            <div class="rec-box">
+              <div class="rec-title-row">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                <span>Versão Ideal para seu Aparelho:</span>
+              </div>
+              <div class="rec-name" id="recApkName">APK Mais Recente (v1.1.2)</div>
+              <div class="rec-desc" id="recApkDesc">Analisando arquitetura do processador e versão do Android para selecionar o melhor instalador...</div>
+            </div>
+
+            <a href="https://github.com/GilbertoMF/livrechat/releases/download/v1.1.2/livrechat-v1.1.2-universal.apk" id="smartDownloadBtn" class="btn-smart-download" download>
+              <svg viewBox="0 0 24 24">
+                <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+              </svg>
+              <span id="smartBtnText">Baixar APK Recomendado</span>
+              <span class="badge-pill" id="smartBtnSize">32.1 MB</span>
+            </a>
+
+            <div class="manual-picker-section">
+              <div class="manual-picker-title">
+                <span>Ou escolha manualmente a versão que preferir:</span>
+                <span style="font-size: 11px; color: var(--primary);">100% Gratuito</span>
+              </div>
+              <div class="manual-pills">
+                <a href="https://github.com/GilbertoMF/livrechat/releases/download/v1.1.2/livrechat-v1.1.2-arm64.apk" id="pillArm64" class="manual-pill" download>
+                  <span>APK Leve (ARM64)</span>
+                  <span class="manual-pill-size">POCO / Modernos • 25.4 MB</span>
+                </a>
+                <a href="https://github.com/GilbertoMF/livrechat/releases/download/v1.1.2/livrechat-v1.1.2-armv7.apk" id="pillArmv7" class="manual-pill" download>
+                  <span>APK 32-bit (ARMv7)</span>
+                  <span class="manual-pill-size">Moto e6i / Básicos • 22.0 MB</span>
+                </a>
+                <a href="https://github.com/GilbertoMF/livrechat/releases/download/v1.1.2/livrechat-v1.1.2-universal.apk" id="pillUniversal" class="manual-pill" download>
+                  <span>APK Universal</span>
+                  <span class="manual-pill-size">Todos os Celulares • 32.1 MB</span>
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
+
         <div class="sub-cta-info">
           <span>
             <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
@@ -1128,5 +1374,158 @@
       <p style="margin-top: 8px;">Código aberto disponível no <a href="https://github.com/GilbertoMF/livrechat" target="_blank" rel="noopener">GitHub</a>.</p>
     </footer>
   </div>
+
+  <script>
+    (function initSmartDeviceDetector() {
+      const ua = navigator.userAgent || '';
+      const isAndroid = /Android/i.test(ua);
+      const isIOS = /iPhone|iPad|iPod/i.test(ua);
+      const isWindows = /Windows/i.test(ua);
+      const isMac = /Macintosh/i.test(ua);
+      const isLinux = /Linux/i.test(ua) && !isAndroid;
+
+      const chipText = document.getElementById('detectorChipText');
+      const compatTag = document.getElementById('compatibilityTag');
+      const recName = document.getElementById('recApkName');
+      const recDesc = document.getElementById('recApkDesc');
+      const smartBtn = document.getElementById('smartDownloadBtn');
+      const smartBtnText = document.getElementById('smartBtnText');
+      const smartBtnSize = document.getElementById('smartBtnSize');
+
+      const pillArm64 = document.getElementById('pillArm64');
+      const pillArmv7 = document.getElementById('pillArmv7');
+      const pillUniversal = document.getElementById('pillUniversal');
+
+      const URL_ARM64 = 'https://github.com/GilbertoMF/livrechat/releases/download/v1.1.2/livrechat-v1.1.2-arm64.apk';
+      const URL_ARMV7 = 'https://github.com/GilbertoMF/livrechat/releases/download/v1.1.2/livrechat-v1.1.2-armv7.apk';
+      const URL_UNIVERSAL = 'https://github.com/GilbertoMF/livrechat/releases/download/v1.1.2/livrechat-v1.1.2-universal.apk';
+
+      function setRecommendation(type, title, desc, url, sizeText, deviceLabel, compatText, isCompatible) {
+        if (chipText) chipText.textContent = deviceLabel;
+        if (compatTag) {
+          compatTag.textContent = compatText;
+          compatTag.style.color = isCompatible ? '#00E676' : '#FFB74D';
+          compatTag.style.borderColor = isCompatible ? 'rgba(0, 230, 118, 0.3)' : 'rgba(255, 183, 77, 0.3)';
+        }
+        if (recName) recName.textContent = title;
+        if (recDesc) recDesc.textContent = desc;
+        if (smartBtn) {
+          smartBtn.href = url;
+          smartBtn.setAttribute('download', '');
+        }
+        if (smartBtnText) smartBtnText.textContent = 'Baixar ' + title;
+        if (smartBtnSize) smartBtnSize.textContent = sizeText;
+
+        [pillArm64, pillArmv7, pillUniversal].forEach(p => {
+          if (p) {
+            p.classList.remove('is-recommended');
+            const badge = p.querySelector('.manual-pill-rec-tag');
+            if (badge) badge.remove();
+          }
+        });
+
+        let targetPill = null;
+        if (type === 'arm64') targetPill = pillArm64;
+        else if (type === 'armv7') targetPill = pillArmv7;
+        else if (type === 'universal') targetPill = pillUniversal;
+
+        if (targetPill) {
+          targetPill.classList.add('is-recommended');
+          const tag = document.createElement('span');
+          tag.className = 'manual-pill-rec-tag';
+          tag.textContent = 'Ideal para você';
+          targetPill.appendChild(tag);
+        }
+      }
+
+      function evaluateDevice(hints) {
+        if (isAndroid) {
+          let versionStr = '8.0+';
+          let versionNum = 12;
+          const vMatch = ua.match(/Android\s([0-9\.]+)/i);
+          if (vMatch && vMatch[1]) {
+            versionStr = vMatch[1];
+            versionNum = parseFloat(vMatch[1]);
+          }
+
+          let modelName = '';
+          if (hints && hints.model) {
+            modelName = hints.model;
+          } else {
+            const mMatch = ua.match(/;\s([^;]+)\sBuild\//i);
+            if (mMatch && mMatch[1]) {
+              modelName = mMatch[1].trim();
+            }
+          }
+
+          let is64Bit = true;
+          if (hints && hints.bitness) {
+            is64Bit = hints.bitness === '64';
+          } else {
+            const mem = navigator.deviceMemory || 4;
+            const cores = navigator.hardwareConcurrency || 4;
+            const lowerModel = modelName.toLowerCase();
+            const isLowEnd = mem <= 2 && cores <= 4;
+            if (/armv7|armeabi/i.test(ua) || (isLowEnd && (lowerModel.includes('e6i') || lowerModel.includes('go') || lowerModel.includes('lite') || lowerModel.includes('a01')))) {
+              is64Bit = false;
+            }
+          }
+
+          const deviceNameDisplay = modelName ? `${modelName} • Android ${versionStr}` : `Android ${versionStr}`;
+          const isSupported = versionNum >= 8.0;
+          const compatText = isSupported ? '✓ Compatível com LivreChat' : '⚠️ Android antigo (< 8.0)';
+
+          if (!is64Bit) {
+            setRecommendation(
+              'armv7',
+              'APK 32-bit ARMv7 (Otimizado)',
+              'Detectamos seu celular como arquitetura 32-bit (ARMv7 / Android Go). Esta versão é super leve (22 MB), consome pouca memória RAM e garante alta fluidez no seu aparelho.',
+              URL_ARMV7,
+              '22.0 MB',
+              `📱 ${deviceNameDisplay} (32-bit)`,
+              compatText,
+              isSupported
+            );
+          } else {
+            setRecommendation(
+              'arm64',
+              'APK Leve ARM64 (Alta Performance)',
+              'Detectamos processador moderno de 64-bit (ARM64). Esta versão entrega a máxima velocidade de resposta, abre 2x mais rápido e economiza bateria.',
+              URL_ARM64,
+              '25.4 MB',
+              `📱 ${deviceNameDisplay} (64-bit)`,
+              compatText,
+              isSupported
+            );
+          }
+        } else {
+          let osName = 'Computador / Outro';
+          if (isWindows) osName = 'Windows';
+          else if (isMac) osName = 'macOS';
+          else if (isIOS) osName = 'iPhone / iPad';
+          else if (isLinux) osName = 'Linux';
+
+          setRecommendation(
+            'universal',
+            'APK Universal (Todos os Aparelhos)',
+            `Você está navegando a partir de um ${osName}. O LivreChat é desenvolvido para Android. Baixe o APK Universal para transferir ao seu smartphone ou abra este site no navegador do seu celular Android para instalar diretamente!`,
+            URL_UNIVERSAL,
+            '32.1 MB',
+            `💻 ${osName} detectado`,
+            'Disponível para Android',
+            true
+          );
+        }
+      }
+
+      if (navigator.userAgentData && typeof navigator.userAgentData.getHighEntropyValues === 'function') {
+        navigator.userAgentData.getHighEntropyValues(['architecture', 'bitness', 'model', 'platformVersion'])
+          .then(hints => evaluateDevice(hints))
+          .catch(() => evaluateDevice(null));
+      } else {
+        evaluateDevice(null);
+      }
+    })();
+  </script>
 </body>
 </html>
