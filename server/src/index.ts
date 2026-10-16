@@ -33,7 +33,7 @@ app.get(['/', '/download', '/baixar', '/app'], (req, res) => {
 
 // Latest APK redirect
 app.get(['/apks/livrechat-latest.apk', '/download/latest'], (req, res) => {
-  res.redirect('https://github.com/GilbertoMF/livrechat/releases/download/v1.1.2/livrechat-v1.1.2-universal.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.2-universal.apk');
 });
 
 // Health check
@@ -53,8 +53,7 @@ app.get('/health', async (req, res) => {
   });
 });
 
-const GITHUB_V112_BASE = 'https://github.com/GilbertoMF/livrechat/releases/download/v1.1.2';
-const GITHUB_V112_TAG = 'https://github.com/GilbertoMF/livrechat/releases/tag/v1.1.2';
+const CDN_V112_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks';
 
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
@@ -75,10 +74,10 @@ app.get('/api/versions/check', (req, res) => {
     message: isMandatory
       ? 'Versões diferentes não podem se comunicar por segurança. Atualize para a versão mais recente.'
       : 'Nova versão disponível com melhorias de segurança e estabilidade.',
-    apkArm64Url: `${GITHUB_V112_BASE}/livrechat-v1.1.2-arm64.apk`,
-    apkArmv7Url: `${GITHUB_V112_BASE}/livrechat-v1.1.2-armv7.apk`,
-    apkUniversalUrl: `${GITHUB_V112_BASE}/livrechat-v1.1.2-universal.apk`,
-    downloadPortalUrl: GITHUB_V112_TAG
+    apkArm64Url: `${CDN_V112_BASE}/livrechat-v1.1.2-arm64.apk`,
+    apkArmv7Url: `${CDN_V112_BASE}/livrechat-v1.1.2-armv7.apk`,
+    apkUniversalUrl: `${CDN_V112_BASE}/livrechat-v1.1.2-universal.apk`,
+    downloadPortalUrl: '/download'
   });
 });
 
@@ -92,10 +91,10 @@ app.get('/api/versions', (req, res) => {
       mandatory: true,
       title: 'Atualização Obrigatória',
       message: 'Versões diferentes não podem se comunicar por segurança. Atualize para a versão mais recente.',
-      apkArm64Url: `${GITHUB_V112_BASE}/livrechat-v1.1.2-arm64.apk`,
-      apkArmv7Url: `${GITHUB_V112_BASE}/livrechat-v1.1.2-armv7.apk`,
-      apkUniversalUrl: `${GITHUB_V112_BASE}/livrechat-v1.1.2-universal.apk`,
-      downloadPortalUrl: GITHUB_V112_TAG,
+      apkArm64Url: `${CDN_V112_BASE}/livrechat-v1.1.2-arm64.apk`,
+      apkArmv7Url: `${CDN_V112_BASE}/livrechat-v1.1.2-armv7.apk`,
+      apkUniversalUrl: `${CDN_V112_BASE}/livrechat-v1.1.2-universal.apk`,
+      downloadPortalUrl: '/download',
       sizeMbArm64: '25.4 MB',
       sizeMbUniversal: '32.1 MB'
     },
@@ -107,9 +106,9 @@ app.get('/api/versions', (req, res) => {
         isLatest: true,
         changelog: 'Banner de atualização obrigatória, trava de segurança entre versões diferentes e compatibilidade garantida de protocolo de mensagens e chamadas.',
         downloads: [
-          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '25.4 MB', url: `${GITHUB_V112_BASE}/livrechat-v1.1.2-arm64.apk` },
-          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '22.0 MB', url: `${GITHUB_V112_BASE}/livrechat-v1.1.2-armv7.apk` },
-          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '32.1 MB', url: `${GITHUB_V112_BASE}/livrechat-v1.1.2-universal.apk` }
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '25.4 MB', url: `${CDN_V112_BASE}/livrechat-v1.1.2-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '22.0 MB', url: `${CDN_V112_BASE}/livrechat-v1.1.2-armv7.apk` },
+          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '32.1 MB', url: `${CDN_V112_BASE}/livrechat-v1.1.2-universal.apk` }
         ]
       },
       {
