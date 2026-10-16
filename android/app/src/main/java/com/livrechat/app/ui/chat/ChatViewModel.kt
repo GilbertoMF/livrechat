@@ -154,7 +154,10 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             isMuted = dto.isMuted,
                             isGroup = dto.isGroup,
                             groupTitle = dto.title,
-                            groupAvatar = dto.avatarUrl
+                            groupAvatar = dto.avatarUrl,
+                            adminOnlyMessage = dto.adminOnlyMessage ?: localExisting?.adminOnlyMessage ?: false,
+                            adminOnlyEditInfo = dto.adminOnlyEditInfo ?: localExisting?.adminOnlyEditInfo ?: false,
+                            adminOnlyAddMembers = dto.adminOnlyAddMembers ?: localExisting?.adminOnlyAddMembers ?: false
                         )
                     }
                     db.conversationDao().insertAll(entities)
@@ -177,13 +180,14 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                     val entities = dtoList.map { dto ->
                         val existing = existingMap[dto.id]
                         val calculatedStatus: String = if (dto.senderId == myId) {
+                            val otherReceipts = dto.receipts?.filter { it.userId != null && it.userId != myId }
                             when {
                                 existing?.status == "read" -> "read"
                                 dto.status == "read" -> "read"
-                                dto.receipts?.any { it.status == "read" } == true -> "read"
+                                otherReceipts?.any { it.status == "read" } == true -> "read"
                                 existing?.status == "delivered" -> "delivered"
                                 dto.status == "delivered" -> "delivered"
-                                dto.receipts?.any { it.status == "delivered" } == true -> "delivered"
+                                otherReceipts?.any { it.status == "delivered" } == true -> "delivered"
                                 else -> existing?.status ?: "sent"
                             }
                         } else {
@@ -305,11 +309,11 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                     )
                     if (res.isSuccessful) {
                         db.messageDao().updateStatus(clientMessageId, "sent")
-                    } else {
+                    } else if (res.code() in 400..499) {
                         db.messageDao().updateStatus(clientMessageId, "failed")
                     }
                 } catch (e: Exception) {
-                    db.messageDao().updateStatus(clientMessageId, "failed")
+                    // Erro de rede ou sem conexão: mantém 'sending' na caixa de saída (ícone de relógio)
                 }
             }
         }
@@ -377,11 +381,11 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                     )
                     if (res.isSuccessful) {
                         db.messageDao().updateStatus(clientMessageId, "sent")
-                    } else {
+                    } else if (res.code() in 400..499) {
                         db.messageDao().updateStatus(clientMessageId, "failed")
                     }
                 } catch (e: Exception) {
-                    db.messageDao().updateStatus(clientMessageId, "failed")
+                    // Erro de rede ou sem conexão: mantém 'sending' na caixa de saída (ícone de relógio)
                 }
             }
         }
@@ -496,11 +500,11 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                     )
                     if (res.isSuccessful) {
                         db.messageDao().updateStatus(clientMessageId, "sent")
-                    } else {
+                    } else if (res.code() in 400..499) {
                         db.messageDao().updateStatus(clientMessageId, "failed")
                     }
                 } catch (e: Exception) {
-                    db.messageDao().updateStatus(clientMessageId, "failed")
+                    // Erro de rede ou sem conexão: mantém 'sending' na caixa de saída (ícone de relógio)
                 }
             }
         }
@@ -631,7 +635,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
 
     private var contactRecordingAudioJob: Job? = null
 
-    override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean) {
+    override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean, displayName: String?) {
         if (_currentConversationId.value == conversationId) {
             contactTypingJob?.cancel()
             _isContactTyping.value = isTyping
@@ -644,7 +648,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         }
     }
 
-    override fun onRecordingAudio(conversationId: String, userId: String, username: String, isRecording: Boolean) {
+    override fun onRecordingAudio(conversationId: String, userId: String, username: String, isRecording: Boolean, displayName: String?) {
         if (_currentConversationId.value == conversationId) {
             contactRecordingAudioJob?.cancel()
             _isContactRecordingAudio.value = isRecording

@@ -84,8 +84,9 @@ export class MessagesController {
       const enriched = await Promise.all(
         messages.map(async m => {
           const receipts = await db.getReceiptsForMessage(m.id);
-          const hasRead = receipts.some(r => r.status === 'read');
-          const hasDelivered = receipts.some(r => r.status === 'delivered');
+          const otherReceipts = receipts.filter(r => r.user_id !== m.sender_id);
+          const hasRead = otherReceipts.some(r => r.status === 'read');
+          const hasDelivered = otherReceipts.some(r => r.status === 'delivered');
           const status = hasRead ? 'read' : (hasDelivered ? 'delivered' : 'sent');
           const senderProfile = await db.getProfile(m.sender_id);
           const senderUser = await db.findUserById(m.sender_id);
@@ -172,6 +173,8 @@ export class MessagesController {
         }
         for (const memberId of members) {
           if (memberId !== senderId) {
+            const blocked = await db.isBlocked(senderId, memberId);
+            if (blocked) continue;
             wsManager.sendToUser(memberId, {
               type: 'chat:message',
               message: payloadMessage
@@ -262,11 +265,19 @@ export class MessagesController {
 
       await db.markConversationAsRead(conversationId, userId);
 
-      WebSocketManager.getInstance()?.broadcast({
-        type: 'chat:conversation_read',
-        conversationId,
-        userId
-      });
+      const wsManager = WebSocketManager.getInstance();
+      if (wsManager) {
+        const members = await db.getConversationMembers(conversationId);
+        for (const memberId of members) {
+          if (memberId !== userId) {
+            wsManager.sendToUser(memberId, {
+              type: 'chat:conversation_read',
+              conversationId,
+              userId
+            });
+          }
+        }
+      }
 
       return res.status(200).json({ success: true });
     } catch (e: any) {

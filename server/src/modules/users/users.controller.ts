@@ -76,18 +76,31 @@ export class UsersController {
       const userId = req.user!.userId;
       const { displayName, bio, avatarUrl, publicKey, phoneNumber } = req.body;
 
+      const existing = await db.getProfile(userId);
+      const effectiveDisplayName = (displayName !== undefined && displayName !== null && displayName.trim().length > 0)
+        ? displayName.trim()
+        : (existing?.display_name || req.user!.username);
+
       const profile = await db.upsertProfile({
         user_id: userId,
-        display_name: displayName || req.user!.username,
-        bio: bio || '',
-        avatar_url: avatarUrl,
-        public_key: publicKey,
-        phone_number: phoneNumber,
+        display_name: effectiveDisplayName,
+        bio: bio !== undefined ? bio : (existing?.bio || ''),
+        avatar_url: avatarUrl !== undefined ? avatarUrl : existing?.avatar_url,
+        public_key: publicKey !== undefined ? publicKey : existing?.public_key,
+        phone_number: phoneNumber !== undefined ? phoneNumber : existing?.phone_number,
         updated_at: new Date().toISOString()
       });
 
       return res.status(200).json({
-        ...profile,
+        id: userId,
+        userId: userId,
+        username: req.user!.username,
+        displayName: profile.display_name,
+        display_name: profile.display_name,
+        bio: profile.bio,
+        avatarUrl: profile.avatar_url,
+        avatar_url: profile.avatar_url,
+        publicKey: profile.public_key,
         phoneNumber: profile.phone_number
       });
     } catch (e: any) {

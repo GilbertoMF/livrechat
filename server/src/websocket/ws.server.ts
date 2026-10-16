@@ -133,7 +133,7 @@ export class WebSocketManager {
       }
     });
 
-    // Heartbeat Interval to clean dead sockets
+    // Heartbeat Interval to clean dead sockets quickly (10s)
     setInterval(() => {
       this.wss.clients.forEach((client: any) => {
         const authWs = client as AuthenticatedSocket;
@@ -143,7 +143,7 @@ export class WebSocketManager {
         authWs.isAlive = false;
         authWs.ping();
       });
-    }, 30000);
+    }, 10000);
   }
 
   private async handleIncomingEvent(senderWs: AuthenticatedSocket, event: any) {
@@ -291,6 +291,8 @@ export class WebSocketManager {
         if (targetUserId && !members.includes(targetUserId)) {
           members.push(targetUserId);
         }
+        const profile = await db.getProfile(senderId);
+        const displayName = profile?.display_name || senderWs.username || '';
         for (const memberId of members) {
           if (memberId !== senderId) {
             const blocked = await db.isBlocked(senderId, memberId);
@@ -300,6 +302,7 @@ export class WebSocketManager {
               conversationId,
               userId: senderId,
               username: senderWs.username,
+              displayName,
               isTyping: !!isTyping
             });
           }
@@ -314,6 +317,8 @@ export class WebSocketManager {
         if (targetUserId && !members.includes(targetUserId)) {
           members.push(targetUserId);
         }
+        const profile = await db.getProfile(senderId);
+        const displayName = profile?.display_name || senderWs.username || '';
         for (const memberId of members) {
           if (memberId !== senderId) {
             const blocked = await db.isBlocked(senderId, memberId);
@@ -323,6 +328,7 @@ export class WebSocketManager {
               conversationId,
               userId: senderId,
               username: senderWs.username,
+              displayName,
               isRecording: !!isRecording
             });
           }

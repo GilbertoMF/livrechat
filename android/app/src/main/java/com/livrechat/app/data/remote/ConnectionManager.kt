@@ -40,9 +40,17 @@ class ConnectionManager(
     private val _typingStatus = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val typingStatus: StateFlow<Map<String, Boolean>> = _typingStatus.asStateFlow()
 
+    // Map of conversationId -> displayName/username of who is typing
+    private val _typingUserByConv = MutableStateFlow<Map<String, String?>>(emptyMap())
+    val typingUserByConv: StateFlow<Map<String, String?>> = _typingUserByConv.asStateFlow()
+
     // Map of conversationId -> isRecordingAudio
     private val _recordingAudioStatus = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val recordingAudioStatus: StateFlow<Map<String, Boolean>> = _recordingAudioStatus.asStateFlow()
+
+    // Map of conversationId -> displayName/username of who is recording audio
+    private val _recordingUserByConv = MutableStateFlow<Map<String, String?>>(emptyMap())
+    val recordingUserByConv: StateFlow<Map<String, String?>> = _recordingUserByConv.asStateFlow()
 
     // Map of userId -> isOnline
     private val _onlineUsers = MutableStateFlow<Map<String, Boolean>>(emptyMap())
@@ -65,10 +73,19 @@ class ConnectionManager(
             cm?.registerNetworkCallback(request, object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
                     val prefs = LivreChatApp.instance.preferencesManager
-                    if (prefs.isLoggedIn() && !_isConnected.value) {
-                        Log.d(TAG, "Rede de internet disponível. Conectando WebSocket...")
+                    if (prefs.isLoggedIn()) {
+                        Log.d(TAG, "Rede de internet disponível. Conectando WebSocket e descarregando outbox...")
                         connect()
+                        flushOutbox()
                     }
+                }
+
+                override fun onLost(network: Network) {
+                    Log.d(TAG, "Conexão de internet perdida.")
+                    _isConnected.value = false
+                    try {
+                        webSocketClient.disconnect()
+                    } catch (e: Exception) {}
                 }
             })
         } catch (e: Exception) {
@@ -102,8 +119,58 @@ class ConnectionManager(
 
     fun getClient(): WebSocketClient = webSocketClient
 
+    fun flushOutbox() {
+        val prefs = LivreChatApp.instance.preferencesManager
+        if (!prefs.isLoggedIn()) return
+        scope.launch {
+            try {
+                val db = LivreChatApp.instance.database
+                val pending = db.messageDao().getPendingOutboxMessages()
+                if (pending.isEmpty()) return@launch
+                Log.d(TAG, "Reenviando ${pending.size} mensagens pendentes na caixa de saída...")
+
+                for (msg in pending) {
+                    var sent = false
+                    if (_isConnected.value) {
+                        sent = webSocketClient.sendChatMessage(
+                            conversationId = msg.conversationId,
+                            content = msg.content,
+                            iv = msg.iv,
+                            messageType = msg.messageType,
+                            replyToId = msg.replyToId,
+                            clientMessageId = msg.id,
+                            targetUserId = null
+                        )
+                    }
+                    if (!sent) {
+                        try {
+                            val res = LivreChatApp.instance.apiClient.apiService.sendMessage(
+                                com.livrechat.app.data.remote.model.SendMessageRequest(
+                                    conversationId = msg.conversationId,
+                                    content = msg.content,
+                                    iv = msg.iv,
+                                    messageType = msg.messageType,
+                                    replyToId = msg.replyToId,
+                                    clientMessageId = msg.id
+                                )
+                            )
+                            if (res.isSuccessful) {
+                                db.messageDao().updateStatus(msg.id, "sent")
+                            }
+                        } catch (e: Exception) {
+                            // Erro de rede: permanece como 'sending'
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Erro ao processar caixa de saída: ${e.message}")
+            }
+        }
+    }
+
     override fun onConnected() {
         _isConnected.value = true
+        flushOutbox()
         synchronized(listeners) {
             listeners.forEach { it.onConnected() }
         }
@@ -192,7 +259,7 @@ class ConnectionManager(
                             db.conversationDao().insertOrUpdate(
                                 newConv.copy(
                                     otherUsername = userDto.username,
-                                    otherDisplayName = if (userDto.displayName.isNotBlank()) userDto.displayName else userDto.username,
+                                    otherDisplayName = userDto.displayName?.takeIf { it.isNotBlank() } ?: userDto.username,
                                     otherAvatarUrl = userDto.avatarUrl,
                                     otherPublicKey = userDto.publicKey
                                 )
@@ -298,6 +365,11 @@ class ConnectionManager(
     }
 
     override fun onConversationRead(conversationId: String, userId: String) {
+        val myId = LivreChatApp.instance.preferencesManager.currentUserId
+        if (!myId.isNullOrBlank() && userId == myId) {
+            // Não marcar as nossas próprias mensagens enviadas como lidas se o evento veio de nós mesmos
+            return
+        }
         scope.launch {
             val db = LivreChatApp.instance.database
             db.messageDao().markAllOutgoingAsRead(conversationId)
@@ -310,44 +382,68 @@ class ConnectionManager(
 
     private val typingTimeoutJobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
 
-    override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean) {
+    override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean, displayName: String?) {
         typingTimeoutJobs[conversationId]?.cancel()
 
         val current = _typingStatus.value.toMutableMap()
         current[conversationId] = isTyping
         _typingStatus.value = current
 
+        val userMap = _typingUserByConv.value.toMutableMap()
         if (isTyping) {
+            val prefs = LivreChatApp.instance.preferencesManager
+            val effectiveName = prefs.getContactCustomName(userId)
+                ?: displayName?.takeIf { it.isNotBlank() }
+                ?: username.ifBlank { "Alguém" }
+            userMap[conversationId] = effectiveName
+            _typingUserByConv.value = userMap
+
             val onlMap = _onlineUsers.value.toMutableMap()
             onlMap[userId] = true
             _onlineUsers.value = onlMap
 
             typingTimeoutJobs[conversationId] = scope.launch {
-                kotlinx.coroutines.delay(2000)
+                kotlinx.coroutines.delay(2500)
                 val updated = _typingStatus.value.toMutableMap()
                 updated[conversationId] = false
                 _typingStatus.value = updated
+
+                val uMap = _typingUserByConv.value.toMutableMap()
+                uMap.remove(conversationId)
+                _typingUserByConv.value = uMap
+
                 synchronized(listeners) {
-                    listeners.forEach { it.onTyping(conversationId, userId, username, false) }
+                    listeners.forEach { it.onTyping(conversationId, userId, username, false, displayName) }
                 }
             }
+        } else {
+            userMap.remove(conversationId)
+            _typingUserByConv.value = userMap
         }
 
         synchronized(listeners) {
-            listeners.forEach { it.onTyping(conversationId, userId, username, isTyping) }
+            listeners.forEach { it.onTyping(conversationId, userId, username, isTyping, displayName) }
         }
     }
 
     private val recordingAudioTimeoutJobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
 
-    override fun onRecordingAudio(conversationId: String, userId: String, username: String, isRecording: Boolean) {
+    override fun onRecordingAudio(conversationId: String, userId: String, username: String, isRecording: Boolean, displayName: String?) {
         recordingAudioTimeoutJobs[conversationId]?.cancel()
 
         val current = _recordingAudioStatus.value.toMutableMap()
         current[conversationId] = isRecording
         _recordingAudioStatus.value = current
 
+        val recMap = _recordingUserByConv.value.toMutableMap()
         if (isRecording) {
+            val prefs = LivreChatApp.instance.preferencesManager
+            val effectiveName = prefs.getContactCustomName(userId)
+                ?: displayName?.takeIf { it.isNotBlank() }
+                ?: username.ifBlank { "Alguém" }
+            recMap[conversationId] = effectiveName
+            _recordingUserByConv.value = recMap
+
             val onlMap = _onlineUsers.value.toMutableMap()
             onlMap[userId] = true
             _onlineUsers.value = onlMap
@@ -357,14 +453,22 @@ class ConnectionManager(
                 val updated = _recordingAudioStatus.value.toMutableMap()
                 updated[conversationId] = false
                 _recordingAudioStatus.value = updated
+
+                val rMap = _recordingUserByConv.value.toMutableMap()
+                rMap.remove(conversationId)
+                _recordingUserByConv.value = rMap
+
                 synchronized(listeners) {
-                    listeners.forEach { it.onRecordingAudio(conversationId, userId, username, false) }
+                    listeners.forEach { it.onRecordingAudio(conversationId, userId, username, false, displayName) }
                 }
             }
+        } else {
+            recMap.remove(conversationId)
+            _recordingUserByConv.value = recMap
         }
 
         synchronized(listeners) {
-            listeners.forEach { it.onRecordingAudio(conversationId, userId, username, isRecording) }
+            listeners.forEach { it.onRecordingAudio(conversationId, userId, username, isRecording, displayName) }
         }
     }
 

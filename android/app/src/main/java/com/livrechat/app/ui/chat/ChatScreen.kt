@@ -195,6 +195,10 @@ fun ChatScreen(
     val prefs = remember { app.preferencesManager }
     val onlineUsers by app.connectionManager.onlineUsers.collectAsState()
     val lastSeenUsers by app.connectionManager.lastSeenUsers.collectAsState()
+    val typingUserMap by app.connectionManager.typingUserByConv.collectAsState()
+    val recordingUserMap by app.connectionManager.recordingUserByConv.collectAsState()
+    val activeTypingUser = typingUserMap[conversationId]
+    val activeRecordingUser = recordingUserMap[conversationId]
     var isContactBlocked by remember(otherUserId) { mutableStateOf(prefs.isUserBlocked(otherUserId)) }
     val isContactOnline = if (isContactBlocked) false else (onlineUsers[otherUserId] == true)
     val contactLastSeen = if (isContactBlocked) null else lastSeenUsers[otherUserId]
@@ -432,7 +436,7 @@ fun ChatScreen(
                                 val profileRes = app.apiClient.apiService.getUserProfile(senderId)
                                 if (profileRes.isSuccessful && profileRes.body() != null) {
                                     val u = profileRes.body()!!
-                                    val resolved = u.displayName.ifBlank { u.username }
+                                    val resolved = u.displayName?.takeIf { it.isNotBlank() } ?: u.username
                                     withContext(Dispatchers.Main) {
                                         resolvedUserNames[senderId] = resolved
                                     }
@@ -1127,12 +1131,52 @@ fun ChatScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             if (isGroup) {
-                                Text(
-                                    text = "Grupo",
-                                    fontSize = 12.sp,
-                                    color = Color.Gray
-                                )
-                            } else if (isRecordingAudio) {
+                                if (activeRecordingUser != null) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Mic,
+                                            contentDescription = null,
+                                            tint = Color(0xFF25D366),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(
+                                            text = "$activeRecordingUser está gravando áudio...",
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF25D366),
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                } else if (activeTypingUser != null) {
+                                    Text(
+                                        text = "$activeTypingUser está digitando...",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF25D366),
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                } else {
+                                    val memberSummary = if (groupMembers.isNotEmpty()) {
+                                        val names = groupMembers.map { m ->
+                                            if (m.id == prefs.currentUserId) "Você"
+                                            else resolveSenderName(m.id)
+                                        }.take(4).joinToString(", ")
+                                        if (groupMembers.size > 4) "$names, +${groupMembers.size - 4}" else names
+                                    } else {
+                                        "Toque aqui para dados do grupo"
+                                    }
+                                    Text(
+                                        text = memberSummary,
+                                        fontSize = 12.sp,
+                                        color = Color.Gray,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            } else if (isRecordingAudio || activeRecordingUser != null) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = Icons.Default.Mic,
@@ -1148,11 +1192,11 @@ fun ChatScreen(
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
-                            } else if (isTyping) {
+                            } else if (isTyping || activeTypingUser != null) {
                                 Text(
                                     text = "digitando...",
                                     fontSize = 12.sp,
-                                    color = BlueAccent,
+                                    color = Color(0xFF25D366),
                                     fontWeight = FontWeight.Bold
                                 )
                             } else if (isContactOnline) {

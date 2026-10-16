@@ -48,14 +48,14 @@ data class VirtualNumberRequestResponse(
 )
 
 data class UserDto(
-    val id: String,
-    val username: String,
-    val displayName: String,
-    val avatarUrl: String? = null,
-    val publicKey: String? = null,
+    val id: String = "",
+    val username: String = "",
+    @SerializedName("displayName", alternate = ["display_name"]) val displayName: String? = null,
+    @SerializedName("avatarUrl", alternate = ["avatar_url"]) val avatarUrl: String? = null,
+    @SerializedName("publicKey", alternate = ["public_key"]) val publicKey: String? = null,
     val bio: String? = null,
-    val phoneNumber: String? = null,
-    val createdAt: String? = null
+    @SerializedName("phoneNumber", alternate = ["phone_number"]) val phoneNumber: String? = null,
+    @SerializedName("createdAt", alternate = ["created_at"]) val createdAt: String? = null
 )
 
 data class TokensDto(
@@ -75,7 +75,10 @@ data class ConversationDto(
     val otherUser: UserDto? = null,
     val lastMessage: MessageDto? = null,
     val unreadCount: Int = 0,
-    val updatedAt: String? = null
+    val updatedAt: String? = null,
+    @SerializedName("adminOnlyMessage", alternate = ["admin_only_message"]) val adminOnlyMessage: Boolean? = false,
+    @SerializedName("adminOnlyEditInfo", alternate = ["admin_only_edit_info"]) val adminOnlyEditInfo: Boolean? = false,
+    @SerializedName("adminOnlyAddMembers", alternate = ["admin_only_add_members"]) val adminOnlyAddMembers: Boolean? = false
 )
 
 data class MessageDto(
@@ -94,10 +97,10 @@ data class MessageDto(
 )
 
 data class ReceiptDto(
-    val messageId: String,
-    val userId: String,
+    @SerializedName("messageId", alternate = ["message_id"]) val messageId: String? = null,
+    @SerializedName("userId", alternate = ["user_id"]) val userId: String? = null,
     val status: String,
-    val timestamp: String
+    val timestamp: String? = null
 )
 
 data class SendMessageRequest(

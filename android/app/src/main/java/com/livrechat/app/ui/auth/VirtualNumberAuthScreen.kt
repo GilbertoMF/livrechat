@@ -205,7 +205,7 @@ fun VirtualNumberAuthScreen(
                             onClick = {
                                 incomingSmsPreview?.let {
                                     smsCode = it
-                                    viewModel.verifyVirtualNumberCode(virtualNumber, it)
+                                    viewModel.verifyVirtualNumberCode(virtualNumber, it, displayName)
                                 }
                             },
                             shape = RoundedCornerShape(10.dp),

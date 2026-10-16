@@ -337,7 +337,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     override fun onMessageReceived(message: MessageEntity) {}
     override fun onMessageAck(messageId: String, clientMessageId: String?, status: String) {}
     override fun onMessageReceipt(messageId: String, status: String, userId: String) {}
-    override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean) {}
+    override fun onTyping(conversationId: String, userId: String, username: String, isTyping: Boolean, displayName: String?) {}
 
     override fun onCleared() {
         super.onCleared()

@@ -80,7 +80,7 @@ class AuthViewModel : ViewModel() {
                     val userEntity = UserEntity(
                         id = body.user.id,
                         username = body.user.username,
-                        displayName = body.user.displayName,
+                        displayName = body.user.displayName ?: body.user.username,
                         avatarUrl = body.user.avatarUrl,
                         publicKey = body.user.publicKey,
                         recoveryKey = body.recoveryKey,
@@ -144,7 +144,7 @@ class AuthViewModel : ViewModel() {
                     val userEntity = UserEntity(
                         id = body.user.id,
                         username = body.user.username,
-                        displayName = body.user.displayName,
+                        displayName = body.user.displayName ?: body.user.username,
                         avatarUrl = body.user.avatarUrl,
                         publicKey = body.user.publicKey,
                         isCurrentUser = true
@@ -258,11 +258,19 @@ class AuthViewModel : ViewModel() {
                         } catch (e: Exception) {}
                     }
 
+                    val effectiveDisplayName = if (!body.user.displayName.isNullOrBlank() && !body.user.displayName.startsWith("ID ")) {
+                        body.user.displayName
+                    } else if (!displayName.isNullOrBlank()) {
+                        displayName.trim()
+                    } else {
+                        body.user.displayName ?: "ID $cleanNumber"
+                    }
+
                     prefs.accessToken = body.tokens.accessToken
                     prefs.refreshToken = body.tokens.refreshToken
                     prefs.currentUserId = body.user.id
                     prefs.currentUsername = body.user.username
-                    prefs.currentDisplayName = body.user.displayName
+                    prefs.currentDisplayName = effectiveDisplayName
                     prefs.userAvatarUrl = body.user.avatarUrl
 
                     if (body.user.avatarUrl.isNullOrBlank()) {
@@ -275,12 +283,18 @@ class AuthViewModel : ViewModel() {
                     val userEntity = UserEntity(
                         id = body.user.id,
                         username = body.user.username,
-                        displayName = body.user.displayName,
+                        displayName = effectiveDisplayName,
                         avatarUrl = body.user.avatarUrl,
                         publicKey = body.user.publicKey,
                         isCurrentUser = true
                     )
                     userDao.insertOrUpdate(userEntity)
+
+                    if (!displayName.isNullOrBlank()) {
+                        try {
+                            apiService.updateProfile(mapOf("displayName" to displayName.trim()))
+                        } catch (e: Exception) {}
+                    }
 
                     app.connectionManager.connect()
 

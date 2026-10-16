@@ -361,12 +361,13 @@ fun SearchContactScreen(
                                 val searchRes = apiService.searchUsers(newContactUsername.trim().removePrefix("@"))
                                 val user = searchRes.body()?.firstOrNull()
                                 if (user != null) {
+                                    val name = user.displayName?.takeIf { it.isNotBlank() } ?: user.username
                                     apiService.addContact(AddContactRequest(contactUserId = user.id))
-                                    Toast.makeText(context, "${user.displayName} adicionado aos contatos!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "$name adicionado aos contatos!", Toast.LENGTH_SHORT).show()
                                     showAddContactDialog = false
                                     newContactUsername = ""
                                     loadContacts()
-                                    startChatWithUser(user.id, user.displayName, user.username, user.avatarUrl)
+                                    startChatWithUser(user.id, name, user.username, user.avatarUrl)
                                 } else {
                                     Toast.makeText(context, "Usuário não encontrado", Toast.LENGTH_SHORT).show()
                                 }
@@ -955,16 +956,17 @@ fun SearchContactScreen(
                         )
                     }
                     items(nonLocalResults, key = { it.id }) { user ->
+                        val name = user.displayName?.takeIf { it.isNotBlank() } ?: user.username
                         ContactRowItem(
                             contact = ContactUiModel(
                                 userId = user.id,
-                                displayName = user.displayName,
+                                displayName = name,
                                 username = user.username,
                                 avatarUrl = user.avatarUrl,
                                 bio = "@${user.username}"
                             ),
                             onClick = {
-                                startChatWithUser(user.id, user.displayName, user.username, user.avatarUrl)
+                                startChatWithUser(user.id, name, user.username, user.avatarUrl)
                             }
                         )
                     }

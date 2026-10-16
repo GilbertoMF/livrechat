@@ -1635,21 +1635,25 @@ fun SettingsScreen(
                                     modifier = Modifier.padding(10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    val safeDisplayName = blockedUser.displayName?.takeIf { it.isNotBlank() }
+                                        ?: blockedUser.username.takeIf { it.isNotBlank() }
+                                        ?: "Usuário"
                                     UserAvatarView(
                                         avatarUrl = blockedUser.avatarUrl,
-                                        displayName = blockedUser.displayName.ifBlank { blockedUser.username },
+                                        displayName = safeDisplayName,
                                         size = 40.dp,
                                         fontSize = 16.sp
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = blockedUser.displayName.ifBlank { blockedUser.username },
+                                            text = safeDisplayName,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 14.sp
                                         )
+                                        val displayUsername = blockedUser.username.ifBlank { "ID" }
                                         Text(
-                                            text = "@${blockedUser.username}",
+                                            text = "@$displayUsername",
                                             fontSize = 12.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )

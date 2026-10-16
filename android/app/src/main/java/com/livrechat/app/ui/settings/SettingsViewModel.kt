@@ -187,7 +187,7 @@ class SettingsViewModel : ViewModel() {
                                 com.livrechat.app.data.local.entity.CallRecordEntity(
                                     id = dto.id,
                                     contactUserId = dto.contact.id,
-                                    contactDisplayName = dto.contact.displayName,
+                                    contactDisplayName = dto.contact.displayName?.takeIf { it.isNotBlank() } ?: dto.contact.username,
                                     contactUsername = dto.contact.username,
                                     contactAvatarUrl = dto.contact.avatarUrl,
                                     isOutgoing = dto.isOutgoing,
