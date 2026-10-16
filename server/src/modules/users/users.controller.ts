@@ -497,10 +497,11 @@ export class UsersController {
     try {
       const userId = req.user!.userId;
       const { token, deviceName } = req.body;
+      const versionCode = parseInt(req.body.versionCode || (req.headers['x-app-version-code'] as string) || '0', 10);
       if (!token) {
         return res.status(400).json({ error: 'Token FCM é obrigatório.' });
       }
-      await db.saveFcmToken(userId, token, deviceName);
+      await db.saveFcmToken(userId, token, deviceName, versionCode);
       return res.status(200).json({ success: true });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });

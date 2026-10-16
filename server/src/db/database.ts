@@ -2375,8 +2375,12 @@ class DatabaseService {
   }
 
   // FCM TOKENS
-  public async saveFcmToken(userId: string, token: string, deviceName?: string): Promise<void> {
+  public async saveFcmToken(userId: string, token: string, deviceName?: string, versionCode?: number): Promise<void> {
     if (!userId || !token) return;
+
+    if (versionCode && versionCode > 0) {
+      this.setUserVersionCode(userId, versionCode);
+    }
 
     if (!this.memoryStore.fcm_tokens) this.memoryStore.fcm_tokens = [];
     const idx = this.memoryStore.fcm_tokens.findIndex(t => t.token === token);
@@ -2460,6 +2464,19 @@ class DatabaseService {
       }
     }
     return this.memoryStore.fcm_tokens?.length || 0;
+  }
+
+  private userVersionCodes: Map<string, number> = new Map();
+
+  public setUserVersionCode(userId: string, versionCode: number): void {
+    if (userId && versionCode > 0) {
+      this.userVersionCodes.set(userId, versionCode);
+    }
+  }
+
+  public async getUserVersionCode(userId: string): Promise<number> {
+    if (!userId) return 0;
+    return this.userVersionCodes.get(userId) || 0;
   }
 }
 

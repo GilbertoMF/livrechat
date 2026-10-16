@@ -202,6 +202,26 @@ interface ApiService {
         @retrofit2.http.Part file: okhttp3.MultipartBody.Part,
         @retrofit2.http.Part("folder") folder: okhttp3.RequestBody? = null
     ): Response<MediaUploadResponse>
+
+    @GET("api/versions/check")
+    suspend fun checkVersion(
+        @retrofit2.http.Query("versionCode") versionCode: Int
+    ): Response<AppVersionCheckResponse>
 }
+
+data class AppVersionCheckResponse(
+    val clientVersionCode: Int = 0,
+    val latestVersion: String = "",
+    val latestVersionCode: Int = 0,
+    val minSupportedVersionCode: Int = 0,
+    val isUpdateAvailable: Boolean = false,
+    val isMandatory: Boolean = false,
+    val title: String = "",
+    val message: String = "",
+    val apkArm64Url: String = "",
+    val apkArmv7Url: String = "",
+    val apkUniversalUrl: String = "",
+    val downloadPortalUrl: String = ""
+)
 
 

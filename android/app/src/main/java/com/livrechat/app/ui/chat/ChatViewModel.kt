@@ -58,6 +58,13 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
     val typingStatus: StateFlow<Map<String, Boolean>> = connectionManager.typingStatus
     val recordingAudioStatus: StateFlow<Map<String, Boolean>> = connectionManager.recordingAudioStatus
 
+    private val _chatErrorMessage = MutableStateFlow<String?>(null)
+    val chatErrorMessage: StateFlow<String?> = _chatErrorMessage.asStateFlow()
+
+    fun clearChatError() {
+        _chatErrorMessage.value = null
+    }
+
     init {
         connectionManager.registerListener(this)
         syncConversations()
@@ -735,6 +742,10 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
     override fun onCallRinging(fromUserId: String) {}
     override fun onCallRejected(fromUserId: String, reason: String) {}
     override fun onCallEnded(fromUserId: String) {}
+
+    override fun onChatError(code: String, message: String, clientMessageId: String?) {
+        _chatErrorMessage.value = message
+    }
 
     override fun onCleared() {
         super.onCleared()

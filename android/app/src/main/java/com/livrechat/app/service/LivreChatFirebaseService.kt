@@ -29,7 +29,9 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
                     LivreChatApp.instance.apiService.registerFcmToken(
                         mapOf(
                             "token" to token,
-                            "deviceName" to Build.MODEL
+                            "deviceName" to Build.MODEL,
+                            "versionCode" to com.livrechat.app.BuildConfig.VERSION_CODE.toString(),
+                            "versionName" to com.livrechat.app.BuildConfig.VERSION_NAME
                         )
                     )
                     Log.d(TAG, "Token FCM sincronizado com o servidor com sucesso.")
@@ -214,7 +216,9 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
                                         LivreChatApp.instance.apiService.registerFcmToken(
                                             mapOf(
                                                 "token" to token,
-                                                "deviceName" to Build.MODEL
+                                                "deviceName" to Build.MODEL,
+                                                "versionCode" to com.livrechat.app.BuildConfig.VERSION_CODE.toString(),
+                                                "versionName" to com.livrechat.app.BuildConfig.VERSION_NAME
                                             )
                                         )
                                         Log.d(TAG, "Token FCM sincronizado com sucesso no arranque do app.")

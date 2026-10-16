@@ -166,6 +166,28 @@ export class MessagesController {
 
       let members = await db.getConversationMembers(conversationId);
       const otherMember = targetUserId || (members.length <= 2 ? members.find(m => m !== senderId) : null);
+
+      // Security & Version Compatibility Rule:
+      const senderVersionCode = parseInt((req.headers['x-app-version-code'] as string) || (req.body.versionCode as string) || '0', 10);
+      if (senderVersionCode > 0 && senderVersionCode < 12) {
+        return res.status(403).json({
+          error: 'SENDER_VERSION_OUTDATED',
+          message: 'Seu aplicativo está em uma versão antiga e desatualizada. Atualize o LivreChat no banner da tela principal para continuar enviando mensagens.'
+        });
+      }
+
+      if (otherMember) {
+        const recVersion = await db.getUserVersionCode(otherMember);
+        if (recVersion > 0 && recVersion < 12) {
+          const recProfile = await db.getProfile(otherMember);
+          const name = recProfile?.display_name || 'O contato';
+          return res.status(400).json({
+            error: 'RECIPIENT_VERSION_INCOMPATIBLE',
+            message: `${name} está usando uma versão desatualizada do LivreChat. Versões diferentes não podem se comunicar por segurança. Peça para o contato atualizar o app.`
+          });
+        }
+      }
+
       if (otherMember) {
         const isBlocked = await db.isBlocked(senderId, otherMember);
         if (isBlocked) {

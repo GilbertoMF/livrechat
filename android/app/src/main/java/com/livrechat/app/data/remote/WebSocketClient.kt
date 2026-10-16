@@ -46,6 +46,8 @@ interface WebSocketEventsListener {
     fun onStatusView(statusId: String, fromUserId: String, fromUsername: String, displayName: String? = null, avatarUrl: String? = null) {}
     fun onConversationRead(conversationId: String, userId: String) {}
     fun onUserStatus(userId: String, isOnline: Boolean, lastSeenTimestamp: Long? = null) {}
+    fun onVersionStatus(isUpdateAvailable: Boolean, isMandatory: Boolean, latestVersion: String, latestVersionCode: Int, downloadUrl: String, message: String) {}
+    fun onChatError(code: String, message: String, clientMessageId: String? = null) {}
 }
 
 class WebSocketClient(
@@ -95,7 +97,9 @@ class WebSocketClient(
         if (server.endsWith("/")) {
             server = server.substring(0, server.length - 1)
         }
-        val wsUrl = "$server/ws?token=$token"
+        val vCode = com.livrechat.app.BuildConfig.VERSION_CODE
+        val vName = com.livrechat.app.BuildConfig.VERSION_NAME
+        val wsUrl = "$server/ws?token=$token&versionCode=$vCode&version=$vName"
 
         isIntentionalClose = false
         isConnecting = true
@@ -104,7 +108,11 @@ class WebSocketClient(
             webSocket?.cancel()
         } catch (e: Exception) {}
 
-        val request = Request.Builder().url(wsUrl).build()
+        val request = Request.Builder()
+            .url(wsUrl)
+            .addHeader("X-App-Version-Code", vCode.toString())
+            .addHeader("X-App-Version", vName)
+            .build()
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -193,6 +201,31 @@ class WebSocketClient(
             scope.launch(Dispatchers.Main) {
                 try {
                     when (type) {
+                        "connection:ack" -> {
+                            if (json.has("versionStatus") && !json.get("versionStatus").isJsonNull) {
+                                val vs = json.getAsJsonObject("versionStatus")
+                                val isUpdateAvail = vs.get("isUpdateAvailable").asBooleanOrDefault(false)
+                                val isMandatory = vs.get("isMandatory").asBooleanOrDefault(false)
+                                val latestVer = vs.get("latestVersion").asStringOrDefault("")
+                                val latestCode = if (vs.has("latestVersionCode") && !vs.get("latestVersionCode").isJsonNull) vs.get("latestVersionCode").asInt else 0
+                                val dlUrl = vs.get("downloadUrl").asStringOrDefault("")
+                                listener.onVersionStatus(isUpdateAvail, isMandatory, latestVer, latestCode, dlUrl, "Atualização disponível")
+                            }
+                        }
+                        "system:version_status", "version:incompatible" -> {
+                            val msg = json.get("message").asStringOrDefault("Versões diferentes não podem se comunicar por segurança. Atualize o aplicativo.")
+                            val isMandatory = json.get("isMandatory").asBooleanOrDefault(true)
+                            val latestVer = json.get("latestVersion").asStringOrDefault("")
+                            val latestCode = if (json.has("latestVersionCode") && !json.get("latestVersionCode").isJsonNull) json.get("latestVersionCode").asInt else 0
+                            val dlUrl = json.get("downloadUrl").asStringOrDefault("")
+                            listener.onVersionStatus(true, isMandatory, latestVer, latestCode, dlUrl, msg)
+                        }
+                        "chat:error" -> {
+                            val code = json.get("code").asStringOrDefault("ERROR")
+                            val msg = json.get("message").asStringOrDefault("Erro ao processar mensagem.")
+                            val clientMsgId = json.get("clientMessageId")?.asStringOrNull()
+                            listener.onChatError(code, msg, clientMsgId)
+                        }
                         "chat:message" -> {
                             val m = json.getAsJsonObject("message") ?: return@launch
                             val currentUserId = preferencesManager.currentUserId ?: ""

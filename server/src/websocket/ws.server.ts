@@ -7,10 +7,19 @@ import { CONFIG } from '../config/env';
 import { db, Message } from '../db/database';
 import { fcmService } from '../services/fcm.service';
 
+export const APP_VERSION_RULES = {
+  LATEST_VERSION_NAME: '1.1.2',
+  LATEST_VERSION_CODE: 12,
+  MIN_SUPPORTED_VERSION_CODE: 12,
+  DOWNLOAD_PORTAL_URL: '/download'
+};
+
 export type AuthenticatedSocket = WebSocket & {
   userId?: string;
   username?: string;
   isAlive?: boolean;
+  versionCode?: number;
+  versionName?: string;
 };
 
 export class WebSocketManager {
@@ -46,6 +55,15 @@ export class WebSocketManager {
         ws.username = decoded.username;
         ws.isAlive = true;
 
+        const clientVersionCode = parseInt((parsedUrl.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
+        const clientVersionName = (parsedUrl.query.version as string) || (req.headers['x-app-version'] as string) || '';
+        ws.versionCode = clientVersionCode;
+        ws.versionName = clientVersionName;
+
+        if (ws.userId && clientVersionCode > 0) {
+          db.setUserVersionCode(ws.userId, clientVersionCode);
+        }
+
         if (!this.userSockets.has(ws.userId)) {
           this.userSockets.set(ws.userId, new Set());
         }
@@ -56,17 +74,37 @@ export class WebSocketManager {
           this.broadcastUserStatus(ws.userId, 'online').catch(() => {});
         }
 
-        console.log(`[WS] Usuário conectado: ${ws.username} (${ws.userId})`);
+        console.log(`[WS] Usuário conectado: ${ws.username} (${ws.userId}) [v${clientVersionCode || 1}]`);
         if (ws.userId) {
           db.ensureUserExists(ws.userId, ws.username || 'usuario').catch(() => {});
         }
 
-        // Send connection ack
+        // Send connection ack with version compatibility status
+        const isOutdated = clientVersionCode > 0 && clientVersionCode < APP_VERSION_RULES.MIN_SUPPORTED_VERSION_CODE;
         ws.send(JSON.stringify({
           type: 'connection:ack',
           userId: ws.userId,
+          versionStatus: {
+            isUpdateAvailable: clientVersionCode < APP_VERSION_RULES.LATEST_VERSION_CODE,
+            isMandatory: isOutdated,
+            latestVersion: APP_VERSION_RULES.LATEST_VERSION_NAME,
+            latestVersionCode: APP_VERSION_RULES.LATEST_VERSION_CODE,
+            minSupportedVersionCode: APP_VERSION_RULES.MIN_SUPPORTED_VERSION_CODE,
+            downloadUrl: APP_VERSION_RULES.DOWNLOAD_PORTAL_URL
+          },
           timestamp: new Date().toISOString()
         }));
+
+        if (isOutdated) {
+          ws.send(JSON.stringify({
+            type: 'system:version_status',
+            message: 'Versão do aplicativo desatualizada. Versões diferentes não podem se comunicar por segurança. Atualize para a versão mais recente.',
+            isMandatory: true,
+            latestVersion: APP_VERSION_RULES.LATEST_VERSION_NAME,
+            latestVersionCode: APP_VERSION_RULES.LATEST_VERSION_CODE,
+            downloadUrl: APP_VERSION_RULES.DOWNLOAD_PORTAL_URL
+          }));
+        }
 
         // Deliver pending offline messages immediately
         (async () => {
@@ -197,6 +235,55 @@ export class WebSocketManager {
             clientMessageId,
             status: 'sent',
             timestamp: now
+          }));
+          break;
+        }
+
+        // Security & Version Compatibility Rule:
+        // 1. Sender must be on a supported version (>= MIN_SUPPORTED_VERSION_CODE)
+        if (senderWs.versionCode && senderWs.versionCode < APP_VERSION_RULES.MIN_SUPPORTED_VERSION_CODE) {
+          senderWs.send(JSON.stringify({
+            type: 'chat:error',
+            clientMessageId,
+            code: 'SENDER_VERSION_OUTDATED',
+            message: 'Seu aplicativo está em uma versão antiga e desatualizada. Versões diferentes não podem se comunicar. Atualize o LivreChat no banner da tela principal para continuar enviando mensagens.'
+          }));
+          break;
+        }
+
+        // 2. Recipients cannot be on incompatible / outdated versions
+        let hasIncompatibleRecipient = false;
+        let incompatibleRecipientName = '';
+        for (const memberId of members) {
+          if (memberId !== senderId) {
+            let recVersion = 0;
+            const recSockets = this.userSockets.get(memberId);
+            if (recSockets && recSockets.size > 0) {
+              for (const s of recSockets) {
+                if (s.versionCode) {
+                  recVersion = s.versionCode;
+                  break;
+                }
+              }
+            } else {
+              recVersion = await db.getUserVersionCode(memberId);
+            }
+
+            if (recVersion > 0 && recVersion < APP_VERSION_RULES.MIN_SUPPORTED_VERSION_CODE) {
+              hasIncompatibleRecipient = true;
+              const recProfile = await db.getProfile(memberId);
+              incompatibleRecipientName = recProfile?.display_name || 'O contato';
+              break;
+            }
+          }
+        }
+
+        if (hasIncompatibleRecipient) {
+          senderWs.send(JSON.stringify({
+            type: 'chat:error',
+            clientMessageId,
+            code: 'RECIPIENT_VERSION_INCOMPATIBLE',
+            message: `${incompatibleRecipientName} está usando uma versão desatualizada do LivreChat. Versões diferentes não podem se comunicar por segurança. Peça para o contato atualizar o app.`
           }));
           break;
         }
@@ -515,6 +602,24 @@ export class WebSocketManager {
           senderWs.send(JSON.stringify({
             type: 'call:busy',
             reason: 'Usuário indisponível.'
+          }));
+          return;
+        }
+
+        // Version compatibility check for calls
+        if (senderWs.versionCode && senderWs.versionCode < APP_VERSION_RULES.MIN_SUPPORTED_VERSION_CODE) {
+          senderWs.send(JSON.stringify({
+            type: 'call:rejected',
+            reason: 'Seu aplicativo está em uma versão antiga. Atualize para poder realizar chamadas.'
+          }));
+          return;
+        }
+
+        const calleeVersion = (await db.getUserVersionCode(calleeId)) || 0;
+        if (calleeVersion > 0 && calleeVersion < APP_VERSION_RULES.MIN_SUPPORTED_VERSION_CODE) {
+          senderWs.send(JSON.stringify({
+            type: 'call:rejected',
+            reason: 'O contato está em uma versão desatualizada do LivreChat. Ambos precisam atualizar para realizar chamadas.'
           }));
           return;
         }

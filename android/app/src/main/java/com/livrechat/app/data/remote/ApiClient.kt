@@ -19,6 +19,8 @@ class ApiClient(private val preferencesManager: PreferencesManager) {
         }
 
         builder.header("Content-Type", "application/json")
+        builder.header("X-App-Version-Code", com.livrechat.app.BuildConfig.VERSION_CODE.toString())
+        builder.header("X-App-Version", com.livrechat.app.BuildConfig.VERSION_NAME)
         chain.proceed(builder.build())
     }
 

@@ -108,6 +108,11 @@ fun HomeScreen(
     val isConnected by chatViewModel.isConnected.collectAsState()
     val typingStatus by chatViewModel.typingStatus.collectAsState()
     val recordingAudioStatus by chatViewModel.recordingAudioStatus.collectAsState()
+    val updateInfo by com.livrechat.app.data.remote.AppUpdateManager.updateState.collectAsState()
+
+    LaunchedEffect(Unit) {
+        com.livrechat.app.data.remote.AppUpdateManager.checkUpdate()
+    }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -285,6 +290,9 @@ fun HomeScreen(
                         } else s
                     }
                 }
+            }
+            override fun onVersionStatus(isUpdateAvailable: Boolean, isMandatory: Boolean, latestVersion: String, latestVersionCode: Int, downloadUrl: String, message: String) {
+                com.livrechat.app.data.remote.AppUpdateManager.setUpdateFromWebSocket(isUpdateAvailable, isMandatory, latestVersion, latestVersionCode, downloadUrl, message)
             }
         }
         val connMgr = LivreChatApp.instance.connectionManager
@@ -2274,6 +2282,18 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            com.livrechat.app.ui.common.UpdateBanner(
+                updateInfo = updateInfo,
+                onUpdateClick = {
+                    if (updateInfo != null) {
+                        com.livrechat.app.data.remote.AppUpdateManager.startUpdate(context, updateInfo!!)
+                    }
+                },
+                onDismiss = {
+                    com.livrechat.app.data.remote.AppUpdateManager.dismiss()
+                }
+            )
+
             // Tabs: Conversas / Atualizações / Chamadas
             TabRow(selectedTabIndex = selectedTab) {
                 Tab(

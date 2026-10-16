@@ -655,4 +655,16 @@ class ConnectionManager(
             listeners.forEach { it.onStatusUpdated() }
         }
     }
+
+    override fun onVersionStatus(isUpdateAvailable: Boolean, isMandatory: Boolean, latestVersion: String, latestVersionCode: Int, downloadUrl: String, message: String) {
+        synchronized(listeners) {
+            listeners.forEach { it.onVersionStatus(isUpdateAvailable, isMandatory, latestVersion, latestVersionCode, downloadUrl, message) }
+        }
+    }
+
+    override fun onChatError(code: String, message: String, clientMessageId: String?) {
+        synchronized(listeners) {
+            listeners.forEach { it.onChatError(code, message, clientMessageId) }
+        }
+    }
 }
