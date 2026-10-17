@@ -9,6 +9,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -71,10 +74,24 @@ fun LivreChatNavGraph(
     val callInfo by callViewModel.callInfo.collectAsState()
 
     val context = androidx.compose.ui.platform.LocalContext.current
+    var requestedHomeTab by remember { mutableIntStateOf(0) }
 
     // Handle background notification click, incoming call intent, or contact shortcut
     LaunchedEffect(pendingIntent) {
         if (pendingIntent != null) {
+            val openTab = pendingIntent.getStringExtra("openTab")
+            if (openTab == "calls") {
+                requestedHomeTab = 2
+                val currentRoute = navController.currentBackStackEntry?.destination?.route
+                if (currentRoute != Routes.HOME) {
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(Routes.HOME) { inclusive = false }
+                    }
+                }
+                onIntentHandled()
+                return@LaunchedEffect
+            }
+
             val isIncomingCall = pendingIntent.getBooleanExtra("incomingCall", false)
             val autoAnswer = pendingIntent.getBooleanExtra("autoAnswer", false)
             val callerId = pendingIntent.getStringExtra("callerId")
@@ -254,6 +271,7 @@ fun LivreChatNavGraph(
             HomeScreen(
                 chatViewModel = chatViewModel,
                 callViewModel = callViewModel,
+                initialTab = requestedHomeTab,
                 onNavigateToChat = { convId, userId, name ->
                     navController.navigate("chat/$convId/$userId/$name")
                 },

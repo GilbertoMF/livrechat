@@ -33,7 +33,7 @@ app.get(['/', '/download', '/baixar', '/app'], (req, res) => {
 
 // Latest APK redirect
 app.get(['/apks/livrechat-latest.apk', '/download/latest'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.11-universal.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.13-universal.apk');
 });
 
 // Health check
@@ -46,7 +46,7 @@ app.get('/health', async (req, res) => {
   res.status(200).json({
     status: 'online',
     appName: 'LivreChat Server',
-    version: '1.1.11',
+    version: '1.1.13',
     fcmInitialized: fcmService.isAvailable(),
     registeredFcmDevices,
     timestamp: new Date().toISOString()
@@ -58,14 +58,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 22;
+  const LATEST_CODE = 23;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.12',
+    latestVersion: '1.1.13',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -73,10 +73,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.12: Atender chamada direto na notificação em segundo plano com 1 toque.',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.12-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.12-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.12-universal.apk`,
+      : 'Nova versão 1.1.13: Silenciar conversas estilo WhatsApp, criação de figurinhas corrigida e chamada perdida abre aba de chamadas.',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.13-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.13-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.13-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -84,26 +84,38 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.12',
-      versionCode: 22,
+      version: '1.1.13',
+      versionCode: 23,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-17',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Atendimento instantâneo de chamadas com 1 toque direto pela notificação do sistema.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.12-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.12-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.12-universal.apk`,
+      message: 'Silenciar conversas estilo WhatsApp, criação de figurinhas 512x512 corrigida e chamada perdida abre aba de chamadas.',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.13-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.13-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.13-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '24.2 MB',
       sizeMbUniversal: '30.4 MB'
     },
     versions: [
       {
+        version: '1.1.13',
+        versionCode: 23,
+        releaseDate: '2026-10-17',
+        isLatest: true,
+        changelog: 'Silenciar notificações de conversas estilo WhatsApp (8 horas, 1 semana, Sempre), correção completa na criação de figurinhas (recorte quadrado 512x512 PNG salvo na galeria), toque em chamada perdida abre a aba de chamadas sem ligar de volta e supressão de notificações no topo quando dentro do chat ativo.',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.13-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '20.9 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.13-armv7.apk` },
+          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '30.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.13-universal.apk` }
+        ]
+      },
+      {
         version: '1.1.12',
         versionCode: 22,
         releaseDate: '2026-10-17',
-        isLatest: true,
+        isLatest: false,
         changelog: 'Atendimento instantâneo de chamadas: ao tocar em Atender na notificação com o app minimizado, a chamada conecta direto sem precisar confirmar de novo na tela.',
         downloads: [
           { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.12-arm64.apk` },

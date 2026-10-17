@@ -18,6 +18,9 @@ object LivreChatNotificationManager {
     const val CHANNEL_CALLS = "livrechat_calls"
     private const val CALL_NOTIFICATION_ID = 9999
 
+    @Volatile
+    var activeConversationId: String? = null
+
     fun initChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -60,6 +63,19 @@ object LivreChatNotificationManager {
         isPlayingAudio: Boolean = false
     ) {
         try {
+            // 1. Se o usuário estiver atualmente com esta conversa aberta, não exibir notificação no topo
+            if (conversationId == activeConversationId) {
+                android.util.Log.d("LivreChatNotif", "Conversa $conversationId aberta. Notificação no topo suprimida.")
+                return
+            }
+
+            // 2. Se a conversa foi silenciada pelo usuário estilo WhatsApp, não exibir notificação sonora/heads-up
+            val prefs = com.livrechat.app.LivreChatApp.instance.preferencesManager
+            if (prefs.isConversationMuted(conversationId)) {
+                android.util.Log.d("LivreChatNotif", "Conversa $conversationId silenciada. Notificação suprimida.")
+                return
+            }
+
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra("conversationId", conversationId)
@@ -119,6 +135,7 @@ object LivreChatNotificationManager {
                 messageType == "image" || content.contains("/image/") -> "📷 Foto"
                 messageType == "video" || content.contains("/video/") -> "🎥 Vídeo"
                 messageType == "file" || content.contains("/file/") -> "📄 Documento"
+                messageType == "sticker" -> "📑 Figurinha"
                 else -> content
             }
 
@@ -335,9 +352,7 @@ object LivreChatNotificationManager {
         try {
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                putExtra("targetUserId", callerUserId)
-                putExtra("targetDisplayName", callerName)
-                putExtra("isVoiceCall", true)
+                putExtra("openTab", "calls")
             }
             val pendingIntent = PendingIntent.getActivity(
                 context,
@@ -352,7 +367,7 @@ object LivreChatNotificationManager {
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("Chamada perdida")
                 .setContentText("Você perdeu uma chamada de $callerName")
-                .setStyle(NotificationCompat.BigTextStyle().bigText("Chamada perdida de $callerName. Toque para retornar."))
+                .setStyle(NotificationCompat.BigTextStyle().bigText("Chamada perdida de $callerName. Toque para ver o histórico."))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_MISSED_CALL)
                 .setAutoCancel(true)

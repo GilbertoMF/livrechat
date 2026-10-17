@@ -58,6 +58,7 @@ import com.livrechat.app.ui.camera.CustomCameraDialog
 import com.livrechat.app.ui.chat.EmojiStickerBottomSheet
 import com.livrechat.app.ui.chat.EmojiStickerPanel
 import com.livrechat.app.ui.chat.MessageActionMenuDialog
+import com.livrechat.app.ui.common.MuteNotificationDialog
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -160,7 +161,11 @@ fun ChatScreen(
     }
 
     DisposableEffect(conversationId) {
+        com.livrechat.app.notification.LivreChatNotificationManager.activeConversationId = conversationId
         onDispose {
+            if (com.livrechat.app.notification.LivreChatNotificationManager.activeConversationId == conversationId) {
+                com.livrechat.app.notification.LivreChatNotificationManager.activeConversationId = null
+            }
             typingDebounceJob?.cancel()
             recordingJob?.cancel()
             audioPlayerHelper.stop()
@@ -492,6 +497,8 @@ fun ChatScreen(
         }
     }
     var isConvLocked by remember { mutableStateOf(prefs.isConversationLocked(conversationId)) }
+    var isConvMuted by remember(conversationId) { mutableStateOf(prefs.isConversationMuted(conversationId)) }
+    var showMuteDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
     var showContactProfile by remember { mutableStateOf(false) }
@@ -743,6 +750,22 @@ fun ChatScreen(
                 TextButton(onClick = { showCryptoInfoDialog = false }) {
                     Text("Entendido", fontWeight = FontWeight.Bold)
                 }
+            }
+        )
+    }
+
+    if (showMuteDialog) {
+        MuteNotificationDialog(
+            conversationTitle = otherDisplayName,
+            onDismiss = { showMuteDialog = false },
+            onConfirm = { duration ->
+                prefs.setConversationMutedUntil(conversationId, duration)
+                isConvMuted = true
+                scope.launch(Dispatchers.IO) {
+                    app.database.conversationDao().updateMuteStatus(conversationId, true)
+                }
+                showMuteDialog = false
+                Toast.makeText(context, "Notificações silenciadas", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -1326,6 +1349,29 @@ fun ChatScreen(
                                     Icon(
                                         imageVector = if (isConvLocked) Icons.Default.LockOpen else Icons.Default.Lock,
                                         contentDescription = null
+                                    )
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (isConvMuted) "Desativar silêncio" else "Silenciar notificações") },
+                                onClick = {
+                                    showMenu = false
+                                    if (isConvMuted) {
+                                        prefs.unmuteConversation(conversationId)
+                                        isConvMuted = false
+                                        scope.launch(Dispatchers.IO) {
+                                            app.database.conversationDao().updateMuteStatus(conversationId, false)
+                                        }
+                                        Toast.makeText(context, "Silêncio desativado", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        showMuteDialog = true
+                                    }
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = if (isConvMuted) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
                             )
@@ -2361,8 +2407,17 @@ fun ChatScreen(
             },
             onCreateSticker = {
                 messageActionTarget = null
-                viewModel.sendStickerMessage(conversationId, target.content, otherUserId)
-                Toast.makeText(context, "Figurinha criada e enviada! ✨", Toast.LENGTH_SHORT).show()
+                scope.launch(Dispatchers.IO) {
+                    val stickerFile = MediaFileManager.createStickerFromContent(context, target.content)
+                    withContext(Dispatchers.Main) {
+                        if (stickerFile != null) {
+                            viewModel.sendStickerMessage(conversationId, stickerFile.absolutePath, otherUserId)
+                            Toast.makeText(context, "Figurinha criada e enviada! ✨", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Não foi possível criar figurinha desta mídia", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
             },
             onSaveMedia = {
                 messageActionTarget = null
@@ -2450,9 +2505,18 @@ fun ChatScreen(
                 }
             },
             onCreateSticker = { b64 ->
-                viewModel.sendStickerMessage(conversationId, b64, otherUserId)
-                Toast.makeText(context, "Figurinha criada e enviada! ✨", Toast.LENGTH_SHORT).show()
-                viewingImageBase64 = null
+                scope.launch(Dispatchers.IO) {
+                    val stickerFile = MediaFileManager.createStickerFromContent(context, b64)
+                    withContext(Dispatchers.Main) {
+                        if (stickerFile != null) {
+                            viewModel.sendStickerMessage(conversationId, stickerFile.absolutePath, otherUserId)
+                            Toast.makeText(context, "Figurinha criada e enviada! ✨", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Não foi possível criar figurinha", Toast.LENGTH_SHORT).show()
+                        }
+                        viewingImageBase64 = null
+                    }
+                }
             }
         )
     }
@@ -2872,10 +2936,18 @@ fun StickerMessageBubbleContent(
     message: MessageEntity,
     isOutgoing: Boolean
 ) {
-    val model = if (message.content.startsWith("http") || message.content.startsWith("data:")) {
-        message.content
-    } else {
-        File(message.content)
+    val model: Any = remember(message.content) {
+        val c = message.content.trim()
+        when {
+            c.startsWith("http://") || c.startsWith("https://") -> c
+            c.startsWith("data:") -> c
+            MediaFileManager.isLocalFilePath(c) -> File(c.removePrefix("file://"))
+            c.length > 100 -> {
+                val clean = if (c.contains(",")) c.substringAfter(",") else c
+                "data:image/png;base64,$clean"
+            }
+            else -> File(c)
+        }
     }
 
     Box(

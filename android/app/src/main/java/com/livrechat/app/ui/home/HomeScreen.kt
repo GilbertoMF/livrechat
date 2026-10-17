@@ -92,6 +92,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.livrechat.app.ui.common.MuteNotificationDialog
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -102,6 +103,7 @@ import java.util.Locale
 fun HomeScreen(
     chatViewModel: ChatViewModel,
     callViewModel: CallViewModel,
+    initialTab: Int = 0,
     onNavigateToChat: (String, String, String) -> Unit, // convId, otherUserId, displayName
     onNavigateToSearch: () -> Unit,
     onNavigateToQRCode: () -> Unit,
@@ -109,7 +111,12 @@ fun HomeScreen(
     onStartCall: (String, String, String, String?) -> Unit
 ) {
     // Tabs: 0 = Conversas, 1 = Atualizações (Status), 2 = Chamadas
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(initialTab) }
+    LaunchedEffect(initialTab) {
+        if (initialTab in 0..2) {
+            selectedTab = initialTab
+        }
+    }
     val conversations by chatViewModel.conversationsFlow.collectAsState(initial = emptyList())
     val callHistory by callViewModel.callHistoryFlow.collectAsState(initial = emptyList())
     val isConnected by chatViewModel.isConnected.collectAsState()
@@ -133,6 +140,7 @@ fun HomeScreen(
     var showClearCallHistoryDialog by remember { mutableStateOf(false) }
     var selectedConvForAction by remember { mutableStateOf<ConversationEntity?>(null) }
     var showClearConvDialog by remember { mutableStateOf<ConversationEntity?>(null) }
+    var showMuteDialogForConv by remember { mutableStateOf<ConversationEntity?>(null) }
 
     // Status State
     var statusesList by remember { mutableStateOf<List<StatusDto>>(emptyList()) }
@@ -526,7 +534,54 @@ fun HomeScreen(
                         .padding(top = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // 1. Bloquear / Desbloquear com Digital (Biometria)
+                    // 1. Silenciar / Desativar Silêncio (Estilo WhatsApp)
+                    val isConvMuted = conv.isMuted || prefs.isConversationMuted(conv.id)
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val toAction = conv
+                                selectedConvForAction = null
+                                if (isConvMuted) {
+                                    prefs.unmuteConversation(toAction.id)
+                                    scope.launch(Dispatchers.IO) {
+                                        db.conversationDao().updateMuteStatus(toAction.id, false)
+                                    }
+                                    Toast.makeText(context, "Silêncio desativado", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    showMuteDialogForConv = toAction
+                                }
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (isConvMuted) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = if (isConvMuted) "Desativar Silêncio" else "Silenciar Notificações",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = if (isConvMuted) "Voltar a receber avisos e sons" else "8 horas, 1 semana ou sempre",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    // 2. Bloquear / Desbloquear com Digital (Biometria)
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -728,6 +783,23 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
+            }
+        )
+    }
+
+    // DIALOG: Silenciar Notificações (Estilo WhatsApp)
+    if (showMuteDialogForConv != null) {
+        val convToMute = showMuteDialogForConv!!
+        MuteNotificationDialog(
+            conversationTitle = convToMute.otherDisplayName,
+            onDismiss = { showMuteDialogForConv = null },
+            onConfirm = { duration ->
+                prefs.setConversationMutedUntil(convToMute.id, duration)
+                scope.launch(Dispatchers.IO) {
+                    db.conversationDao().updateMuteStatus(convToMute.id, true)
+                }
+                showMuteDialogForConv = null
+                Toast.makeText(context, "Notificações silenciadas", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -4198,19 +4270,33 @@ fun ConversationItem(
                     )
                 }
 
-                if (conversation.unreadCount > 0) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = if (conversation.unreadCount > 99) "99+" else conversation.unreadCount.toString(),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                val isConvMuted = conversation.isMuted || prefs.isConversationMuted(conversation.id)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (isConvMuted) {
+                        Icon(
+                            imageVector = Icons.Default.NotificationsOff,
+                            contentDescription = "Silenciado",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    if (conversation.unreadCount > 0) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (isConvMuted) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = if (conversation.unreadCount > 99) "99+" else conversation.unreadCount.toString(),
+                                    color = if (isConvMuted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }

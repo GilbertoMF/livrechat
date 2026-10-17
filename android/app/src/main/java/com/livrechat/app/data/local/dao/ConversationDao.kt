@@ -66,6 +66,9 @@ interface ConversationDao {
 
     @Query("UPDATE conversations SET pinnedMessageId = :messageId, pinnedMessageSnippet = :snippet WHERE id = :convId")
     suspend fun updatePinnedMessage(convId: String, messageId: String?, snippet: String?)
+
+    @Query("UPDATE conversations SET isMuted = :isMuted WHERE id = :convId")
+    suspend fun updateMuteStatus(convId: String, isMuted: Boolean)
 }
 
 private fun sanitizePreview(content: String?): String? {

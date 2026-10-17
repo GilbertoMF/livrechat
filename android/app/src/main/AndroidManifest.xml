@@ -113,7 +113,7 @@
             android:name=".service.LivreChatBackgroundService"
             android:enabled="true"
             android:exported="false"
-            android:stopWithTask="true" />
+            android:stopWithTask="false" />
 
         <!-- Firebase Cloud Messaging Receiver (High-Priority Background Handler) -->
         <service

@@ -316,6 +316,24 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
+    fun setConversationMutedUntil(convId: String, untilTimestamp: Long) {
+        prefs.edit().putLong("conv_muted_until_$convId", untilTimestamp).apply()
+    }
+
+    fun isConversationMuted(convId: String): Boolean {
+        val until = prefs.getLong("conv_muted_until_$convId", 0L)
+        if (until == -1L) return true
+        return until > System.currentTimeMillis()
+    }
+
+    fun unmuteConversation(convId: String) {
+        prefs.edit().remove("conv_muted_until_$convId").apply()
+    }
+
+    fun getConversationMutedUntil(convId: String): Long {
+        return prefs.getLong("conv_muted_until_$convId", 0L)
+    }
+
     companion object {
         private const val KEY_GLOBAL_WALLPAPER = "chat_wallpaper_global"
         private const val KEY_SERVER_URL = "server_url"

@@ -501,6 +501,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                         "image" -> "image/jpeg"
                         "video" -> "video/mp4"
                         "audio" -> "audio/mp3"
+                        "sticker" -> "image/png"
                         else -> "application/octet-stream"
                     }
                     payloadToSend = "data:$mime;base64,$b64"
@@ -513,6 +514,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                     "image" -> "jpg"
                     "video" -> "mp4"
                     "audio" -> "m4a"
+                    "sticker" -> "png"
                     else -> (fileName ?: "doc").substringAfterLast(".", "bin")
                 }
                 val localFile = MediaFileManager.saveBase64ToLocalFile(app, content, "sent_${clientMessageId}.$ext")
@@ -553,11 +555,12 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                         "image" -> "image/jpeg"
                         "video" -> "video/mp4"
                         "audio" -> "audio/mp4"
+                        "sticker" -> "image/png"
                         else -> "application/octet-stream"
                     }
                     val requestFile = fileToUpload.asRequestBody(mime.toMediaTypeOrNull())
                     val body = MultipartBody.Part.createFormData("file", fileToUpload.name, requestFile)
-                    val folderBody = (messageType + "s").toRequestBody("text/plain".toMediaTypeOrNull())
+                    val folderBody = (if (messageType == "sticker") "stickers" else (messageType + "s")).toRequestBody("text/plain".toMediaTypeOrNull())
                     val uploadRes = apiService.uploadMedia(body, folderBody)
                     if (uploadRes.isSuccessful && !uploadRes.body()?.url.isNullOrBlank()) {
                         finalPayload = uploadRes.body()!!.url

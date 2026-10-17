@@ -200,6 +200,7 @@ class ConnectionManager(
             val isCurrentOpen = _activeConversationId.value == message.conversationId
 
             val actualType = when {
+                message.messageType == "sticker" -> "sticker"
                 message.messageType == "image" || message.content.startsWith("data:image") -> "image"
                 message.messageType == "video" || message.content.startsWith("data:video") -> "video"
                 message.messageType == "file" || message.content.startsWith("data:application") -> "file"
@@ -209,12 +210,13 @@ class ConnectionManager(
 
             // Save incoming media to local storage so SQLite never stores heavy base64 blobs
             var processedMessage = message.copy(messageType = actualType)
-            if (actualType in listOf("image", "video", "file", "audio") || message.content.startsWith("data:") || message.content.length > 50000) {
+            if (actualType in listOf("image", "video", "file", "audio", "sticker") || message.content.startsWith("data:") || message.content.length > 50000) {
                 if (!MediaFileManager.isLocalFilePath(message.content)) {
                     val ext = when (actualType) {
                         "image" -> "jpg"
                         "video" -> "mp4"
                         "audio" -> "m4a"
+                        "sticker" -> "png"
                         else -> {
                             val fn = message.iv?.split("|")?.firstOrNull() ?: ""
                             fn.substringAfterLast(".", "bin")
@@ -234,6 +236,7 @@ class ConnectionManager(
                 "image" -> "📷 Foto"
                 "video" -> "🎥 Vídeo"
                 "file" -> "📄 Documento/Arquivo"
+                "sticker" -> "📑 Figurinha"
                 else -> processedMessage.content
             }
 

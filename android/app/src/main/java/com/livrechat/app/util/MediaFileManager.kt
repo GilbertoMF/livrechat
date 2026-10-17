@@ -221,5 +221,25 @@ object MediaFileManager {
             null
         }
     }
+
+    fun createStickerFromContent(context: Context, content: String): File? {
+        return try {
+            val original = decodeAndCorrectBitmap(context, content) ?: return null
+            val size = minOf(original.width, original.height)
+            val x = (original.width - size) / 2
+            val y = (original.height - size) / 2
+            val square = Bitmap.createBitmap(original, x, y, size, size)
+            val scaled = Bitmap.createScaledBitmap(square, 512, 512, true)
+            val stickersDir = File(context.filesDir, "stickers").apply { mkdirs() }
+            val stickerFile = File(stickersDir, "sticker_${System.currentTimeMillis()}.png")
+            java.io.FileOutputStream(stickerFile).use { out ->
+                scaled.compress(Bitmap.CompressFormat.PNG, 100, out)
+                out.flush()
+            }
+            stickerFile
+        } catch (e: Exception) {
+            null
+        }
+    }
 }
 

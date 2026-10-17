@@ -115,13 +115,14 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
 
                 val existing = db.messageDao().getMessageById(messageId)
                 if (existing == null) {
+                    val isCurrentOpen = conversationId == LivreChatNotificationManager.activeConversationId
                     val entity = MessageEntity(
                         id = messageId,
                         conversationId = conversationId,
                         senderId = senderId,
                         content = content,
                         messageType = messageType,
-                        status = "delivered",
+                        status = if (isCurrentOpen) "read" else "delivered",
                         isOutgoing = false,
                         createdAt = createdAt
                     )
@@ -130,7 +131,11 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
                     // Atualiza a conversa localmente para que já apareça no topo da lista
                     if (existingConv != null) {
                         db.conversationDao().updateLastMessage(conversationId, content, createdAt)
-                        db.conversationDao().recalculateUnreadCount(conversationId)
+                        if (isCurrentOpen) {
+                            db.conversationDao().clearUnreadCount(conversationId)
+                        } else {
+                            db.conversationDao().recalculateUnreadCount(conversationId)
+                        }
                         if (existingConv.otherDisplayName.isBlank() || existingConv.otherDisplayName == senderId || existingConv.otherDisplayName.startsWith("ID ")) {
                             db.conversationDao().insertOrUpdate(existingConv.copy(otherDisplayName = resolvedSenderName))
                         }
@@ -142,7 +147,7 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
                             otherDisplayName = resolvedSenderName,
                             lastMessageContent = content,
                             lastMessageTimestamp = createdAt,
-                            unreadCount = 1
+                            unreadCount = if (isCurrentOpen) 0 else 1
                         )
                         db.conversationDao().insertOrUpdate(newConv)
                     }
