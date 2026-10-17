@@ -589,7 +589,7 @@ export class WebSocketManager {
         const { conversationId } = event;
         await db.clearConversationMessages(conversationId);
         this.broadcast({
-          type: 'chat:clear',
+          type: 'chat:cleared',
           conversationId
         });
         break;

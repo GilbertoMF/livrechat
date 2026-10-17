@@ -38,6 +38,8 @@ class LivreChatApp : Application() {
     var isAppInForeground: Boolean = false
         private set
 
+    val isDuressModeActive = kotlinx.coroutines.flow.MutableStateFlow(false)
+
     val apiService: com.livrechat.app.data.remote.ApiService
         get() = apiClient.apiService
 

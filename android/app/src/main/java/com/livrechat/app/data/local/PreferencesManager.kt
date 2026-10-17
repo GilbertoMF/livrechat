@@ -140,6 +140,60 @@ class PreferencesManager(private val context: Context) {
             prefs.edit().putString("app_lock_pin_$uid", value).apply()
         }
 
+    var duressPin: String?
+        get() {
+            val uid = currentUserId
+            if (uid.isNullOrBlank()) return null
+            return prefs.getString("duress_pin_$uid", null)
+        }
+        set(value) {
+            val uid = currentUserId ?: return
+            prefs.edit().putString("duress_pin_$uid", value).apply()
+        }
+
+    var autoWipeOnFailedPin: Boolean
+        get() {
+            val uid = currentUserId
+            if (uid.isNullOrBlank()) return false
+            return prefs.getBoolean("auto_wipe_failed_pin_$uid", false)
+        }
+        set(value) {
+            val uid = currentUserId ?: return
+            prefs.edit().putBoolean("auto_wipe_failed_pin_$uid", value).apply()
+        }
+
+    private val _peekToViewFlow = kotlinx.coroutines.flow.MutableStateFlow(prefs.getBoolean("peek_to_view_enabled", false))
+    val peekToViewFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _peekToViewFlow
+
+    var peekToViewEnabled: Boolean
+        get() = prefs.getBoolean("peek_to_view_enabled", false)
+        set(value) {
+            prefs.edit().putBoolean("peek_to_view_enabled", value).apply()
+            _peekToViewFlow.value = value
+        }
+
+    private val _camouflageModeFlow = kotlinx.coroutines.flow.MutableStateFlow(prefs.getBoolean("camouflage_mode_enabled", false))
+    val camouflageModeFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _camouflageModeFlow
+
+    var camouflageModeEnabled: Boolean
+        get() = prefs.getBoolean("camouflage_mode_enabled", false)
+        set(value) {
+            prefs.edit().putBoolean("camouflage_mode_enabled", value).apply()
+            _camouflageModeFlow.value = value
+        }
+
+    fun wipeAllLocalData(context: Context) {
+        try {
+            prefs.edit().clear().apply()
+            val db = AppDatabase.getInstance(context)
+            db.clearAllTables()
+            context.filesDir.deleteRecursively()
+            context.cacheDir.deleteRecursively()
+        } catch (e: Exception) {
+            android.util.Log.e("PreferencesManager", "Erro ao apagar dados locais", e)
+        }
+    }
+
     var selfDestructTimer: String
         get() = prefs.getString(KEY_SELF_DESTRUCT_TIMER, "off") ?: "off"
         set(value) = prefs.edit().putString(KEY_SELF_DESTRUCT_TIMER, value).apply()
@@ -237,6 +291,8 @@ class PreferencesManager(private val context: Context) {
             editor.remove("biometric_enabled_$uid")
                 .remove("pin_lock_enabled_$uid")
                 .remove("app_lock_pin_$uid")
+                .remove("duress_pin_$uid")
+                .remove("auto_wipe_failed_pin_$uid")
         }
         editor.apply()
 

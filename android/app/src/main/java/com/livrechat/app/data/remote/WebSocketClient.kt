@@ -364,7 +364,7 @@ class WebSocketClient(
                             val avatarUrl = json.get("avatarUrl")?.asStringOrNull()
                             listener.onStatusView(statusId, fromUserId, fromUsername, displayName, avatarUrl)
                         }
-                        "chat:cleared" -> {
+                        "chat:cleared", "chat:clear" -> {
                             val convId = json.get("conversationId").asStringOrDefault()
                             listener.onChatCleared(convId)
                         }

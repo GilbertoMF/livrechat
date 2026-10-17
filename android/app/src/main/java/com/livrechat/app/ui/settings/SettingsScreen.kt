@@ -65,6 +65,8 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -896,12 +898,103 @@ fun SettingsScreen(
         )
     }
 
+    var showSetPinDialog by remember { mutableStateOf(false) }
+    var showSetDuressPinDialog by remember { mutableStateOf(false) }
+    var pinDraft by remember { mutableStateOf("") }
+    var duressPinDraft by remember { mutableStateOf("") }
+
+    if (showSetPinDialog) {
+        AlertDialog(
+            onDismissRequest = { showSetPinDialog = false },
+            title = { Text("Definir PIN de Acesso (4 dígitos)", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = {
+                Column {
+                    Text("Digite 4 números que serão solicitados ao abrir o app:", fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = pinDraft,
+                        onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) pinDraft = it },
+                        label = { Text("PIN (4 dígitos)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (pinDraft.length == 4) {
+                            prefs.appLockPin = pinDraft
+                            prefs.isPinLockEnabled = true
+                            showSetPinDialog = false
+                        }
+                    },
+                    enabled = pinDraft.length == 4
+                ) {
+                    Text("Salvar PIN")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSetPinDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (showSetDuressPinDialog) {
+        AlertDialog(
+            onDismissRequest = { showSetDuressPinDialog = false },
+            title = { Text("PIN de Coação (Perfil Falso)", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = {
+                Column {
+                    Text(
+                        "Se você for forçado sob coação ou ameaça a desbloquear o LivreChat, digite este PIN de emergência. O app abrirá um perfil limpo e inofensivo, sem expor suas conversas reais.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = duressPinDraft,
+                        onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) duressPinDraft = it },
+                        label = { Text("PIN de Coação (4 dígitos)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (duressPinDraft.length == 4 && duressPinDraft != prefs.appLockPin) {
+                            prefs.duressPin = duressPinDraft
+                            showSetDuressPinDialog = false
+                        }
+                    },
+                    enabled = duressPinDraft.length == 4 && duressPinDraft != prefs.appLockPin
+                ) {
+                    Text("Salvar PIN de Coação")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSetDuressPinDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
     // DIALOG: Conta e Segurança Avançada
     if (showSecurityDialog) {
         var isBioActive by remember { mutableStateOf(prefs.isBiometricEnabled) }
         var isPinActive by remember { mutableStateOf(prefs.isPinLockEnabled) }
         var selfDestruct by remember { mutableStateOf(prefs.selfDestructTimer) }
         var blockPrints by remember { mutableStateOf(prefs.blockScreenshots) }
+        var isAutoWipeActive by remember { mutableStateOf(prefs.autoWipeOnFailedPin) }
+        var isPeekToViewActive by remember { mutableStateOf(prefs.peekToViewEnabled) }
+        var isCamouflageActive by remember { mutableStateOf(prefs.camouflageModeEnabled) }
 
         AlertDialog(
             onDismissRequest = { showSecurityDialog = false },
@@ -932,7 +1025,158 @@ fun SettingsScreen(
                         )
                     }
 
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    // Bloqueio por PIN
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Bloqueio por PIN", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(
+                                if (prefs.appLockPin.isNullOrBlank()) "Definir código de 4 dígitos"
+                                else "PIN ativo (****)",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isPinActive,
+                            onCheckedChange = {
+                                isPinActive = it
+                                prefs.isPinLockEnabled = it
+                                if (it && prefs.appLockPin.isNullOrBlank()) {
+                                    pinDraft = ""
+                                    showSetPinDialog = true
+                                }
+                            }
+                        )
+                    }
+
+                    if (isPinActive) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    pinDraft = ""
+                                    showSetPinDialog = true
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text("Alterar PIN", fontSize = 11.sp)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    duressPinDraft = ""
+                                    showSetDuressPinDialog = true
+                                },
+                                modifier = Modifier.weight(1.3f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    if (prefs.duressPin.isNullOrBlank()) "PIN Coação (Falso)"
+                                    else "PIN Coação: Ativo",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        // Anti-Força Bruta
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Apagar Dados após 5 Erros", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("Proteção anti-força bruta", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Switch(
+                                checked = isAutoWipeActive,
+                                onCheckedChange = {
+                                    isAutoWipeActive = it
+                                    prefs.autoWipeOnFailedPin = it
+                                }
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    // Anti-Xeretador (Peek to View)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Modo Anti-Xeretador (Borrão)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("Fotos recebidas ficam borradas. Mantenha o dedo pressionado para ver.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = isPeekToViewActive,
+                            onCheckedChange = {
+                                isPeekToViewActive = it
+                                prefs.peekToViewEnabled = it
+                            }
+                        )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    // Modo Camuflagem (Calculadora)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Modo Camuflagem (Calculadora)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("Abre o app como uma calculadora funcional. Digite seu PIN e aperte '=' para entrar.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = isCamouflageActive,
+                            onCheckedChange = { active ->
+                                isCamouflageActive = active
+                                prefs.camouflageModeEnabled = active
+                                try {
+                                    val pm = context.packageManager
+                                    val mainComp = android.content.ComponentName(context, "com.livrechat.app.MainActivity")
+                                    val aliasComp = android.content.ComponentName(context, "com.livrechat.app.CalculatorAlias")
+                                    if (active) {
+                                        pm.setComponentEnabledSetting(
+                                            aliasComp,
+                                            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                                            android.content.pm.PackageManager.DONT_KILL_APP
+                                        )
+                                        pm.setComponentEnabledSetting(
+                                            mainComp,
+                                            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                                            android.content.pm.PackageManager.DONT_KILL_APP
+                                        )
+                                    } else {
+                                        pm.setComponentEnabledSetting(
+                                            mainComp,
+                                            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                                            android.content.pm.PackageManager.DONT_KILL_APP
+                                        )
+                                        pm.setComponentEnabledSetting(
+                                            aliasComp,
+                                            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                                            android.content.pm.PackageManager.DONT_KILL_APP
+                                        )
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("SettingsScreen", "Erro ao alternar alias: ${e.message}")
+                                }
+                            }
+                        )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                     // Bloquear Prints
                     Row(
@@ -952,7 +1196,7 @@ fun SettingsScreen(
                         )
                     }
 
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                     // Mensagens Autodestrutivas
                     Text("Autodestruição de Mensagens:", fontWeight = FontWeight.Bold, fontSize = 13.sp)

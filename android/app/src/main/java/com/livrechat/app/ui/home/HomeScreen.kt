@@ -117,8 +117,40 @@ fun HomeScreen(
             selectedTab = initialTab
         }
     }
-    val conversations by chatViewModel.conversationsFlow.collectAsState(initial = emptyList())
-    val callHistory by callViewModel.callHistoryFlow.collectAsState(initial = emptyList())
+    val isDuressActive by LivreChatApp.instance.isDuressModeActive.collectAsState()
+    val rawConversations by chatViewModel.conversationsFlow.collectAsState(initial = emptyList())
+    val conversations = remember(rawConversations, isDuressActive) {
+        if (isDuressActive) {
+            listOf(
+                ConversationEntity(
+                    id = "fake_support",
+                    otherUserId = "support",
+                    otherUsername = "suporte_oficial",
+                    otherDisplayName = "Equipe LivreChat",
+                    otherAvatarUrl = null,
+                    lastMessageContent = "Bem-vindo ao LivreChat! Seu app de mensagens privado e seguro.",
+                    lastMessageTimestamp = System.currentTimeMillis() - 7200000,
+                    unreadCount = 0
+                ),
+                ConversationEntity(
+                    id = "fake_updates",
+                    otherUserId = "updates",
+                    otherUsername = "novidades",
+                    otherDisplayName = "Dicas de Segurança",
+                    otherAvatarUrl = null,
+                    lastMessageContent = "Dica: Suas conversas contam com criptografia avançada de ponta a ponta.",
+                    lastMessageTimestamp = System.currentTimeMillis() - 86400000,
+                    unreadCount = 0
+                )
+            )
+        } else {
+            rawConversations
+        }
+    }
+    val rawCallHistory by callViewModel.callHistoryFlow.collectAsState(initial = emptyList())
+    val callHistory = remember(rawCallHistory, isDuressActive) {
+        if (isDuressActive) emptyList() else rawCallHistory
+    }
     val isConnected by chatViewModel.isConnected.collectAsState()
     val typingStatus by chatViewModel.typingStatus.collectAsState()
     val recordingAudioStatus by chatViewModel.recordingAudioStatus.collectAsState()
@@ -2452,6 +2484,10 @@ fun HomeScreen(
                                 isRecordingAudio = isConvRecording,
                                 isLocked = isLocked,
                                 onClick = {
+                                    if (conv.id.startsWith("fake_")) {
+                                        android.widget.Toast.makeText(context, "Canal oficial LivreChat. Tudo seguro.", android.widget.Toast.LENGTH_SHORT).show()
+                                        return@ConversationItem
+                                    }
                                     if (isLocked) {
                                         val activity = context as? FragmentActivity
                                         if (activity != null) {

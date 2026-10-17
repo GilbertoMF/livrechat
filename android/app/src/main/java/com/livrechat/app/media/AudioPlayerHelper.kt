@@ -97,7 +97,7 @@ class AudioPlayerHelper(private val context: Context) {
         }
     }
 
-    fun playAudio(messageId: String, content: String) {
+    fun playAudio(messageId: String, content: String, pitch: Float = 1.0f) {
         if (currentPlayingMessageId == messageId && _isPlaying.value) {
             pause()
             return
@@ -139,6 +139,15 @@ class AudioPlayerHelper(private val context: Context) {
                                 true
                             }
                             prepare()
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && pitch != 1.0f) {
+                                try {
+                                    val params = playbackParams
+                                    params.pitch = pitch
+                                    playbackParams = params
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Falha ao definir pitch $pitch: ${e.message}")
+                                }
+                            }
                             start()
                         }
 

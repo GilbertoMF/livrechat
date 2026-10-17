@@ -46,7 +46,7 @@ app.get('/health', async (req, res) => {
   res.status(200).json({
     status: 'online',
     appName: 'LivreChat Server',
-    version: '1.1.14',
+    version: '1.1.15',
     fcmInitialized: fcmService.isAvailable(),
     registeredFcmDevices,
     timestamp: new Date().toISOString()
@@ -58,14 +58,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 24;
+  const LATEST_CODE = 25;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.14',
+    latestVersion: '1.1.15',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -73,10 +73,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.14: Remoção do atalho de recado de vídeo na barra de mensagem e melhorias gerais.',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.14-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.14-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.14-universal.apk`,
+      : 'Nova versão 1.1.15 com Funcionalidades Exclusivas: PIN de Coação, Calculadora Camuflada, Modulador de Voz, Queimar Conversa, Mensagem com Senha, Modo Anti-Xeretador e P2P Sem Limites!',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.15-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.15-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.15-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -84,26 +84,38 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.14',
-      versionCode: 24,
+      version: '1.1.15',
+      versionCode: 25,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-17',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Remoção do atalho de recado de vídeo na barra de mensagem e melhorias gerais.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.14-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.14-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.14-universal.apk`,
+      message: 'Mega atualização 1.1.15 com Funcionalidades Exclusivas (PIN de Coação, Modo Calculadora, Modulador de Voz, Queimar Conversa, Envelope com Senha, Anti-Xeretador e P2P).',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.15-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.15-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.15-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '24.2 MB',
       sizeMbUniversal: '30.4 MB'
     },
     versions: [
       {
+        version: '1.1.15',
+        versionCode: 25,
+        releaseDate: '2026-10-17',
+        isLatest: true,
+        changelog: 'Mega atualização 1.1.15: PIN de Coação (perfil falso sob ameaça), Modo Camuflagem (abre calculadora funcional), Modulador de Tom de Voz (Grave, Agudo, Robô), Queimar Conversa dos dois lados, Mensagem Envelopada com Senha, Modo Anti-Xeretador (Peek to view) e Transferência Direta P2P sem limite.',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.15-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '20.9 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.15-armv7.apk` },
+          { type: 'universal', name: 'APK Universal Completo', size: '30.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.15-universal.apk` }
+        ]
+      },
+      {
         version: '1.1.14',
         versionCode: 24,
         releaseDate: '2026-10-17',
-        isLatest: true,
+        isLatest: false,
         changelog: 'Remoção do ícone de atalho de recado de vídeo (bolinha) da barra de digitação da conversa, mantendo a interface limpa estilo WhatsApp (anexos de vídeo continuam no clipe).',
         downloads: [
           { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.14-arm64.apk` },

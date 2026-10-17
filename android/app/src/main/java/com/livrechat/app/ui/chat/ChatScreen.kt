@@ -41,6 +41,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.draw.blur
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -75,6 +77,7 @@ import com.livrechat.app.media.AudioPlayerHelper
 import com.livrechat.app.media.AudioRecorderHelper
 import com.livrechat.app.ui.theme.BlueAccent
 import com.livrechat.app.ui.theme.DangerRed
+import com.livrechat.app.ui.theme.SuccessGreen
 import com.livrechat.app.ui.common.UserAvatarView
 import com.livrechat.app.sync.ContactSyncHelper
 import androidx.compose.ui.text.style.TextOverflow
@@ -134,6 +137,7 @@ fun ChatScreen(
     var recordingSeconds by remember { mutableIntStateOf(0) }
     var recordingJob by remember { mutableStateOf<Job?>(null) }
     val recordingAmplitudes = remember { mutableStateListOf<Int>() }
+    var selectedVoicePitch by remember { mutableFloatStateOf(1.0f) }
 
     val currentFlow by viewModel.messagesFlow.collectAsState()
     val messages by currentFlow.collectAsState(initial = emptyList())
@@ -154,7 +158,8 @@ fun ChatScreen(
                 val nextAudio = messages.subList(idx + 1, messages.size)
                     .firstOrNull { it.messageType == "audio" && !it.isDeleted }
                 if (nextAudio != null) {
-                    audioPlayerHelper.playAudio(nextAudio.id, nextAudio.content)
+                    val nextPitch = extractPitchFromIv(nextAudio.iv)
+                    audioPlayerHelper.playAudio(nextAudio.id, nextAudio.content, nextPitch)
                 }
             }
         }
@@ -501,6 +506,19 @@ fun ChatScreen(
     var showMuteDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var showBurnBothSidesDialog by remember { mutableStateOf(false) }
+    var showEnvelopeDialog by remember { mutableStateOf(false) }
+    var envelopeSecretText by remember { mutableStateOf("") }
+    var envelopePin by remember { mutableStateOf("") }
+    var envelopeHint by remember { mutableStateOf("") }
+    var showP2PConfirmDialog by remember { mutableStateOf(false) }
+    var pendingP2PFileName by remember { mutableStateOf<String?>(null) }
+    var pendingP2PFileSize by remember { mutableLongStateOf(0L) }
+    var pendingP2PUri by remember { mutableStateOf<Uri?>(null) }
+    val unlockedEnvelopes = remember { mutableStateMapOf<String, String>() }
+    var activeEnvelopeToUnlock by remember { mutableStateOf<MessageEntity?>(null) }
+    var unlockPinAttempt by remember { mutableStateOf("") }
+    var unlockError by remember { mutableStateOf<String?>(null) }
     var showContactProfile by remember { mutableStateOf(false) }
     var showCryptoInfoDialog by remember { mutableStateOf(false) }
     var selectedMessageForAction by remember { mutableStateOf<MessageEntity?>(null) }
@@ -674,6 +692,18 @@ fun ChatScreen(
         }
     }
 
+    val p2pFilePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val (fName, fSize) = getFileNameAndSize(context, uri)
+            pendingP2PFileName = fName
+            pendingP2PFileSize = fSize
+            pendingP2PUri = uri
+            showP2PConfirmDialog = true
+        }
+    }
+
     val audioPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -723,6 +753,254 @@ fun ChatScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (showBurnBothSidesDialog) {
+        AlertDialog(
+            onDismissRequest = { showBurnBothSidesDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.LocalFireDepartment, contentDescription = null, tint = DangerRed)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("🔥 Queimar para Ambos?", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Text(
+                    "Esta ação apagará permanentemente todo o histórico de mensagens, áudios e fotos para você e para o outro participante, além de limpar do servidor, sem deixar rastros.",
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearConversation(conversationId, otherUserId)
+                        showBurnBothSidesDialog = false
+                        Toast.makeText(context, "Conversa queimada para ambos com sucesso!", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DangerRed)
+                ) {
+                    Text("Queimar Conversa", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBurnBothSidesDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (showEnvelopeDialog) {
+        AlertDialog(
+            onDismissRequest = { showEnvelopeDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFFFFB300))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Mensagem com Senha", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        "A mensagem é criptografada e selada. O destinatário precisará digitar o código de 4 dígitos para abrir.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = envelopeSecretText,
+                        onValueChange = { envelopeSecretText = it },
+                        label = { Text("Mensagem secreta") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 4
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = envelopePin,
+                        onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) envelopePin = it },
+                        label = { Text("Senha de 4 dígitos") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = envelopeHint,
+                        onValueChange = { envelopeHint = it },
+                        label = { Text("Dica de senha (opcional)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (envelopeSecretText.isNotBlank() && envelopePin.length == 4) {
+                            val encryptedEnvelope = com.livrechat.app.util.EnvelopeCrypto.encrypt(
+                                pin = envelopePin,
+                                plaintext = envelopeSecretText.trim(),
+                                hint = envelopeHint.trim()
+                            )
+                            viewModel.sendMessage(conversationId, encryptedEnvelope, replyingToMessage?.id, otherUserId)
+                            envelopeSecretText = ""
+                            envelopePin = ""
+                            envelopeHint = ""
+                            showEnvelopeDialog = false
+                            replyingToMessage = null
+                        }
+                    },
+                    enabled = envelopeSecretText.isNotBlank() && envelopePin.length == 4,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB300))
+                ) {
+                    Text("Enviar Selada", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEnvelopeDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (activeEnvelopeToUnlock != null) {
+        val targetMsg = activeEnvelopeToUnlock!!
+        val hint = com.livrechat.app.util.EnvelopeCrypto.getHint(targetMsg.content)
+        AlertDialog(
+            onDismissRequest = {
+                activeEnvelopeToUnlock = null
+                unlockPinAttempt = ""
+                unlockError = null
+            },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.LockOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Desbloquear Mensagem", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column {
+                    if (!hint.isNullOrBlank()) {
+                        Text("Dica: $hint", fontWeight = FontWeight.Medium, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    Text("Digite a senha de 4 dígitos definida pelo remetente:", fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = unlockPinAttempt,
+                        onValueChange = {
+                            if (it.length <= 4 && it.all { c -> c.isDigit() }) {
+                                unlockPinAttempt = it
+                                unlockError = null
+                            }
+                        },
+                        label = { Text("Senha (4 dígitos)") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (!unlockError.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(unlockError!!, color = DangerRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val decrypted = com.livrechat.app.util.EnvelopeCrypto.decrypt(unlockPinAttempt, targetMsg.content)
+                        if (decrypted != null) {
+                            unlockedEnvelopes[targetMsg.id] = decrypted
+                            activeEnvelopeToUnlock = null
+                            unlockPinAttempt = ""
+                            unlockError = null
+                        } else {
+                            unlockError = "Senha incorreta!"
+                        }
+                    },
+                    enabled = unlockPinAttempt.length == 4
+                ) {
+                    Text("Abrir")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    activeEnvelopeToUnlock = null
+                    unlockPinAttempt = ""
+                    unlockError = null
+                }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (showP2PConfirmDialog && pendingP2PUri != null) {
+        val sizeFormatted = when {
+            pendingP2PFileSize >= 1024 * 1024 * 1024 -> "%.2f GB".format(pendingP2PFileSize.toDouble() / (1024 * 1024 * 1024))
+            pendingP2PFileSize >= 1024 * 1024 -> "%.1f MB".format(pendingP2PFileSize.toDouble() / (1024 * 1024))
+            pendingP2PFileSize >= 1024 -> "%d KB".format(pendingP2PFileSize / 1024)
+            else -> "$pendingP2PFileSize B"
+        }
+        AlertDialog(
+            onDismissRequest = { showP2PConfirmDialog = false },
+            icon = { Icon(Icons.Default.Bolt, contentDescription = null, tint = Color(0xFF00E5FF), modifier = Modifier.size(36.dp)) },
+            title = { Text("Transferência P2P Sem Limites", fontWeight = FontWeight.Bold, fontSize = 17.sp) },
+            text = {
+                Column {
+                    Text("Arquivo: ${pendingP2PFileName ?: "Arquivo"}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("Tamanho: $sizeFormatted", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        "Este arquivo será enviado diretamente de aparelho para aparelho via P2P criptografado ponta a ponta. Nada passa nem é armazenado nos servidores da LivreChat.",
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val name = pendingP2PFileName ?: "arquivo_p2p"
+                        val size = pendingP2PFileSize
+                        val uri = pendingP2PUri
+                        showP2PConfirmDialog = false
+                        if (uri != null) {
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    val input = context.contentResolver.openInputStream(uri)
+                                    val localFile = if (input != null) {
+                                        MediaFileManager.saveStreamToLocalFile(context, input, name).also { input.close() }
+                                    } else null
+                                    viewModel.sendMediaMessage(
+                                        conversationId = conversationId,
+                                        content = "p2p://$name|$size|${localFile?.absolutePath ?: ""}",
+                                        networkPayload = "p2p://$name|$size",
+                                        messageType = "p2p_file",
+                                        fileName = name,
+                                        fileSize = size,
+                                        targetUserId = otherUserId
+                                    )
+                                } catch (e: Exception) {
+                                    Log.e("ChatScreen", "Erro no envio P2P", e)
+                                }
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
+                ) {
+                    Text("Enviar via P2P", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showP2PConfirmDialog = false }) {
                     Text("Cancelar")
                 }
             }
@@ -1376,6 +1654,16 @@ fun ChatScreen(
                                 }
                             )
                             DropdownMenuItem(
+                                text = { Text("🔥 Queimar para ambos", color = DangerRed) },
+                                onClick = {
+                                    showMenu = false
+                                    showBurnBothSidesDialog = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.LocalFireDepartment, contentDescription = null, tint = DangerRed)
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Limpar conversa") },
                                 onClick = {
                                     showMenu = false
@@ -1538,6 +1826,7 @@ fun ChatScreen(
                                 isRecording = false
                                 recordingSeconds = 0
                                 recordingAmplitudes.clear()
+                                selectedVoicePitch = 1.0f
                                 Toast.makeText(context, "Gravação cancelada", Toast.LENGTH_SHORT).show()
                             },
                             colors = IconButtonDefaults.iconButtonColors(containerColor = DangerRed.copy(alpha = 0.15f))
@@ -1545,7 +1834,7 @@ fun ChatScreen(
                             Icon(Icons.Default.Delete, contentDescription = "Cancelar", tint = DangerRed)
                         }
 
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         // Duration label with red dot & live amplitude visualizer
                         Row(
@@ -1557,21 +1846,21 @@ fun ChatScreen(
                                     .size(10.dp)
                                     .background(DangerRed, CircleShape)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Gravando: %02d:%02d".format(recordingSeconds / 60, recordingSeconds % 60),
+                                text = "%02d:%02d".format(recordingSeconds / 60, recordingSeconds % 60),
                                 fontWeight = FontWeight.Bold,
                                 color = DangerRed,
-                                fontSize = 15.sp
+                                fontSize = 14.sp
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             // Live bouncing bars
                             Row(
                                 modifier = Modifier.height(20.dp),
                                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val recent = recordingAmplitudes.takeLast(14)
+                                val recent = recordingAmplitudes.takeLast(10)
                                 for (a in recent) {
                                     val barH = ((a / 12000f).coerceIn(0.2f, 1f) * 18).dp
                                     Box(
@@ -1585,6 +1874,42 @@ fun ChatScreen(
                             }
                         }
 
+                        // Voice Pitch Selector Pill
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (selectedVoicePitch != 1.0f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .clickable {
+                                    selectedVoicePitch = when (selectedVoicePitch) {
+                                        1.0f -> 0.75f   // Grave / Anônimo
+                                        0.75f -> 1.35f  // Agudo
+                                        1.35f -> 0.88f  // Robô
+                                        else -> 1.0f    // Normal
+                                    }
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val (emoji, label) = when (selectedVoicePitch) {
+                                    0.75f -> "🦹" to "Grave"
+                                    1.35f -> "🐿️" to "Agudo"
+                                    0.88f -> "🤖" to "Robô"
+                                    else -> "🎙️" to "Voz"
+                                }
+                                Text(emoji, fontSize = 14.sp)
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selectedVoicePitch != 1.0f) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
                         // Send Audio Button
                         IconButton(
                             onClick = {
@@ -1593,9 +1918,11 @@ fun ChatScreen(
                                 val recordedFile = audioRecorderHelper.stopRecording()
                                 val seconds = recordingSeconds
                                 val amps = recordingAmplitudes.toList()
+                                val currentPitch = selectedVoicePitch
                                 isRecording = false
                                 recordingSeconds = 0
                                 recordingAmplitudes.clear()
+                                selectedVoicePitch = 1.0f
 
                                 if (recordedFile != null && recordedFile.exists() && recordedFile.length() > 0) {
                                     scope.launch(Dispatchers.IO) {
@@ -1604,7 +1931,8 @@ fun ChatScreen(
                                             val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                                             val audioUri = "data:audio/mp4;base64,$base64"
                                             val bars = processAmplitudesToBars(amps, 28)
-                                            val encodedWaveform = encodeWaveform(bars)
+                                            val pitchPrefix = if (currentPitch != 1.0f) "pitch:$currentPitch|" else ""
+                                            val encodedWaveform = pitchPrefix + encodeWaveform(bars)
                                             viewModel.sendAudioMessage(
                                                 conversationId = conversationId,
                                                 audioBase64 = audioUri,
@@ -2160,6 +2488,12 @@ fun ChatScreen(
                             if (senderId != prefs.currentUserId) {
                                 viewingMemberUserId = senderId
                             }
+                        },
+                        unlockedEnvelopes = unlockedEnvelopes,
+                        onUnlockEnvelope = { msg ->
+                            activeEnvelopeToUnlock = msg
+                            unlockPinAttempt = ""
+                            unlockError = null
                         }
                     )
                 }
@@ -2292,6 +2626,43 @@ fun ChatScreen(
                         showAttachmentSheet = false
                         cameraInitialMode = "Recado de vídeo"
                         showCameraDialog = true
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    AttachmentItem(
+                        icon = Icons.Default.Lock,
+                        label = "Envelope",
+                        color = Color(0xFFFFB300)
+                    ) {
+                        showAttachmentSheet = false
+                        envelopeSecretText = ""
+                        envelopePin = ""
+                        envelopeHint = ""
+                        showEnvelopeDialog = true
+                    }
+
+                    AttachmentItem(
+                        icon = Icons.Default.LocalFireDepartment,
+                        label = "Queimar",
+                        color = DangerRed
+                    ) {
+                        showAttachmentSheet = false
+                        showBurnBothSidesDialog = true
+                    }
+
+                    AttachmentItem(
+                        icon = Icons.Default.Bolt,
+                        label = "P2P Direto",
+                        color = Color(0xFF00E5FF)
+                    ) {
+                        showAttachmentSheet = false
+                        p2pFilePickerLauncher.launch("*/*")
                     }
                 }
 
@@ -2543,7 +2914,9 @@ fun MessageBubble(
     isGroup: Boolean = false,
     senderDisplayName: String = "",
     senderAvatarUrl: String? = null,
-    onSenderClick: ((String) -> Unit)? = null
+    onSenderClick: ((String) -> Unit)? = null,
+    unlockedEnvelopes: Map<String, String> = emptyMap(),
+    onUnlockEnvelope: ((MessageEntity) -> Unit)? = null
 ) {
     val isOutgoing = message.isOutgoing
     val alignment = if (isOutgoing) Alignment.End else Alignment.Start
@@ -2830,11 +3203,28 @@ fun MessageBubble(
                                 hasCaption = hasMediaCaption,
                                 onVideoClick = { onVideoClick(message) }
                             )
+                        } else if (message.messageType == "p2p_file" || message.content.startsWith("p2p://")) {
+                            P2PFileMessageBubbleContent(
+                                message = message,
+                                isOutgoing = isOutgoing,
+                                context = context
+                            )
                         } else if (message.messageType == "file" || message.content.startsWith("data:application")) {
                             FileMessageBubbleContent(
                                 message = message,
                                 isOutgoing = isOutgoing,
                                 context = context
+                            )
+                        } else if (com.livrechat.app.util.EnvelopeCrypto.isEnveloped(message.content)) {
+                            val isUnlocked = unlockedEnvelopes.containsKey(message.id)
+                            EnvelopedMessageBubbleContent(
+                                message = message,
+                                isOutgoing = isOutgoing,
+                                isUnlocked = isUnlocked,
+                                decryptedText = unlockedEnvelopes[message.id],
+                                onUnlockClick = {
+                                    onUnlockEnvelope?.invoke(message)
+                                }
                             )
                         } else {
                             Text(
@@ -2979,17 +3369,24 @@ fun encodeWaveform(bars: List<Int>): String {
     return sb.toString()
 }
 
+fun extractPitchFromIv(encoded: String?): Float {
+    if (encoded == null) return 1.0f
+    val match = Regex("pitch:([0-9.]+)").find(encoded)
+    return match?.groupValues?.get(1)?.toFloatOrNull() ?: 1.0f
+}
+
 fun decodeWaveform(encoded: String?): List<Int> {
-    if (encoded != null && encoded.startsWith("w:")) {
-        val chars = encoded.removePrefix("w:")
+    val clean = if (encoded != null && encoded.contains("|")) encoded.substringAfterLast("|") else encoded
+    if (clean != null && clean.startsWith("w:")) {
+        val chars = clean.removePrefix("w:")
         val list = chars.map { ch ->
             val level = (ch - 'A').coerceIn(0, 25)
             6 + level
         }
         if (list.isNotEmpty()) return list
     }
-    if (encoded != null && encoded.startsWith("wf:")) {
-        val parsed = encoded.removePrefix("wf:").split(",").mapNotNull { it.toIntOrNull() }
+    if (clean != null && clean.startsWith("wf:")) {
+        val parsed = clean.removePrefix("wf:").split(",").mapNotNull { it.toIntOrNull() }
         if (parsed.isNotEmpty()) return parsed
     }
     return listOf(8, 14, 22, 12, 28, 18, 10, 24, 16, 26, 30, 14, 20, 26, 12, 18, 28, 16, 10, 22, 30, 20, 14, 18, 26, 16, 10, 14)
@@ -3049,6 +3446,8 @@ fun AudioMessageBubbleContent(
         }
     }
 
+    val pitch = remember(message.iv) { extractPitchFromIv(message.iv) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -3057,7 +3456,7 @@ fun AudioMessageBubbleContent(
     ) {
         IconButton(
             onClick = {
-                audioPlayerHelper.playAudio(message.id, message.content)
+                audioPlayerHelper.playAudio(message.id, message.content, pitch)
             },
             colors = IconButtonDefaults.iconButtonColors(
                 containerColor = if (isOutgoing) Color.White.copy(alpha = 0.25f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
@@ -3103,6 +3502,26 @@ fun AudioMessageBubbleContent(
                         fontSize = 11.sp,
                         color = if (isOutgoing) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (pitch != 1.0f) {
+                        val pitchLabel = when {
+                            pitch <= 0.8f -> "🦹 Grave"
+                            pitch >= 1.2f -> "🐿️ Agudo"
+                            else -> "🤖 Robô"
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Surface(
+                            color = if (isOutgoing) Color.White.copy(alpha = 0.22f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = pitchLabel,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3205,6 +3624,9 @@ fun ImageMessageBubbleContent(
 ) {
     var decodedBitmap by remember(message.content) { mutableStateOf<Bitmap?>(null) }
     val context = LocalContext.current
+    val prefs = remember { LivreChatApp.instance.preferencesManager }
+    val isPeekToViewActive by prefs.peekToViewFlow.collectAsState()
+    var isRevealed by remember { mutableStateOf(false) }
 
     LaunchedEffect(message.content) {
         withContext(Dispatchers.IO) {
@@ -3215,12 +3637,29 @@ fun ImageMessageBubbleContent(
         }
     }
 
+    val shouldBlur = isPeekToViewActive && !isOutgoing && !isRevealed
+
     Column {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(13.dp))
-                .clickable(onClick = onImageClick)
+                .pointerInput(isPeekToViewActive, isOutgoing) {
+                    if (isPeekToViewActive && !isOutgoing) {
+                        detectTapGestures(
+                            onPress = {
+                                isRevealed = true
+                                tryAwaitRelease()
+                                isRevealed = false
+                            },
+                            onTap = {
+                                onImageClick()
+                            }
+                        )
+                    } else {
+                        detectTapGestures(onTap = { onImageClick() })
+                    }
+                }
         ) {
             if (decodedBitmap != null) {
                 Image(
@@ -3228,9 +3667,43 @@ fun ImageMessageBubbleContent(
                     contentDescription = "Foto",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 160.dp, max = 280.dp),
+                        .heightIn(min = 160.dp, max = 280.dp)
+                        .then(if (shouldBlur) Modifier.blur(25.dp) else Modifier),
                     contentScale = ContentScale.Crop
                 )
+
+                if (shouldBlur) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(Color.Black.copy(alpha = 0.45f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VisibilityOff,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Anti-Xeretador Ativo",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = "Mantenha pressionado para ver",
+                                color = Color.White.copy(alpha = 0.85f),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
             } else {
                 Box(
                     modifier = Modifier
@@ -3281,6 +3754,81 @@ fun ImageMessageBubbleContent(
                 fontSize = 14.sp,
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
             )
+        }
+    }
+}
+
+@Composable
+fun EnvelopedMessageBubbleContent(
+    message: MessageEntity,
+    isOutgoing: Boolean,
+    isUnlocked: Boolean,
+    decryptedText: String?,
+    onUnlockClick: () -> Unit
+) {
+    val hint = com.livrechat.app.util.EnvelopeCrypto.getHint(message.content)
+    Surface(
+        color = if (isOutgoing) Color.Black.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = if (isUnlocked) Icons.Default.LockOpen else Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = if (isUnlocked) SuccessGreen else Color(0xFFFFB300),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isUnlocked) "Mensagem Revelada" else "Mensagem Envelopada",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = if (isUnlocked) SuccessGreen else Color(0xFFFFB300)
+                )
+            }
+
+            if (!hint.isNullOrBlank() && !isUnlocked) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Dica: $hint",
+                    fontSize = 12.sp,
+                    fontStyle = FontStyle.Italic,
+                    color = if (isOutgoing) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            if (isUnlocked && decryptedText != null) {
+                Text(
+                    text = decryptedText,
+                    fontSize = 15.sp,
+                    color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "•••• •••• ••••",
+                        fontSize = 14.sp,
+                        letterSpacing = 2.sp,
+                        color = if (isOutgoing) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                    Button(
+                        onClick = onUnlockClick,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB300)),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Text("Abrir", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     }
 }
@@ -3506,6 +4054,127 @@ fun FileMessageBubbleContent(
                 tint = if (isOutgoing) Color.White else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp)
             )
+        }
+    }
+}
+
+@Composable
+fun P2PFileMessageBubbleContent(
+    message: MessageEntity,
+    isOutgoing: Boolean,
+    context: Context
+) {
+    val parts = remember(message.iv, message.content) {
+        val raw = if (!message.iv.isNullOrBlank()) message.iv!! else message.content.removePrefix("p2p://")
+        raw.split("|")
+    }
+    val fileName = parts.getOrNull(0)?.ifBlank { null } ?: "arquivo_p2p_${message.id.take(8)}"
+    val fileSize = parts.getOrNull(1)?.toLongOrNull() ?: 0L
+    val localFilePath = parts.getOrNull(2)?.ifBlank { null }
+    val formattedSize = remember(fileSize) {
+        when {
+            fileSize >= 1024 * 1024 * 1024 -> "%.2f GB".format(fileSize.toDouble() / (1024 * 1024 * 1024))
+            fileSize >= 1024 * 1024 -> "%.1f MB".format(fileSize.toDouble() / (1024 * 1024))
+            fileSize >= 1024 -> "%d KB".format(fileSize / 1024)
+            else -> "$fileSize B"
+        }
+    }
+    val ext = fileName.substringAfterLast(".", "").uppercase()
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (isOutgoing) Color.White.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .clickable {
+                if (localFilePath != null) {
+                    val mime = when (ext.lowercase()) {
+                        "pdf" -> "application/pdf"
+                        "doc", "docx" -> "application/msword"
+                        "xls", "xlsx" -> "application/vnd.ms-excel"
+                        "zip" -> "application/zip"
+                        "apk" -> "application/vnd.android.package-archive"
+                        "mp4" -> "video/mp4"
+                        "mp3", "m4a" -> "audio/*"
+                        "txt" -> "text/plain"
+                        else -> "*/*"
+                    }
+                    openMediaFile(context, localFilePath, fileName, mime)
+                } else {
+                    Toast.makeText(context, "Conexão P2P direta pronta", Toast.LENGTH_SHORT).show()
+                }
+            }
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Bolt,
+                    contentDescription = null,
+                    tint = Color(0xFF00E5FF),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Transferência Direta P2P (Sem Limite)",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = Color(0xFF00E5FF)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFF00B0FF),
+                    modifier = Modifier.size(42.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.FileDownload,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = fileName,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "$formattedSize • P2P Encriptado",
+                        fontSize = 12.sp,
+                        color = if (isOutgoing) Color.White.copy(alpha = 0.7f) else OfflineGray
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color(0xFF00E5FF).copy(alpha = 0.15f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = if (isOutgoing) "✓ Pronto para transferência direta ao destinatário" else "⚡ Conexão direta entre dispositivos disponível",
+                    fontSize = 11.sp,
+                    color = Color(0xFF00E5FF),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
         }
     }
 }

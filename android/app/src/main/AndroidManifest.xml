@@ -74,6 +74,20 @@
             </intent-filter>
         </activity>
 
+        <!-- Camouflage Mode: Activity Alias disguised as Calculator -->
+        <activity-alias
+            android:name=".CalculatorAlias"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="Calculadora">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
         <!-- Account Authenticator Service for LivreChat -->
         <service
             android:name=".sync.AuthenticatorService"
