@@ -67,9 +67,7 @@ fun EmojiStickerPanel(
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 try {
-                    val input = context.contentResolver.openInputStream(uri) ?: return@launch
-                    val original = BitmapFactory.decodeStream(input)
-                    input.close()
+                    val original = com.livrechat.app.util.MediaFileManager.loadGalleryImageCorrected(context, uri, 1024)
                     if (original != null) {
                         val size = minOf(original.width, original.height)
                         val x = (original.width - size) / 2

@@ -281,6 +281,9 @@ fun LivreChatNavGraph(
                 onStartCall = { userId, displayName, username, avatar ->
                     callViewModel.startOutgoingCall(userId, displayName, username, avatar)
                     navController.navigate(Routes.ACTIVE_CALL)
+                },
+                onNavigateToActiveCall = {
+                    navController.navigate(Routes.ACTIVE_CALL)
                 }
             )
         }
@@ -306,6 +309,9 @@ fun LivreChatNavGraph(
                 onStartCall = { targetId, targetName, targetUsername, targetAvatar ->
                     callViewModel.startOutgoingCall(targetId, targetName, targetUsername, targetAvatar)
                     navController.navigate(Routes.ACTIVE_CALL)
+                },
+                onNavigateToActiveCall = {
+                    navController.navigate(Routes.ACTIVE_CALL)
                 }
             )
         }
@@ -313,6 +319,24 @@ fun LivreChatNavGraph(
         composable(Routes.ACTIVE_CALL) {
             ActiveCallScreen(
                 viewModel = callViewModel,
+                onMinimize = {
+                    val currentRoute = navController.currentBackStackEntry?.destination?.route
+                    if (currentRoute == Routes.ACTIVE_CALL) {
+                        val popped = navController.popBackStack()
+                        if (!popped || navController.currentBackStackEntry == null) {
+                            navController.navigate(Routes.HOME) {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        }
+                    }
+                },
+                onNavigateToChat = { targetUserId, targetDisplayName ->
+                    val currentRoute = navController.currentBackStackEntry?.destination?.route
+                    if (currentRoute == Routes.ACTIVE_CALL) {
+                        navController.popBackStack()
+                    }
+                    navController.navigate("chat/call_$targetUserId/$targetUserId/$targetDisplayName")
+                },
                 onCallFinished = {
                     val currentRoute = navController.currentBackStackEntry?.destination?.route
                     if (currentRoute == Routes.ACTIVE_CALL) {

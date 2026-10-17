@@ -210,8 +210,31 @@ class ConnectionManager(
 
             // Save incoming media to local storage so SQLite never stores heavy base64 blobs
             var processedMessage = message.copy(messageType = actualType)
-            if (actualType in listOf("image", "video", "file", "audio", "sticker") || message.content.startsWith("data:") || message.content.length > 50000) {
-                if (!MediaFileManager.isLocalFilePath(message.content)) {
+            if (message.content.startsWith("http://") || message.content.startsWith("https://")) {
+                // Remote media URL (Cloudflare R2): keep URL and pre-cache file in background
+                val remoteUrl = message.content
+                launch(Dispatchers.IO) {
+                    try {
+                        val cacheKey = "cache_" + kotlin.math.abs(remoteUrl.hashCode()).toString() + ".jpg"
+                        val cachedFile = java.io.File(MediaFileManager.getMediaDir(context), cacheKey)
+                        if (!cachedFile.exists() || cachedFile.length() < 200L) {
+                            val url = java.net.URL(remoteUrl)
+                            val conn = url.openConnection() as java.net.HttpURLConnection
+                            conn.connectTimeout = 15000
+                            conn.readTimeout = 15000
+                            conn.setRequestProperty("User-Agent", "LivreChat-Android")
+                            if (conn.responseCode in 200..299) {
+                                conn.inputStream.use { input ->
+                                    cachedFile.outputStream().use { out -> input.copyTo(out) }
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Falha no pré-cache de mídia remota: ${e.message}")
+                    }
+                }
+            } else if (actualType in listOf("image", "video", "file", "audio", "sticker") || message.content.startsWith("data:") || message.content.length > 50000) {
+                if (!MediaFileManager.isLocalFilePath(message.content) && !message.content.startsWith("p2p://")) {
                     val ext = when (actualType) {
                         "image" -> "jpg"
                         "video" -> "mp4"

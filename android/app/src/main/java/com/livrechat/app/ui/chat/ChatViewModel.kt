@@ -221,14 +221,21 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
 
                         // Prevent SQLiteBlobTooBigException: never store raw Base64 media directly into SQLite
                         var safeContent = dto.content
-                        if (existing != null && MediaFileManager.isLocalFilePath(existing.content)) {
+                        val existingFile = if (existing != null && MediaFileManager.isLocalFilePath(existing.content)) {
+                            MediaFileManager.getLocalFile(existing.content)
+                        } else null
+
+                        if (existingFile != null && existingFile.length() > 500L && existing != null) {
                             safeContent = existing.content
-                        } else if (dto.messageType in listOf("image", "video", "file", "audio") || dto.content.startsWith("data:") || dto.content.length > 50000) {
-                            if (!MediaFileManager.isLocalFilePath(dto.content)) {
+                        } else if (dto.content.startsWith("http://") || dto.content.startsWith("https://")) {
+                            safeContent = dto.content
+                        } else if (dto.messageType in listOf("image", "video", "file", "audio", "sticker") || dto.content.startsWith("data:") || dto.content.length > 50000) {
+                            if (!MediaFileManager.isLocalFilePath(dto.content) && !dto.content.startsWith("p2p://")) {
                                 val ext = when (dto.messageType) {
                                     "image" -> "jpg"
                                     "video" -> "mp4"
                                     "audio" -> "m4a"
+                                    "sticker" -> "png"
                                     else -> {
                                         val fn = dto.iv?.split("|")?.firstOrNull() ?: ""
                                         fn.substringAfterLast(".", "bin")

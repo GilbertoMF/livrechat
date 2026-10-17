@@ -121,7 +121,8 @@ fun ChatScreen(
     otherDisplayName: String,
     viewModel: ChatViewModel,
     onNavigateBack: () -> Unit,
-    onStartCall: (String, String, String, String?) -> Unit
+    onStartCall: (String, String, String, String?) -> Unit,
+    onNavigateToActiveCall: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val audioRecorderHelper = remember { AudioRecorderHelper(context) }
@@ -2381,6 +2382,68 @@ fun ChatScreen(
                 }
             }
 
+            // Active Call Banner inside ChatScreen
+            val activeCallVm = com.livrechat.app.ui.call.CallViewModel.activeInstance
+            val chatCallState by (activeCallVm?.callState?.collectAsState() ?: remember { mutableStateOf(com.livrechat.app.webrtc.CallState.IDLE) })
+            val chatCallDuration by (activeCallVm?.durationSeconds?.collectAsState() ?: remember { mutableIntStateOf(0) })
+            val chatCallInfo by (activeCallVm?.callInfo?.collectAsState() ?: remember { mutableStateOf(null) })
+
+            if (chatCallState in listOf(com.livrechat.app.webrtc.CallState.CALLING, com.livrechat.app.webrtc.CallState.RINGING, com.livrechat.app.webrtc.CallState.CONNECTING, com.livrechat.app.webrtc.CallState.CONNECTED)) {
+                Surface(
+                    color = Color(0xFF25D366),
+                    shape = RoundedCornerShape(12.dp),
+                    shadowElevation = 6.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .align(Alignment.TopCenter)
+                        .zIndex(20f)
+                        .clickable { onNavigateToActiveCall?.invoke() }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Call,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Toque para voltar à chamada",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                val durationText = if (chatCallState == com.livrechat.app.webrtc.CallState.CONNECTED) {
+                                    val m = chatCallDuration / 60
+                                    val s = chatCallDuration % 60
+                                    String.format("%02d:%02d", m, s)
+                                } else "Em andamento"
+                                Text(
+                                    text = "${chatCallInfo?.contactDisplayName ?: "Contato"} • $durationText",
+                                    color = Color.White.copy(alpha = 0.9f),
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
             // Pinned Message Banner
             if (!currentConv?.pinnedMessageId.isNullOrBlank()) {
                 val pinnedId = currentConv?.pinnedMessageId!!
@@ -3181,7 +3244,8 @@ fun MessageBubble(
                             ViewOnceMessageBubbleContent(
                                 message = message,
                                 isOutgoing = isOutgoing,
-                                onOpenClick = { onViewOnceClick(message) }
+                                onOpenClick = { onViewOnceClick(message) },
+                                onLongClick = { onLongPress(message) }
                             )
                         } else if (isAudioMsg) {
                             AudioMessageBubbleContent(
@@ -3194,26 +3258,30 @@ fun MessageBubble(
                                 message = message,
                                 isOutgoing = isOutgoing,
                                 hasCaption = hasMediaCaption,
-                                onImageClick = { onImageClick(message.content) }
+                                onImageClick = { onImageClick(message.content) },
+                                onLongClick = { onLongPress(message) }
                             )
                         } else if (isVideoMsg) {
                             VideoMessageBubbleContent(
                                 message = message,
                                 isOutgoing = isOutgoing,
                                 hasCaption = hasMediaCaption,
-                                onVideoClick = { onVideoClick(message) }
+                                onVideoClick = { onVideoClick(message) },
+                                onLongClick = { onLongPress(message) }
                             )
                         } else if (message.messageType == "p2p_file" || message.content.startsWith("p2p://")) {
                             P2PFileMessageBubbleContent(
                                 message = message,
                                 isOutgoing = isOutgoing,
-                                context = context
+                                context = context,
+                                onLongClick = { onLongPress(message) }
                             )
                         } else if (message.messageType == "file" || message.content.startsWith("data:application")) {
                             FileMessageBubbleContent(
                                 message = message,
                                 isOutgoing = isOutgoing,
-                                context = context
+                                context = context,
+                                onLongClick = { onLongPress(message) }
                             )
                         } else if (com.livrechat.app.util.EnvelopeCrypto.isEnveloped(message.content)) {
                             val isUnlocked = unlockedEnvelopes.containsKey(message.id)
@@ -3224,7 +3292,8 @@ fun MessageBubble(
                                 decryptedText = unlockedEnvelopes[message.id],
                                 onUnlockClick = {
                                     onUnlockEnvelope?.invoke(message)
-                                }
+                                },
+                                onLongClick = { onLongPress(message) }
                             )
                         } else {
                             Text(
@@ -3620,19 +3689,27 @@ fun ImageMessageBubbleContent(
     message: MessageEntity,
     isOutgoing: Boolean,
     hasCaption: Boolean,
-    onImageClick: () -> Unit
+    onImageClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     var decodedBitmap by remember(message.content) { mutableStateOf<Bitmap?>(null) }
+    var isLoading by remember(message.content) { mutableStateOf(true) }
+    var loadError by remember(message.content) { mutableStateOf(false) }
+    var reloadCount by remember(message.content) { mutableIntStateOf(0) }
     val context = LocalContext.current
     val prefs = remember { LivreChatApp.instance.preferencesManager }
     val isPeekToViewActive by prefs.peekToViewFlow.collectAsState()
     var isRevealed by remember { mutableStateOf(false) }
 
-    LaunchedEffect(message.content) {
+    LaunchedEffect(message.content, reloadCount) {
+        isLoading = true
+        loadError = false
         withContext(Dispatchers.IO) {
             val bmp = MediaFileManager.decodeAndCorrectBitmap(context, message.content)
             withContext(Dispatchers.Main) {
                 decodedBitmap = bmp
+                isLoading = false
+                loadError = (bmp == null)
             }
         }
     }
@@ -3653,11 +3730,21 @@ fun ImageMessageBubbleContent(
                                 isRevealed = false
                             },
                             onTap = {
-                                onImageClick()
+                                if (loadError) reloadCount++ else onImageClick()
+                            },
+                            onLongPress = {
+                                onLongClick()
                             }
                         )
                     } else {
-                        detectTapGestures(onTap = { onImageClick() })
+                        detectTapGestures(
+                            onTap = {
+                                if (loadError) reloadCount++ else onImageClick()
+                            },
+                            onLongPress = {
+                                onLongClick()
+                            }
+                        )
                     }
                 }
         ) {
@@ -3704,7 +3791,7 @@ fun ImageMessageBubbleContent(
                         }
                     }
                 }
-            } else {
+            } else if (isLoading) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3713,9 +3800,36 @@ fun ImageMessageBubbleContent(
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(26.dp),
                         color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.primary
                     )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .background(Color.Black.copy(alpha = 0.25f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Recarregar imagem",
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Toque para recarregar",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
 
@@ -3758,19 +3872,27 @@ fun ImageMessageBubbleContent(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun EnvelopedMessageBubbleContent(
     message: MessageEntity,
     isOutgoing: Boolean,
     isUnlocked: Boolean,
     decryptedText: String?,
-    onUnlockClick: () -> Unit
+    onUnlockClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     val hint = com.livrechat.app.util.EnvelopeCrypto.getHint(message.content)
     Surface(
         color = if (isOutgoing) Color.Black.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
         shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .combinedClickable(
+                onClick = { if (!isUnlocked) onUnlockClick() },
+                onLongClick = { onLongClick() }
+            )
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3833,12 +3955,14 @@ fun EnvelopedMessageBubbleContent(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun VideoMessageBubbleContent(
     message: MessageEntity,
     isOutgoing: Boolean,
     hasCaption: Boolean,
-    onVideoClick: () -> Unit
+    onVideoClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     val context = LocalContext.current
     val parts = remember(message.iv) { message.iv?.split("|") ?: emptyList() }
@@ -3879,7 +4003,10 @@ fun VideoMessageBubbleContent(
                 .height(180.dp)
                 .clip(RoundedCornerShape(13.dp))
                 .background(Color.Black.copy(alpha = 0.85f))
-                .clickable { onVideoClick() },
+                .combinedClickable(
+                    onClick = { onVideoClick() },
+                    onLongClick = { onLongClick() }
+                ),
             contentAlignment = Alignment.Center
         ) {
             if (thumbnailBitmap != null) {
@@ -3976,11 +4103,13 @@ fun VideoMessageBubbleContent(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun FileMessageBubbleContent(
     message: MessageEntity,
     isOutgoing: Boolean,
-    context: Context
+    context: Context,
+    onLongClick: () -> Unit
 ) {
     val parts = remember(message.iv) { message.iv?.split("|") ?: emptyList() }
     val fileName = parts.getOrNull(0)?.ifBlank { null } ?: "arquivo_${message.id.take(8)}"
@@ -3992,18 +4121,21 @@ fun FileMessageBubbleContent(
         color = if (isOutgoing) Color.White.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {
-                val mime = when (ext.lowercase()) {
-                    "pdf" -> "application/pdf"
-                    "doc", "docx" -> "application/msword"
-                    "xls", "xlsx" -> "application/vnd.ms-excel"
-                    "zip" -> "application/zip"
-                    "apk" -> "application/vnd.android.package-archive"
-                    "txt" -> "text/plain"
-                    else -> "*/*"
-                }
-                openMediaFile(context, message.content, fileName, mime)
-            }
+            .combinedClickable(
+                onClick = {
+                    val mime = when (ext.lowercase()) {
+                        "pdf" -> "application/pdf"
+                        "doc", "docx" -> "application/msword"
+                        "xls", "xlsx" -> "application/vnd.ms-excel"
+                        "zip" -> "application/zip"
+                        "apk" -> "application/vnd.android.package-archive"
+                        "txt" -> "text/plain"
+                        else -> "*/*"
+                    }
+                    openMediaFile(context, message.content, fileName, mime)
+                },
+                onLongClick = { onLongClick() }
+            )
     ) {
         Row(
             modifier = Modifier.padding(10.dp),
@@ -4058,11 +4190,13 @@ fun FileMessageBubbleContent(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun P2PFileMessageBubbleContent(
     message: MessageEntity,
     isOutgoing: Boolean,
-    context: Context
+    context: Context,
+    onLongClick: () -> Unit
 ) {
     val parts = remember(message.iv, message.content) {
         val raw = if (!message.iv.isNullOrBlank()) message.iv!! else message.content.removePrefix("p2p://")
@@ -4087,24 +4221,27 @@ fun P2PFileMessageBubbleContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp)
-            .clickable {
-                if (localFilePath != null) {
-                    val mime = when (ext.lowercase()) {
-                        "pdf" -> "application/pdf"
-                        "doc", "docx" -> "application/msword"
-                        "xls", "xlsx" -> "application/vnd.ms-excel"
-                        "zip" -> "application/zip"
-                        "apk" -> "application/vnd.android.package-archive"
-                        "mp4" -> "video/mp4"
-                        "mp3", "m4a" -> "audio/*"
-                        "txt" -> "text/plain"
-                        else -> "*/*"
+            .combinedClickable(
+                onClick = {
+                    if (localFilePath != null) {
+                        val mime = when (ext.lowercase()) {
+                            "pdf" -> "application/pdf"
+                            "doc", "docx" -> "application/msword"
+                            "xls", "xlsx" -> "application/vnd.ms-excel"
+                            "zip" -> "application/zip"
+                            "apk" -> "application/vnd.android.package-archive"
+                            "mp4" -> "video/mp4"
+                            "mp3", "m4a" -> "audio/*"
+                            "txt" -> "text/plain"
+                            else -> "*/*"
+                        }
+                        openMediaFile(context, localFilePath, fileName, mime)
+                    } else {
+                        Toast.makeText(context, "Conexão P2P direta pronta", Toast.LENGTH_SHORT).show()
                     }
-                    openMediaFile(context, localFilePath, fileName, mime)
-                } else {
-                    Toast.makeText(context, "Conexão P2P direta pronta", Toast.LENGTH_SHORT).show()
-                }
-            }
+                },
+                onLongClick = { onLongClick() }
+            )
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -4645,11 +4782,13 @@ fun getSenderColor(senderId: String): Color {
     return colors[hash % colors.size]
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ViewOnceMessageBubbleContent(
     message: MessageEntity,
     isOutgoing: Boolean,
-    onOpenClick: () -> Unit
+    onOpenClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     val isOpened = message.viewOnceOpened
     val isVideo = message.messageType == "view_once_video" || (message.isViewOnce && message.messageType == "video")
@@ -4657,7 +4796,10 @@ fun ViewOnceMessageBubbleContent(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !isOpened) { onOpenClick() }
+            .combinedClickable(
+                onClick = { if (!isOpened) onOpenClick() },
+                onLongClick = { onLongClick() }
+            )
             .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

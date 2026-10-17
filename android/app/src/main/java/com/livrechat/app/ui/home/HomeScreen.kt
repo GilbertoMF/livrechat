@@ -108,7 +108,8 @@ fun HomeScreen(
     onNavigateToSearch: () -> Unit,
     onNavigateToQRCode: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onStartCall: (String, String, String, String?) -> Unit
+    onStartCall: (String, String, String, String?) -> Unit,
+    onNavigateToActiveCall: (() -> Unit)? = null
 ) {
     // Tabs: 0 = Conversas, 1 = Atualizações (Status), 2 = Chamadas
     var selectedTab by remember { mutableIntStateOf(initialTab) }
@@ -2413,6 +2414,61 @@ fun HomeScreen(
                     com.livrechat.app.data.remote.AppUpdateManager.dismiss()
                 }
             )
+
+            val activeCallState by callViewModel.callState.collectAsState()
+            val activeCallInfo by callViewModel.callInfo.collectAsState()
+            val callDurationSeconds by callViewModel.durationSeconds.collectAsState()
+
+            if (activeCallState in listOf(com.livrechat.app.webrtc.CallState.CALLING, com.livrechat.app.webrtc.CallState.RINGING, com.livrechat.app.webrtc.CallState.CONNECTING, com.livrechat.app.webrtc.CallState.CONNECTED)) {
+                Surface(
+                    color = Color(0xFF25D366),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToActiveCall?.invoke() }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Call,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Toque para voltar à chamada",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                val durationText = if (activeCallState == com.livrechat.app.webrtc.CallState.CONNECTED) {
+                                    val m = callDurationSeconds / 60
+                                    val s = callDurationSeconds % 60
+                                    String.format("%02d:%02d", m, s)
+                                } else "Em andamento"
+                                Text(
+                                    text = "${activeCallInfo?.contactDisplayName ?: "Contato"} • $durationText",
+                                    color = Color.White.copy(alpha = 0.9f),
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
 
             // Tabs: Conversas / Atualizações / Chamadas
             TabRow(selectedTabIndex = selectedTab) {

@@ -51,9 +51,15 @@ object MediaFileManager {
     }
 
     fun saveBase64ToLocalFile(context: Context, base64Data: String, originalFileName: String): File? {
+        if (base64Data.isBlank()) return null
+        if (base64Data.startsWith("http://") || base64Data.startsWith("https://") || isLocalFilePath(base64Data) || base64Data.startsWith("p2p://")) {
+            return null
+        }
+        if (!base64Data.startsWith("data:") && base64Data.length < 100) return null
         return try {
             val clean = if (base64Data.contains(",")) base64Data.substringAfter(",") else base64Data
             val bytes = Base64.decode(clean, Base64.DEFAULT)
+            if (bytes.size < 50) return null
             saveBytesToLocalFile(context, bytes, originalFileName)
         } catch (e: Throwable) {
             null
@@ -72,7 +78,7 @@ object MediaFileManager {
     }
 
     fun decodeFileWithExif(file: File): Bitmap? {
-        if (!file.exists() || file.length() == 0L) return null
+        if (!file.exists() || file.length() < 100L) return null
         return try {
             val exif = ExifInterface(file.absolutePath)
             val orientation = exif.getAttributeInt(
@@ -154,28 +160,34 @@ object MediaFileManager {
             if (content.startsWith("http://") || content.startsWith("https://")) {
                 val cacheKey = "cache_" + kotlin.math.abs(content.hashCode()).toString() + ".jpg"
                 val cachedFile = File(getMediaDir(context), cacheKey)
-                if (cachedFile.exists() && cachedFile.length() > 0) {
-                    return decodeFileWithExif(cachedFile)
+                if (cachedFile.exists() && cachedFile.length() > 200L) {
+                    val cachedBmp = decodeFileWithExif(cachedFile)
+                    if (cachedBmp != null) return cachedBmp
                 }
                 try {
                     val url = java.net.URL(content)
                     val conn = url.openConnection() as java.net.HttpURLConnection
                     conn.connectTimeout = 15000
                     conn.readTimeout = 15000
+                    conn.setRequestProperty("User-Agent", "LivreChat-Android")
                     conn.doInput = true
                     conn.connect()
-                    conn.inputStream.use { input ->
-                        cachedFile.outputStream().use { out ->
-                            input.copyTo(out)
+                    if (conn.responseCode in 200..299) {
+                        conn.inputStream.use { input ->
+                            cachedFile.outputStream().use { out ->
+                                input.copyTo(out)
+                            }
                         }
-                    }
-                    decodeFileWithExif(cachedFile)
+                        if (cachedFile.exists() && cachedFile.length() > 200L) {
+                            decodeFileWithExif(cachedFile)
+                        } else null
+                    } else null
                 } catch (e: Throwable) {
                     null
                 }
             } else if (isLocalFilePath(content)) {
                 val local = getLocalFile(content)
-                if (local != null) {
+                if (local != null && local.length() > 100L) {
                     decodeFileWithExif(local)
                 } else null
             } else {
