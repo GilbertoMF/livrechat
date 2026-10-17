@@ -24,8 +24,8 @@ class PreferencesManager(private val context: Context) {
     var serverUrl: String
         get() {
             val saved = prefs.getString(KEY_SERVER_URL, null)
-            if (saved == null || saved.contains("onrender.com") || saved.contains("b4a.run")) {
-                val newUrl = "https://164-152-40-160.sslip.io"
+            if (saved == null || saved.contains("onrender.com") || saved.contains("b4a.run") || saved.contains("sslip.io")) {
+                val newUrl = "https://livrechat.duckdns.org"
                 prefs.edit().putString(KEY_SERVER_URL, newUrl).apply()
                 return newUrl
             }
