@@ -58,14 +58,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 16;
+  const LATEST_CODE = 17;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.6',
+    latestVersion: '1.1.7',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -73,10 +73,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.6 disponível com Atualizador Integrado no App (download e instalação direta sem sair do aplicativo) e Correção do horário de Visto por Último dos contatos.',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.6-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.6-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.6-universal.apk`,
+      : 'Nova versão 1.1.7 disponível com Migração para Servidor Dedicado 24/7 (Oracle Cloud Always Free), zero limites de uso e conexão direta de alta velocidade.',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.7-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.7-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.7-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -84,26 +84,38 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.6',
-      versionCode: 16,
+      version: '1.1.7',
+      versionCode: 17,
       minSupportedVersionCode: 13,
-      releaseDate: '2026-10-16',
+      releaseDate: '2026-10-17',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Atualizador no Próprio App com progresso em tempo real e Correção do horário de Visto por Último dos contatos.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.6-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.6-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.6-universal.apk`,
+      message: 'Migração para Servidor Dedicado 24/7 (Oracle Cloud Always Free), zero limites de uso e conexão direta de alta velocidade.',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.7-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.7-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.7-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '24.2 MB',
       sizeMbUniversal: '30.4 MB'
     },
     versions: [
       {
+        version: '1.1.7',
+        versionCode: 17,
+        releaseDate: '2026-10-17',
+        isLatest: true,
+        changelog: 'Migração definitiva para o Servidor Dedicado 24/7 de Alta Performance (Oracle Cloud Always Free) com zero limites de franquia, conexão instantânea (~20ms) e banco de dados PostgreSQL integrado.',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.7-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '20.9 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.7-armv7.apk` },
+          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '30.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.7-universal.apk` }
+        ]
+      },
+      {
         version: '1.1.6',
         versionCode: 16,
         releaseDate: '2026-10-16',
-        isLatest: true,
+        isLatest: false,
         changelog: 'Atualização dentro do próprio app com download em streaming, barra de progresso em tempo real e instalador integrado. Correção definitiva do bug do visto por último dos contatos offline.',
         downloads: [
           { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.6-arm64.apk` },

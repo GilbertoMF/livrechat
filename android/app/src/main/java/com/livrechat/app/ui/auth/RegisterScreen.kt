@@ -48,7 +48,7 @@ fun RegisterScreen(
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var showServerConfig by remember { mutableStateOf(false) }
-    var customServerUrl by remember { mutableStateOf("https://livrechat-server.onrender.com") }
+    var customServerUrl by remember { mutableStateOf("https://164-152-40-160.sslip.io") }
 
     val uiState by viewModel.uiState.collectAsState()
 

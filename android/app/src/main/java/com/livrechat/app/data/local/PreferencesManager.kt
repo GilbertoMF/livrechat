@@ -22,7 +22,15 @@ class PreferencesManager(private val context: Context) {
     }
 
     var serverUrl: String
-        get() = prefs.getString(KEY_SERVER_URL, "https://livrechat-server.onrender.com") ?: "https://livrechat-server.onrender.com"
+        get() {
+            val saved = prefs.getString(KEY_SERVER_URL, null)
+            if (saved == null || saved.contains("onrender.com") || saved.contains("b4a.run")) {
+                val newUrl = "https://164-152-40-160.sslip.io"
+                prefs.edit().putString(KEY_SERVER_URL, newUrl).apply()
+                return newUrl
+            }
+            return saved
+        }
         set(value) = prefs.edit().putString(KEY_SERVER_URL, value).apply()
 
     var accessToken: String?
