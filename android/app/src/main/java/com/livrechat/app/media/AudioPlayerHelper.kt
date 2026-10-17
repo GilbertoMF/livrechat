@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
@@ -104,47 +105,68 @@ class AudioPlayerHelper(private val context: Context) {
 
         stop()
 
-        try {
-            val audioFile = getOrCreateAudioFile(messageId, content) ?: return
+        _playingMessageId.value = messageId
 
-            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-            routeAudio(proximityHelper.isNearEar)
-            proximityHelper.startListening()
+        scope.launch(Dispatchers.IO) {
+            try {
+                val audioFile = getOrCreateAudioFile(messageId, content)
 
-            val mp = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build()
-                )
-                setDataSource(audioFile.absolutePath)
-                setOnErrorListener { _, what, extra ->
-                    Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
+                withContext(Dispatchers.Main) {
+                    try {
+                        routeAudio(proximityHelper.isNearEar)
+                        proximityHelper.startListening()
+
+                        val mp = MediaPlayer().apply {
+                            setAudioAttributes(
+                                AudioAttributes.Builder()
+                                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                    .build()
+                            )
+                            if (audioFile != null && audioFile.exists() && audioFile.length() > 0) {
+                                setDataSource(audioFile.absolutePath)
+                            } else if (content.startsWith("http://") || content.startsWith("https://")) {
+                                setDataSource(content)
+                            } else {
+                                Log.e(TAG, "Nenhum arquivo ou URL de áudio válido disponível")
+                                stop()
+                                return@withContext
+                            }
+
+                            setOnErrorListener { _, what, extra ->
+                                Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
+                                stop()
+                                true
+                            }
+                            prepare()
+                            start()
+                        }
+
+                        mediaPlayer = mp
+                        currentPlayingMessageId = messageId
+                        _playingMessageId.value = messageId
+                        _isPlaying.value = true
+
+                        mp.setOnCompletionListener {
+                            val finishedId = currentPlayingMessageId
+                            stop()
+                            if (finishedId != null) {
+                                onAudioCompleted?.invoke(finishedId)
+                            }
+                        }
+
+                        startProgressTracker()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Erro ao reproduzir áudio no MediaPlayer: ${e.message}", e)
+                        stop()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Erro no download do áudio em background: ${e.message}", e)
+                withContext(Dispatchers.Main) {
                     stop()
-                    true
-                }
-                prepare()
-                start()
-            }
-
-            mediaPlayer = mp
-            currentPlayingMessageId = messageId
-            _playingMessageId.value = messageId
-            _isPlaying.value = true
-
-            mp.setOnCompletionListener {
-                val finishedId = currentPlayingMessageId
-                stop()
-                if (finishedId != null) {
-                    onAudioCompleted?.invoke(finishedId)
                 }
             }
-
-            startProgressTracker()
-        } catch (e: Exception) {
-            Log.e(TAG, "Erro ao reproduzir áudio", e)
-            stop()
         }
     }
 
