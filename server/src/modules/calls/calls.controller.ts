@@ -81,6 +81,8 @@ export class CallsController {
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
+  }
+
   public static async notifyRinging(req: AuthRequest, res: Response) {
     try {
       const calleeId = req.user?.userId || req.body.calleeId;
