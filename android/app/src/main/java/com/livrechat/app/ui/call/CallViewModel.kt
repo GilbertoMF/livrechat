@@ -293,6 +293,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     }
 
     override fun onCallRinging(fromUserId: String) {
+        android.util.Log.d("CallViewModel", "onCallRinging recebido de: $fromUserId! Mudando callState para RINGING (Chamando...)")
         _callState.value = CallState.RINGING
     }
 

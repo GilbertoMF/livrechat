@@ -81,5 +81,24 @@ export class CallsController {
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
+  public static async notifyRinging(req: AuthRequest, res: Response) {
+    try {
+      const calleeId = req.user?.userId || req.body.calleeId;
+      const { callerId } = req.body;
+      if (callerId) {
+        const { wsManager } = require('../../index');
+        if (wsManager) {
+          wsManager.sendToUser(callerId, {
+            type: 'call:ringing',
+            fromUserId: calleeId || 'contact'
+          });
+          console.log(`[Calls] Ringing ACK repassado para chamador ${callerId} (destinatário: ${calleeId})`);
+        }
+      }
+      return res.status(200).json({ success: true });
+    } catch (e: any) {
+      console.error('[Calls] Erro em notifyRinging:', e);
+      return res.status(500).json({ error: e.message });
+    }
   }
 }

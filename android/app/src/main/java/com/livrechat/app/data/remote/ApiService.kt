@@ -196,6 +196,11 @@ interface ApiService {
         @Path("messageId") messageId: String
     ): Response<BaseResponse>
 
+    @POST("api/calls/ringing")
+    suspend fun notifyCallRinging(
+        @Body body: Map<String, String>
+    ): Response<BaseResponse>
+
     @retrofit2.http.Multipart
     @POST("api/media/upload")
     suspend fun uploadMedia(

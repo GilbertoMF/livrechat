@@ -197,6 +197,27 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
             callerDisplayName = resolvedCallerName,
             callerUsername = callerUsername
         )
+
+        // WhatsApp Pattern: Notifica o servidor imediatamente que o aparelho está tocando!
+        // O servidor repassa na mesma hora para quem ligou, mudando a tela de "Ligando..." para "Chamando..."
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                LivreChatApp.instance.apiService.notifyCallRinging(
+                    mapOf(
+                        "callerId" to callerId,
+                        "calleeId" to (prefs.currentUserId ?: "")
+                    )
+                )
+                Log.d(TAG, "Notificado servidor: chamada tocando fisicamente (Chamando...) para $callerId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Falha ao enviar ACK de ringing via HTTP", e)
+            }
+        }
+
+        // Conecta o WebSocket para agilizar o WebRTC caso o usuário atenda
+        if (prefs.isLoggedIn()) {
+            LivreChatApp.instance.connectionManager.connect()
+        }
     }
 
     companion object {
