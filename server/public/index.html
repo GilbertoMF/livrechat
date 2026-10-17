@@ -1458,16 +1458,17 @@
             }
           }
 
-          let is64Bit = true;
+          const mem = navigator.deviceMemory || 4;
+          const cores = navigator.hardwareConcurrency || 4;
+          const lowerModel = modelName.toLowerCase();
+
+          let is32Bit = false;
           if (hints && hints.bitness) {
-            is64Bit = hints.bitness === '64';
+            is32Bit = hints.bitness === '32';
           } else {
-            const mem = navigator.deviceMemory || 4;
-            const cores = navigator.hardwareConcurrency || 4;
-            const lowerModel = modelName.toLowerCase();
-            const isLowEnd = mem <= 2 && cores <= 4;
-            if (/armv7|armeabi/i.test(ua) || (isLowEnd && (lowerModel.includes('e6i') || lowerModel.includes('go') || lowerModel.includes('lite') || lowerModel.includes('a01')))) {
-              is64Bit = false;
+            // Celulares de entrada e Android Go (como Moto e6i, A01, etc) têm 2GB RAM ou menos
+            if (mem <= 2 || /armv7|armeabi/i.test(ua) || lowerModel.includes('e6i') || lowerModel.includes('go') || lowerModel.includes('lite') || lowerModel.includes('a01')) {
+              is32Bit = true;
             }
           }
 
@@ -1475,25 +1476,25 @@
           const isSupported = versionNum >= 8.0;
           const compatText = isSupported ? '✓ Compatível com LivreChat' : '⚠️ Android antigo (< 8.0)';
 
-          if (!is64Bit) {
+          if (is32Bit) {
             setRecommendation(
               'armv7',
               'APK 32-bit ARMv7 (Otimizado)',
-              'Detectamos seu celular como arquitetura 32-bit (ARMv7 / Android Go). Esta versão é super leve (22 MB), consome pouca memória RAM e garante alta fluidez no seu aparelho.',
+              'Detectamos seu aparelho como arquitetura 32-bit (Moto e6i / Android Go). Esta versão é super leve (20.9 MB), consome pouca memória RAM e roda com máxima fluidez no seu aparelho.',
               URL_ARMV7,
-              '22.0 MB',
+              '20.9 MB',
               `📱 ${deviceNameDisplay} (32-bit)`,
               compatText,
               isSupported
             );
           } else {
             setRecommendation(
-              'arm64',
-              'APK Leve ARM64 (Alta Performance)',
-              'Detectamos processador moderno de 64-bit (ARM64). Esta versão entrega a máxima velocidade de resposta, abre 2x mais rápido e economiza bateria.',
-              URL_ARM64,
-              '25.4 MB',
-              `📱 ${deviceNameDisplay} (64-bit)`,
+              'universal',
+              'APK Universal (Compatibilidade Total)',
+              'Recomendamos o APK Universal com suporte completo a todas as arquiteturas (ARM64 e ARMv7) para instalação garantida sem erros.',
+              URL_UNIVERSAL,
+              '30.4 MB',
+              `📱 ${deviceNameDisplay}`,
               compatText,
               isSupported
             );
