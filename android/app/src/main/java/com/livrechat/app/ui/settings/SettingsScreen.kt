@@ -1741,7 +1741,7 @@ fun SettingsScreen(
             },
             text = {
                 Column {
-                    Text("LivreChat Decentralized v2.6 Pro", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("LivreChat Decentralized v${com.livrechat.app.BuildConfig.VERSION_NAME} (Build ${com.livrechat.app.BuildConfig.VERSION_CODE})", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("Comunicação privada ponto-a-ponto sem censura.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(12.dp))
@@ -2087,9 +2087,19 @@ fun SettingsScreen(
             item {
                 SettingsCard {
                     SettingsRowItem(
+                        icon = Icons.Default.SystemUpdate,
+                        title = "Atualizações do Aplicativo",
+                        subtitle = "Versão instalada: v${com.livrechat.app.BuildConfig.VERSION_NAME}",
+                        onClick = {
+                            com.livrechat.app.data.remote.AppUpdateManager.checkUpdate()
+                            android.widget.Toast.makeText(context, "Verificando atualizações...", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    SettingsRowItem(
                         icon = Icons.Default.Info,
                         title = "Sobre o LivreChat",
-                        subtitle = "Versão v2.6 Pro Decentralized e licença",
+                        subtitle = "Versão v${com.livrechat.app.BuildConfig.VERSION_NAME} e detalhes do app",
                         onClick = { showAboutDialog = true }
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))

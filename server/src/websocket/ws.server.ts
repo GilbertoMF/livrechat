@@ -8,9 +8,9 @@ import { db, Message } from '../db/database';
 import { fcmService } from '../services/fcm.service';
 
 export const APP_VERSION_RULES = {
-  LATEST_VERSION_NAME: '1.1.5',
-  LATEST_VERSION_CODE: 15,
-  MIN_SUPPORTED_VERSION_CODE: 12,
+  LATEST_VERSION_NAME: '1.1.6',
+  LATEST_VERSION_CODE: 16,
+  MIN_SUPPORTED_VERSION_CODE: 13,
   DOWNLOAD_PORTAL_URL: '/download'
 };
 
@@ -31,6 +31,8 @@ export class WebSocketManager {
   private wss: WebSocketServer;
   // Map userId to active sockets
   private userSockets: Map<string, Set<AuthenticatedSocket>> = new Map();
+  // Map userId to last seen ISO timestamp
+  private userLastSeen: Map<string, string> = new Map();
 
   constructor(server: HttpServer) {
     WebSocketManager.instance = this;
@@ -161,7 +163,10 @@ export class WebSocketManager {
             set.delete(ws);
             if (set.size === 0) {
               this.userSockets.delete(ws.userId);
-              this.broadcastUserStatus(ws.userId, 'offline').catch(() => {});
+              const nowIso = new Date().toISOString();
+              this.userLastSeen.set(ws.userId, nowIso);
+              db.updateUserLastActive(ws.userId, nowIso).catch(() => {});
+              this.broadcastUserStatus(ws.userId, 'offline', nowIso).catch(() => {});
             }
           }
           console.log(`[WS] Usuário desconectado: ${ws.username}`);
@@ -741,11 +746,17 @@ export class WebSocketManager {
             return;
           }
           const isOnline = this.isUserOnline(targetUserId);
+          let timestamp = '';
+          if (isOnline) {
+            timestamp = new Date().toISOString();
+          } else {
+            timestamp = this.userLastSeen.get(targetUserId) || (await db.getUserLastActive(targetUserId)) || '';
+          }
           senderWs.send(JSON.stringify({
             type: 'user:status',
             userId: targetUserId,
             status: isOnline ? 'online' : 'offline',
-            timestamp: new Date().toISOString()
+            timestamp: timestamp
           }));
         }
         break;
@@ -761,19 +772,20 @@ export class WebSocketManager {
     return !!sockets && sockets.size > 0;
   }
 
-  public async broadcastUserStatus(userId: string, status: 'online' | 'offline') {
+  public async broadcastUserStatus(userId: string, status: 'online' | 'offline', lastSeen?: string) {
+    const lastSeenTime = lastSeen || this.userLastSeen.get(userId) || '';
     const onlinePayload = JSON.stringify({
       type: 'user:status',
       userId: userId,
       status: status,
-      timestamp: status === 'online' ? new Date().toISOString() : ''
+      timestamp: status === 'online' ? new Date().toISOString() : lastSeenTime
     });
 
     const offlinePayload = JSON.stringify({
       type: 'user:status',
       userId: userId,
       status: 'offline',
-      timestamp: ''
+      timestamp: lastSeenTime
     });
 
     for (const [targetUserId, sockets] of this.userSockets.entries()) {

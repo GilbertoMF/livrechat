@@ -380,7 +380,7 @@ class WebSocketClient(
                             val uid = json.get("userId").asStringOrNull()
                             val status = json.get("status").asStringOrDefault()
                             val timestampStr = json.get("timestamp").asStringOrNull()
-                            val ts = TimeUtils.parseIsoTimestamp(timestampStr)
+                            val ts = TimeUtils.parseIsoTimestampOrNull(timestampStr)
                             if (uid != null) {
                                 val isOnline = (status == "online") && !preferencesManager.isUserBlocked(uid)
                                 listener.onUserStatus(uid, isOnline, ts)

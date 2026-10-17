@@ -52,6 +52,8 @@ class ConnectionManager(
     private val _recordingUserByConv = MutableStateFlow<Map<String, String?>>(emptyMap())
     val recordingUserByConv: StateFlow<Map<String, String?>> = _recordingUserByConv.asStateFlow()
 
+    private val preferencesManager by lazy { com.livrechat.app.data.local.PreferencesManager(context) }
+
     // Map of userId -> isOnline
     private val _onlineUsers = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val onlineUsers: StateFlow<Map<String, Boolean>> = _onlineUsers.asStateFlow()
@@ -61,7 +63,7 @@ class ConnectionManager(
     val lastSeenUsers: StateFlow<Map<String, Long>> = _lastSeenUsers.asStateFlow()
 
     fun isUserOnline(userId: String): Boolean = _onlineUsers.value[userId] ?: false
-    fun getLastSeen(userId: String): Long? = _lastSeenUsers.value[userId]
+    fun getLastSeen(userId: String): Long? = _lastSeenUsers.value[userId] ?: preferencesManager.getContactLastSeen(userId)
     fun queryUserStatus(userId: String) = webSocketClient.queryUserStatus(userId)
 
     init {
@@ -489,9 +491,17 @@ class ConnectionManager(
         _onlineUsers.value = map
 
         if (!isOnline) {
-            val lsMap = _lastSeenUsers.value.toMutableMap()
-            lsMap[userId] = lastSeenTimestamp ?: System.currentTimeMillis()
-            _lastSeenUsers.value = lsMap
+            val validTimestamp = if (lastSeenTimestamp != null && lastSeenTimestamp > 0L) {
+                lastSeenTimestamp
+            } else {
+                _lastSeenUsers.value[userId] ?: preferencesManager.getContactLastSeen(userId)
+            }
+            if (validTimestamp != null && validTimestamp > 0L) {
+                val lsMap = _lastSeenUsers.value.toMutableMap()
+                lsMap[userId] = validTimestamp
+                _lastSeenUsers.value = lsMap
+                preferencesManager.setContactLastSeen(userId, validTimestamp)
+            }
         }
 
         synchronized(listeners) {

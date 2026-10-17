@@ -205,7 +205,7 @@ fun ChatScreen(
     val activeRecordingUser = recordingUserMap[conversationId]
     var isContactBlocked by remember(otherUserId) { mutableStateOf(prefs.isUserBlocked(otherUserId)) }
     val isContactOnline = if (isContactBlocked) false else (onlineUsers[otherUserId] == true)
-    val contactLastSeen = if (isContactBlocked) null else lastSeenUsers[otherUserId]
+    val contactLastSeen = if (isContactBlocked) null else (lastSeenUsers[otherUserId] ?: prefs.getContactLastSeen(otherUserId))
 
     LaunchedEffect(otherUserId) {
         if (otherUserId.isNotBlank()) {

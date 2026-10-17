@@ -58,14 +58,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 15;
+  const LATEST_CODE = 16;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.5',
+    latestVersion: '1.1.6',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -73,10 +73,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.5 disponível com Fotos/Vídeos de Visualização Única (com bloqueio de print), Mensagens Fixadas e Recados de Vídeo circulares.',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.5-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.5-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.5-universal.apk`,
+      : 'Nova versão 1.1.6 disponível com Atualizador Integrado no App (download e instalação direta sem sair do aplicativo) e Correção do horário de Visto por Último dos contatos.',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.6-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.6-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.6-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -84,31 +84,31 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.5',
-      versionCode: 15,
+      version: '1.1.6',
+      versionCode: 16,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-16',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Visualização Única de Fotos e Vídeos (com proteção contra print), Mensagens Fixadas com salto rápido e Recados de Vídeo (bolinhas circulares).',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.5-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.5-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.5-universal.apk`,
+      message: 'Atualizador no Próprio App com progresso em tempo real e Correção do horário de Visto por Último dos contatos.',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.6-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.6-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.6-universal.apk`,
       downloadPortalUrl: '/download',
-      sizeMbArm64: '24.1 MB',
-      sizeMbUniversal: '30.3 MB'
+      sizeMbArm64: '24.2 MB',
+      sizeMbUniversal: '30.4 MB'
     },
     versions: [
       {
-        version: '1.1.5',
-        versionCode: 15,
+        version: '1.1.6',
+        versionCode: 16,
         releaseDate: '2026-10-16',
         isLatest: true,
-        changelog: 'Mídia de Visualização Única (FLAG_SECURE que bloqueia captura e gravação de tela), Mensagens Fixadas na conversa com navegação instantânea e Recados de Vídeo circulares estilo Telegram/WhatsApp.',
+        changelog: 'Atualização dentro do próprio app com download em streaming, barra de progresso em tempo real e instalador integrado. Correção definitiva do bug do visto por último dos contatos offline.',
         downloads: [
-          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.1 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.5-arm64.apk` },
-          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '20.8 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.5-armv7.apk` },
-          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '30.3 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.5-universal.apk` }
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.6-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '20.9 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.6-armv7.apk` },
+          { type: 'universal', name: 'APK Universal (Todos os Aparelhos)', size: '30.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.6-universal.apk` }
         ]
       },
       {

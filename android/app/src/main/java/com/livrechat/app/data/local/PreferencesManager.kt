@@ -297,6 +297,17 @@ class PreferencesManager(private val context: Context) {
         return prefs.getStringSet("blocked_users_set", emptySet()) ?: emptySet()
     }
 
+    fun getContactLastSeen(userId: String): Long? {
+        val ts = prefs.getLong("contact_last_seen_$userId", 0L)
+        return if (ts > 0L) ts else null
+    }
+
+    fun setContactLastSeen(userId: String, timestamp: Long) {
+        if (timestamp > 0L) {
+            prefs.edit().putLong("contact_last_seen_$userId", timestamp).apply()
+        }
+    }
+
     companion object {
         private const val KEY_GLOBAL_WALLPAPER = "chat_wallpaper_global"
         private const val KEY_SERVER_URL = "server_url"

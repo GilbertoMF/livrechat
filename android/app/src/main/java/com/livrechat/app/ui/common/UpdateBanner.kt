@@ -16,8 +16,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Button
@@ -26,15 +29,24 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.livrechat.app.data.remote.AppUpdateManager
+import com.livrechat.app.data.remote.UpdateDownloadState
 import com.livrechat.app.data.remote.UpdateInfo
+import java.util.Locale
 
 @Composable
 fun UpdateBanner(
@@ -50,6 +62,9 @@ fun UpdateBanner(
         modifier = modifier
     ) {
         if (updateInfo == null) return@AnimatedVisibility
+
+        val context = LocalContext.current
+        val downloadState by AppUpdateManager.downloadState.collectAsState()
 
         val isMandatory = updateInfo.isMandatory
         val containerColor = if (isMandatory) {
@@ -67,7 +82,7 @@ fun UpdateBanner(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 6.dp),
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
                 containerColor = containerColor,
                 contentColor = contentColor
@@ -79,79 +94,288 @@ fun UpdateBanner(
                     .fillMaxWidth()
                     .padding(14.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.Top,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = if (isMandatory) Icons.Default.Security else Icons.Default.SystemUpdate,
-                        contentDescription = null,
-                        tint = contentColor,
-                        modifier = Modifier
-                            .size(28.dp)
-                            .padding(top = 2.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (updateInfo.title.isNotBlank()) updateInfo.title else (if (isMandatory) "Atualização Obrigatória" else "Atualização Disponível"),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = contentColor
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = updateInfo.message,
-                            fontSize = 13.sp,
-                            lineHeight = 17.sp,
-                            color = contentColor.copy(alpha = 0.9f)
-                        )
-                    }
-
-                    if (!isMandatory && onDismiss != null) {
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.size(24.dp)
+                when (val state = downloadState) {
+                    is UpdateDownloadState.Downloading -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Fechar",
-                                tint = contentColor.copy(alpha = 0.7f),
-                                modifier = Modifier.size(18.dp)
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = null,
+                                tint = contentColor,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Baixando Atualização v${updateInfo.latestVersion}...",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = contentColor
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                val progressText = if (state.totalBytes > 0) {
+                                    val percent = (state.progress * 100).toInt()
+                                    "$percent% • ${formatFileSize(state.downloadedBytes)} de ${formatFileSize(state.totalBytes)}"
+                                } else {
+                                    "${formatFileSize(state.downloadedBytes)} baixados..."
+                                }
+                                Text(
+                                    text = progressText,
+                                    fontSize = 12.sp,
+                                    color = contentColor.copy(alpha = 0.85f)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (state.progress >= 0f) {
+                            LinearProgressIndicator(
+                                progress = { state.progress },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color = if (isMandatory) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                trackColor = contentColor.copy(alpha = 0.2f)
+                            )
+                        } else {
+                            LinearProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color = if (isMandatory) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                trackColor = contentColor.copy(alpha = 0.2f)
                             )
                         }
+
+                        if (!isMandatory) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(
+                                    onClick = { AppUpdateManager.cancelDownload() }
+                                ) {
+                                    Text("Cancelar", fontSize = 12.sp, color = contentColor)
+                                }
+                            }
+                        }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                    is UpdateDownloadState.ReadyToInstall -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = contentColor,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Download Concluído!",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = contentColor
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Toque em Instalar para atualizar o aplicativo.",
+                                    fontSize = 13.sp,
+                                    color = contentColor.copy(alpha = 0.9f)
+                                )
+                            }
+                        }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Button(
-                        onClick = onUpdateClick,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isMandatory) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            contentColor = if (isMandatory) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = ButtonDefaults.ContentPadding
-                    ) {
-                        Icon(
-                            Icons.Default.CloudDownload,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (isMandatory) "Atualizar Agora (Obrigatório)" else "Atualizar Agora",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Button(
+                                onClick = {
+                                    AppUpdateManager.installApk(context, state.apkFile)
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isMandatory) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                    contentColor = if (isMandatory) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.SystemUpdate,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Instalar Atualização",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
+
+                    is UpdateDownloadState.Error -> {
+                        Row(
+                            verticalAlignment = Alignment.Top,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .padding(top = 2.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Erro no Download da Atualização",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = contentColor
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = state.message,
+                                    fontSize = 13.sp,
+                                    color = contentColor.copy(alpha = 0.9f)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = { AppUpdateManager.startBrowserUpdate(context, updateInfo) }
+                            ) {
+                                Icon(Icons.Default.OpenInBrowser, contentDescription = null, modifier = Modifier.size(16.dp), tint = contentColor)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Navegador", fontSize = 12.sp, color = contentColor)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = { AppUpdateManager.startInAppUpdate(context, updateInfo) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isMandatory) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                    contentColor = if (isMandatory) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Tentar Novamente", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
+                    }
+
+                    is UpdateDownloadState.Idle -> {
+                        Row(
+                            verticalAlignment = Alignment.Top,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = if (isMandatory) Icons.Default.Security else Icons.Default.SystemUpdate,
+                                contentDescription = null,
+                                tint = contentColor,
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .padding(top = 2.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (updateInfo.title.isNotBlank()) updateInfo.title else (if (isMandatory) "Atualização Obrigatória" else "Atualização Disponível"),
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = contentColor
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = updateInfo.message,
+                                    fontSize = 13.sp,
+                                    lineHeight = 17.sp,
+                                    color = contentColor.copy(alpha = 0.9f)
+                                )
+                            }
+
+                            if (!isMandatory && onDismiss != null) {
+                                IconButton(
+                                    onClick = onDismiss,
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Fechar",
+                                        tint = contentColor.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = { AppUpdateManager.startBrowserUpdate(context, updateInfo) }
+                            ) {
+                                Icon(Icons.Default.OpenInBrowser, contentDescription = null, modifier = Modifier.size(16.dp), tint = contentColor)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Navegador", fontSize = 12.sp, color = contentColor)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = onUpdateClick,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isMandatory) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                    contentColor = if (isMandatory) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = ButtonDefaults.ContentPadding
+                            ) {
+                                Icon(
+                                    Icons.Default.CloudDownload,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isMandatory) "Atualizar Agora (Obrigatório)" else "Atualizar no App",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    if (bytes <= 0L) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB")
+    val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt().coerceIn(0, units.size - 1)
+    return String.format(Locale.US, "%.1f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
 }

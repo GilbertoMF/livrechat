@@ -616,6 +616,42 @@ class DatabaseService {
     return this.memoryStore.sessions.filter(s => s.user_id === userId);
   }
 
+  public async updateUserLastActive(userId: string, timestamp: string): Promise<void> {
+    if (this.pgPool) {
+      try {
+        await this.pgPool.query(
+          'UPDATE user_sessions SET last_active = $1 WHERE user_id = $2',
+          [timestamp, userId]
+        );
+      } catch (e) {
+        console.warn('[Database] Erro PG updateUserLastActive:', e);
+      }
+    }
+    const session = this.memoryStore.sessions.find(s => s.user_id === userId);
+    if (session) {
+      session.last_active = timestamp;
+      this.saveToLocal();
+    }
+  }
+
+  public async getUserLastActive(userId: string): Promise<string | null> {
+    if (this.pgPool) {
+      try {
+        const res = await this.pgPool.query(
+          'SELECT last_active FROM user_sessions WHERE user_id = $1 ORDER BY last_active DESC LIMIT 1',
+          [userId]
+        );
+        if (res.rows.length > 0 && res.rows[0].last_active) {
+          return res.rows[0].last_active.toISOString?.() || String(res.rows[0].last_active);
+        }
+      } catch (e) {
+        console.warn('[Database] Erro PG getUserLastActive:', e);
+      }
+    }
+    const session = this.memoryStore.sessions.find(s => s.user_id === userId);
+    return session?.last_active || null;
+  }
+
   public async revokeSession(sessionId: string, userId: string): Promise<boolean> {
     const initialLen = this.memoryStore.sessions.length;
     this.memoryStore.sessions = this.memoryStore.sessions.filter(s => !(s.id === sessionId && s.user_id === userId));
