@@ -381,9 +381,10 @@ export class WebSocketManager {
             const blocked = await db.isBlocked(senderId, targetUserId);
             if (blocked) return;
           }
-          await db.ensureUserExists(senderId, senderWs.username || 'usuario');
+          await db.ensureUserExists(senderId, senderWs.username || `user_${senderId.substring(0, 8)}`);
           await db.ensureConversationMember(conversationId, senderId);
           if (targetUserId) {
+            await db.ensureUserExists(targetUserId, `user_${targetUserId.substring(0, 8)}`);
             await db.ensureConversationMember(conversationId, targetUserId);
           }
           await db.createMessage(messageRecord);
@@ -654,6 +655,11 @@ export class WebSocketManager {
           senderWs.send(JSON.stringify({
             type: 'call:offline',
             message: 'O contato está offline no momento. Chamando via notificação push...'
+          }));
+        } else {
+          senderWs.send(JSON.stringify({
+            type: 'call:ringing',
+            fromUserId: calleeId
           }));
         }
         break;

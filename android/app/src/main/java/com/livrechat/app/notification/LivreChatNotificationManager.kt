@@ -114,10 +114,18 @@ object LivreChatNotificationManager {
                 .setAllowGeneratedReplies(true)
                 .build()
 
+            val displayContent = when {
+                messageType == "audio" || content.endsWith(".m4a") || content.contains("/audio/") -> "🎤 Mensagem de voz"
+                messageType == "image" || content.contains("/image/") -> "📷 Foto"
+                messageType == "video" || content.contains("/video/") -> "🎥 Vídeo"
+                messageType == "file" || content.contains("/file/") -> "📄 Documento"
+                else -> content
+            }
+
             val builder = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(senderName)
-                .setContentText(content)
+                .setContentText(displayContent)
                 .setAutoCancel(!isPlayingAudio)
                 .setOnlyAlertOnce(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)

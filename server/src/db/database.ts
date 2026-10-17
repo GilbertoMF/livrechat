@@ -343,17 +343,21 @@ class DatabaseService {
     // PostgreSQL
     if (this.pgPool) {
       try {
+        const safeUsername = (username && username !== 'usuario') 
+          ? username 
+          : `user_${userId.replace(/-/g, '').substring(0, 10)}`;
+
         await this.pgPool.query(`
           INSERT INTO users (id, username, password_hash, recovery_hash, created_at, updated_at)
           VALUES ($1, $2, 'migrated', 'migrated', NOW(), NOW())
-          ON CONFLICT (id) DO NOTHING
-        `, [userId, username]);
+          ON CONFLICT DO NOTHING
+        `, [userId, safeUsername]);
 
         await this.pgPool.query(`
           INSERT INTO user_profiles (user_id, display_name, updated_at)
           VALUES ($1, $2, NOW())
-          ON CONFLICT (user_id) DO NOTHING
-        `, [userId, username]);
+          ON CONFLICT DO NOTHING
+        `, [userId, username || safeUsername]);
       } catch (e) {
         console.warn('[Database] Erro ao assegurar existência do usuário no PG:', e);
       }

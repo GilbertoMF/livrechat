@@ -89,11 +89,11 @@ fun ActiveCallScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val stateLabel = when (callState) {
-                    CallState.CALLING -> "Chamando..."
-                    CallState.RINGING -> "Tocando..."
-                    CallState.CONNECTING -> "Conectando WebRTC..."
+                    CallState.CALLING -> "Ligando..."
+                    CallState.RINGING -> "Chamando..."
+                    CallState.CONNECTING -> "Conectando..."
                     CallState.CONNECTED -> formatTimer(durationSeconds)
-                    CallState.RECONNECTING -> "Reconectando áudio..."
+                    CallState.RECONNECTING -> "Reconectando..."
                     CallState.ENDED -> "Chamada encerrada"
                     else -> ""
                 }
