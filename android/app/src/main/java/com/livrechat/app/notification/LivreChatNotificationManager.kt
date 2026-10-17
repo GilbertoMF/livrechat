@@ -239,7 +239,8 @@ object LivreChatNotificationManager {
         context: Context,
         callerId: String,
         callerDisplayName: String,
-        callerUsername: String
+        callerUsername: String,
+        sdp: String? = null
     ) {
         try {
             playIncomingRingtone(context)
@@ -247,8 +248,11 @@ object LivreChatNotificationManager {
             val fullScreenIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra("incomingCall", true)
+                putExtra("autoAnswer", false)
                 putExtra("callerId", callerId)
                 putExtra("callerName", callerDisplayName)
+                putExtra("callerUsername", callerUsername)
+                if (!sdp.isNullOrBlank()) putExtra("sdp", sdp)
             }
 
             val fullScreenPendingIntent = PendingIntent.getActivity(
@@ -265,6 +269,8 @@ object LivreChatNotificationManager {
                 putExtra("autoAnswer", true)
                 putExtra("callerId", callerId)
                 putExtra("callerName", callerDisplayName)
+                putExtra("callerUsername", callerUsername)
+                if (!sdp.isNullOrBlank()) putExtra("sdp", sdp)
             }
             val answerPendingIntent = PendingIntent.getActivity(
                 context,

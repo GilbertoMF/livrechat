@@ -23,15 +23,15 @@ const releaseDir = path.resolve(__dirname, '../../android/app/build/outputs/apk/
 const filesToUpload = [
   {
     localFile: path.join(releaseDir, 'app-arm64-v8a-release.apk'),
-    r2Key: 'apks/livrechat-v1.1.11-arm64.apk',
+    r2Key: 'apks/livrechat-v1.1.12-arm64.apk',
   },
   {
     localFile: path.join(releaseDir, 'app-armeabi-v7a-release.apk'),
-    r2Key: 'apks/livrechat-v1.1.11-armv7.apk',
+    r2Key: 'apks/livrechat-v1.1.12-armv7.apk',
   },
   {
     localFile: path.join(releaseDir, 'app-universal-release.apk'),
-    r2Key: 'apks/livrechat-v1.1.11-universal.apk',
+    r2Key: 'apks/livrechat-v1.1.12-universal.apk',
   },
 ];
 

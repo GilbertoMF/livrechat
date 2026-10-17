@@ -103,4 +103,59 @@ export class CallsController {
       return res.status(500).json({ error: e.message });
     }
   }
+
+  public static async answerCall(req: AuthRequest, res: Response) {
+    try {
+      const calleeId = req.user?.userId || req.body.calleeId;
+      const { callerId, sdp, startedAt } = req.body;
+      if (callerId && sdp) {
+        const { wsManager } = require('../../index');
+        if (wsManager) {
+          wsManager.sendToUser(callerId, {
+            type: 'call:answered',
+            calleeId: calleeId || 'contact',
+            sdp,
+            startedAt: Number(startedAt) || Date.now()
+          });
+          console.log(`[Calls] Answer repassado via HTTP para chamador ${callerId} (destinatário: ${calleeId})`);
+        }
+      }
+      return res.status(200).json({ success: true });
+    } catch (e: any) {
+      console.error('[Calls] Erro em answerCall:', e);
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  public static async rejectCall(req: AuthRequest, res: Response) {
+    try {
+      const calleeId = req.user?.userId || req.body.calleeId;
+      const { callerId, reason } = req.body;
+      if (callerId) {
+        const { wsManager } = require('../../index');
+        if (wsManager) {
+          wsManager.sendToUser(callerId, {
+            type: 'call:rejected',
+            fromUserId: calleeId || 'contact',
+            reason: reason || 'Chamada recusada.'
+          });
+          console.log(`[Calls] Reject repassado via HTTP para chamador ${callerId} (destinatário: ${calleeId})`);
+        }
+        await db.recordCall({
+          id: uuidv4(),
+          caller_id: callerId,
+          callee_id: calleeId || 'unknown',
+          status: 'rejected',
+          started_at: new Date().toISOString(),
+          ended_at: new Date().toISOString(),
+          duration_seconds: 0
+        });
+      }
+      return res.status(200).json({ success: true });
+    } catch (e: any) {
+      console.error('[Calls] Erro em rejectCall:', e);
+      return res.status(500).json({ error: e.message });
+    }
+  }
 }
+

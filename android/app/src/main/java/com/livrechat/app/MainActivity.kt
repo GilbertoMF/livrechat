@@ -58,8 +58,9 @@ class MainActivity : FragmentActivity() {
             )
         }
 
+        val isIncomingCall = intent.getBooleanExtra("incomingCall", false)
         val prefs = LivreChatApp.instance.preferencesManager
-        if (prefs.isBiometricEnabled && prefs.accessToken != null && !prefs.currentUserId.isNullOrBlank()) {
+        if (prefs.isBiometricEnabled && prefs.accessToken != null && !prefs.currentUserId.isNullOrBlank() && !isIncomingCall) {
             isAppUnlockedState.value = false
             triggerBiometricUnlock()
         } else {
@@ -194,6 +195,9 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         processIncomingIntent(intent)
+        if (intent?.getBooleanExtra("incomingCall", false) == true) {
+            isAppUnlockedState.value = true
+        }
         pendingIntentFlow.value = intent
     }
 

@@ -191,11 +191,22 @@ class LivreChatFirebaseService : FirebaseMessagingService() {
             ?: (if (rawCallerDisplayName.isNotBlank() && rawCallerDisplayName != callerId && !rawCallerDisplayName.startsWith("ID ")) rawCallerDisplayName else null)
             ?: callerUsername
 
+        val sdp = data["sdp"]
+
         LivreChatNotificationManager.showIncomingCallNotification(
             context = applicationContext,
             callerId = callerId,
             callerDisplayName = resolvedCallerName,
-            callerUsername = callerUsername
+            callerUsername = callerUsername,
+            sdp = sdp
+        )
+
+        // Se a ViewModel de chamada já estiver ativa, pré-carrega os dados da chamada recebida
+        com.livrechat.app.ui.call.CallViewModel.activeInstance?.prepareIncomingCall(
+            callerId = callerId,
+            callerDisplayName = resolvedCallerName,
+            callerUsername = callerUsername,
+            sdp = sdp
         )
 
         // WhatsApp Pattern: Notifica o servidor imediatamente que o aparelho está tocando!

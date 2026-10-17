@@ -16,6 +16,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.livrechat.app.LivreChatApp
+import com.livrechat.app.notification.LivreChatNotificationManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.livrechat.app.ui.auth.AuthViewModel
@@ -69,18 +70,48 @@ fun LivreChatNavGraph(
     val callState by callViewModel.callState.collectAsState()
     val callInfo by callViewModel.callInfo.collectAsState()
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     // Handle background notification click, incoming call intent, or contact shortcut
     LaunchedEffect(pendingIntent) {
         if (pendingIntent != null) {
             val isIncomingCall = pendingIntent.getBooleanExtra("incomingCall", false)
+            val autoAnswer = pendingIntent.getBooleanExtra("autoAnswer", false)
+            val callerId = pendingIntent.getStringExtra("callerId")
+            val callerName = pendingIntent.getStringExtra("callerName") ?: "Contato"
+            val callerUsername = pendingIntent.getStringExtra("callerUsername") ?: ""
+            val sdp = pendingIntent.getStringExtra("sdp")
             val targetUserId = pendingIntent.getStringExtra("targetUserId")
             val targetDisplayName = pendingIntent.getStringExtra("targetDisplayName") ?: "Contato"
             val isVoiceCall = pendingIntent.getBooleanExtra("isVoiceCall", false)
 
             if (isIncomingCall) {
-                val currentRoute = navController.currentBackStackEntry?.destination?.route
-                if (currentRoute != Routes.INCOMING_CALL && currentRoute != Routes.ACTIVE_CALL) {
-                    navController.navigate(Routes.INCOMING_CALL)
+                if (!callerId.isNullOrEmpty()) {
+                    callViewModel.prepareIncomingCall(
+                        callerId = callerId,
+                        callerDisplayName = callerName,
+                        callerUsername = callerUsername,
+                        sdp = sdp
+                    )
+                }
+
+                if (autoAnswer) {
+                    LivreChatNotificationManager.stopIncomingRingtone()
+                    LivreChatNotificationManager.cancelCallNotification(context)
+
+                    callViewModel.answerIncomingCall(fallbackSdp = sdp)
+
+                    val currentRoute = navController.currentBackStackEntry?.destination?.route
+                    if (currentRoute != Routes.ACTIVE_CALL) {
+                        navController.navigate(Routes.ACTIVE_CALL) {
+                            popUpTo(Routes.INCOMING_CALL) { inclusive = true }
+                        }
+                    }
+                } else {
+                    val currentRoute = navController.currentBackStackEntry?.destination?.route
+                    if (currentRoute != Routes.INCOMING_CALL && currentRoute != Routes.ACTIVE_CALL) {
+                        navController.navigate(Routes.INCOMING_CALL)
+                    }
                 }
                 onIntentHandled()
             } else if (!targetUserId.isNullOrEmpty()) {
@@ -114,7 +145,6 @@ fun LivreChatNavGraph(
         }
     }
 
-    val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(callState, callInfo) {
         if (callState == CallState.RINGING && callInfo != null && !callInfo!!.isOutgoing) {
             val currentRoute = navController.currentBackStackEntry?.destination?.route

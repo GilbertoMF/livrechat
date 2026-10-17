@@ -60,11 +60,27 @@ class NotificationActionReceiver : BroadcastReceiver() {
         if (action == "com.livrechat.app.ACTION_REJECT_CALL") {
             val callerId = intent.getStringExtra("callerId")
             LivreChatNotificationManager.cancelCallNotification(context)
-            if (!callerId.isNullOrBlank()) {
+
+            val activeVm = com.livrechat.app.ui.call.CallViewModel.activeInstance
+            if (activeVm != null) {
+                activeVm.rejectIncomingCall()
+            } else if (!callerId.isNullOrBlank()) {
+                val pendingResult = goAsync()
                 receiverScope.launch {
                     try {
                         LivreChatApp.instance.connectionManager.getClient().sendCallReject(callerId, "Chamada recusada")
                     } catch (e: Exception) {}
+                    try {
+                        val myId = LivreChatApp.instance.preferencesManager.currentUserId ?: ""
+                        LivreChatApp.instance.apiClient.apiService.rejectCall(mapOf(
+                            "callerId" to callerId,
+                            "calleeId" to myId,
+                            "reason" to "Chamada recusada"
+                        ))
+                    } catch (e: Exception) {}
+                    finally {
+                        try { pendingResult.finish() } catch (e: Exception) {}
+                    }
                 }
             }
             return

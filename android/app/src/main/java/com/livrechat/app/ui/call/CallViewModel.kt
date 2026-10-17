@@ -36,6 +36,11 @@ data class ActiveCallInfo(
 )
 
 class CallViewModel(application: Application) : AndroidViewModel(application), WebRTCCallback, WebSocketEventsListener {
+    companion object {
+        @Volatile
+        var activeInstance: CallViewModel? = null
+    }
+
     private val app = getApplication<LivreChatApp>()
     private val callDao = app.database.callDao()
     private val apiService = app.apiClient.apiService
@@ -64,6 +69,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
     private var callStartTimeMs: Long = 0L
 
     init {
+        activeInstance = this
         webRTCManager = WebRTCManager(app, this)
         connectionManager.registerListener(this)
         loadIceServers()
@@ -108,10 +114,43 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
         webRTCManager?.startCall()
     }
 
-    fun answerIncomingCall() {
+    fun prepareIncomingCall(
+        callerId: String,
+        callerDisplayName: String,
+        callerUsername: String = "",
+        callerAvatarUrl: String? = null,
+        sdp: String? = null
+    ) {
+        val current = _callInfo.value
+        if (current == null || current.remoteSdp.isNullOrBlank()) {
+            _callInfo.value = ActiveCallInfo(
+                contactUserId = callerId,
+                contactDisplayName = callerDisplayName,
+                contactUsername = callerUsername,
+                contactAvatarUrl = callerAvatarUrl,
+                isOutgoing = false,
+                remoteSdp = sdp ?: current?.remoteSdp
+            )
+            _callState.value = CallState.RINGING
+        }
+    }
+
+    fun answerIncomingCall(fallbackSdp: String? = null) {
         LivreChatNotificationManager.cancelCallNotification(app)
-        val info = _callInfo.value ?: return
-        val sdp = info.remoteSdp ?: return
+        val info = _callInfo.value
+        val sdp = info?.remoteSdp ?: fallbackSdp
+        if (info == null || sdp.isNullOrBlank()) {
+            android.util.Log.e("CallViewModel", "answerIncomingCall abortado: dados incompletos (info=$info, fallbackSdp=$fallbackSdp)")
+            return
+        }
+
+        if (info.remoteSdp.isNullOrBlank()) {
+            _callInfo.value = info.copy(remoteSdp = sdp)
+        }
+
+        if (!connectionManager.isConnected.value) {
+            connectionManager.connect()
+        }
 
         CallForegroundService.start(app, info.contactDisplayName)
         webRTCManager?.answerCall(sdp)
@@ -121,7 +160,19 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
         LivreChatNotificationManager.cancelCallNotification(app)
         val info = _callInfo.value
         if (info != null) {
-            connectionManager.getClient().sendCallReject(info.contactUserId, "Chamada recusada")
+            val wsSent = connectionManager.getClient().sendCallReject(info.contactUserId, "Chamada recusada")
+            if (!wsSent) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        val myId = prefs.currentUserId ?: ""
+                        apiService.rejectCall(mapOf(
+                            "callerId" to info.contactUserId,
+                            "calleeId" to myId,
+                            "reason" to "Chamada recusada"
+                        ))
+                    } catch (e: Exception) {}
+                }
+            }
             recordCall(info, "rejected", 0)
         }
         cleanupCall()
@@ -237,7 +288,23 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
             connectionManager.getClient().sendCallOffer(info.contactUserId, sdp.description)
         } else {
             val startTs = if (callStartTimeMs > 0L) callStartTimeMs else System.currentTimeMillis().also { callStartTimeMs = it }
-            connectionManager.getClient().sendCallAnswer(info.contactUserId, sdp.description, startTs)
+            val wsSent = connectionManager.getClient().sendCallAnswer(info.contactUserId, sdp.description, startTs)
+            if (!wsSent) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        val myId = prefs.currentUserId ?: ""
+                        apiService.answerCall(mapOf(
+                            "callerId" to info.contactUserId,
+                            "calleeId" to myId,
+                            "sdp" to sdp.description,
+                            "startedAt" to startTs.toString()
+                        ))
+                        android.util.Log.d("CallViewModel", "call:answer enviado com sucesso via HTTP fallback")
+                    } catch (e: Exception) {
+                        android.util.Log.e("CallViewModel", "Falha ao enviar call:answer via HTTP fallback", e)
+                    }
+                }
+            }
         }
     }
 
@@ -342,6 +409,9 @@ class CallViewModel(application: Application) : AndroidViewModel(application), W
 
     override fun onCleared() {
         super.onCleared()
+        if (activeInstance === this) {
+            activeInstance = null
+        }
         connectionManager.unregisterListener(this)
         if (_callState.value != CallState.IDLE || _callInfo.value != null) {
             webRTCManager?.endCall()

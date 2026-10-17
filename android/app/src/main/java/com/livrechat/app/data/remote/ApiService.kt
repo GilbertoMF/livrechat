@@ -201,6 +201,16 @@ interface ApiService {
         @Body body: Map<String, String>
     ): Response<BaseResponse>
 
+    @POST("api/calls/answer")
+    suspend fun answerCall(
+        @Body body: Map<String, String>
+    ): Response<BaseResponse>
+
+    @POST("api/calls/reject")
+    suspend fun rejectCall(
+        @Body body: Map<String, String>
+    ): Response<BaseResponse>
+
     @retrofit2.http.Multipart
     @POST("api/media/upload")
     suspend fun uploadMedia(
