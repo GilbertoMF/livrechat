@@ -1848,19 +1848,6 @@ fun ChatScreen(
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
-                                        com.livrechat.app.ui.common.TooltipIconButton(
-                                            tooltip = "Recado de Vídeo (Bolinha)",
-                                            onClick = {
-                                                cameraInitialMode = "Recado de vídeo"
-                                                showCameraDialog = true
-                                            }
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Videocam,
-                                                contentDescription = "Recado de Vídeo",
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
                                     }
                                 }
                             }
