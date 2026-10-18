@@ -125,9 +125,9 @@ val DarkBackground = Color(0xFF0B132B)
 val DarkSurface = Color(0xFF1C2541)
 val DarkSurfaceVariant = Color(0xFF263252)
 
-val OLEDBackground = Color(0xFF050811)
-val OLEDSurface = Color(0xFF0F172A)
-val OLEDSurfaceVariant = Color(0xFF1E293B)
+val OLEDBackground = Color(0xFF000000)
+val OLEDSurface = Color(0xFF000000)
+val OLEDSurfaceVariant = Color(0xFF121212)
 
 val LightBackground = Color(0xFFF8FAFC)
 val LightSurface = Color(0xFFFFFFFF)

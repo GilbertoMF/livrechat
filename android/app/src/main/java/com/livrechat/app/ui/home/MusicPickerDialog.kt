@@ -466,28 +466,14 @@ fun MusicPickerDialog(
                                             )
                                         )
                                         .border(1.dp, AccentSapphire.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
-                                        .padding(14.dp)
+                                        .padding(18.dp)
                                 ) {
                                     Column {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            horizontalArrangement = Arrangement.End,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Surface(
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = AccentSapphire.copy(alpha = 0.25f),
-                                                border = androidx.compose.foundation.BorderStroke(1.dp, AccentCyan.copy(alpha = 0.5f))
-                                            ) {
-                                                Text(
-                                                    text = "✨ EM ALTA NO LIVRECHAT",
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = AccentCyan,
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                                )
-                                            }
-
                                             val isFav = favoritesSet.contains(featuredTrack.id)
                                             IconButton(
                                                 onClick = {
@@ -500,7 +486,7 @@ fun MusicPickerDialog(
                                                     imageVector = if (isFav) Icons.Default.Star else Icons.Default.StarBorder,
                                                     contentDescription = "Favoritar",
                                                     tint = if (isFav) GoldStar else Color.White.copy(alpha = 0.7f),
-                                                    modifier = Modifier.size(20.dp)
+                                                    modifier = Modifier.size(22.dp)
                                                 )
                                             }
                                         }
@@ -554,7 +540,7 @@ fun MusicPickerDialog(
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
-                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Spacer(modifier = Modifier.height(4.dp))
                                                 Text(
                                                     text = featuredTrack.artist,
                                                     color = Color.White.copy(alpha = 0.75f),
@@ -562,17 +548,17 @@ fun MusicPickerDialog(
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
-                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Spacer(modifier = Modifier.height(6.dp))
                                                 Text(
                                                     text = "Duração • ${featuredTrack.durationFormatted}",
                                                     color = AccentCyan,
-                                                    fontSize = 11.sp,
+                                                    fontSize = 12.sp,
                                                     fontWeight = FontWeight.Medium
                                                 )
                                             }
                                         }
 
-                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Spacer(modifier = Modifier.height(18.dp))
 
                                         // Botão Adicionar ao Status
                                         Button(
@@ -585,14 +571,14 @@ fun MusicPickerDialog(
                                             contentPadding = PaddingValues(0.dp),
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(40.dp)
+                                                .height(46.dp)
                                                 .clip(RoundedCornerShape(12.dp))
                                                 .background(Brush.horizontalGradient(listOf(AccentSapphire, AccentViolet)))
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                                Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                                                 Spacer(modifier = Modifier.width(8.dp))
-                                                Text("Usar esta música no Flash", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White)
+                                                Text("Usar esta música no Flash", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
                                             }
                                         }
                                     }

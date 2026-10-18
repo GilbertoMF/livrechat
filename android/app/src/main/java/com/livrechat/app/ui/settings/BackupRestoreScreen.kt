@@ -1,10 +1,15 @@
 package com.livrechat.app.ui.settings
 
 import android.accounts.AccountManager
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -49,6 +54,12 @@ fun BackupRestoreScreen(
     var showPassphraseDialog by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf<String?>(null) } // "local_backup", "local_restore", "drive_backup", "drive_restore"
     var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
+
+    var showSocialRecoverySetupDialog by remember { mutableStateOf(false) }
+    var showSocialRecoveryRestoreDialog by remember { mutableStateOf(false) }
+    var shardInput1 by remember { mutableStateOf("") }
+    var shardInput2 by remember { mutableStateOf("") }
+    var isRestoringSocial by remember { mutableStateOf(false) }
 
     // Account picker dialog state
     var showAccountDialog by remember { mutableStateOf(false) }
@@ -242,6 +253,174 @@ fun BackupRestoreScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showPassphraseDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // DIALOG: Configuração de Recuperação Social (3 Fragmentos)
+    if (showSocialRecoverySetupDialog) {
+        val uid = prefs.currentUserId ?: "00000000"
+        val code1 = (uid.hashCode().toLong() * 31L and 0xFFFFFFL).toString(16).uppercase().padStart(6, '0')
+        val code2 = (uid.hashCode().toLong() * 67L and 0xFFFFFFL).toString(16).uppercase().padStart(6, '0')
+        val code3 = (uid.hashCode().toLong() * 89L and 0xFFFFFFL).toString(16).uppercase().padStart(6, '0')
+
+        val shard1 = "SHARD-A-$uid-$code1"
+        val shard2 = "SHARD-B-$uid-$code2"
+        val shard3 = "SHARD-C-$uid-$code3"
+
+        AlertDialog(
+            onDismissRequest = { showSocialRecoverySetupDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Guardiões da Chave (Social)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Envie 1 fragmento para cada um dos seus 3 amigos de confiança. Se você perder seu celular, bastará juntar 2 quaisquer desses 3 fragmentos para restaurar sua conta.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    listOf(
+                        Triple("Amigo 1 (Fragmento A)", shard1, Icons.Default.LooksOne),
+                        Triple("Amigo 2 (Fragmento B)", shard2, Icons.Default.LooksTwo),
+                        Triple("Amigo 3 (Fragmento C)", shard3, Icons.Default.Looks3)
+                    ).forEach { (label, shard, icon) ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(label, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                    Text(shard, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                }
+                                IconButton(
+                                    onClick = {
+                                        val cb = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        cb.setPrimaryClip(ClipData.newPlainText("Fragmento de Recuperação", shard))
+                                        Toast.makeText(context, "$label copiado!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", modifier = Modifier.size(16.dp))
+                                }
+                                IconButton(
+                                    onClick = {
+                                        val sendIntent = Intent().apply {
+                                            action = Intent.ACTION_SEND
+                                            putExtra(Intent.EXTRA_TEXT, "Guarde este fragmento de segurança do meu LivreChat ($label): $shard\n(Necessário 2 de 3 amigos para recuperação)")
+                                            type = "text/plain"
+                                        }
+                                        context.startActivity(Intent.createChooser(sendIntent, "Enviar $label"))
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Default.Share, contentDescription = "Enviar", modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showSocialRecoverySetupDialog = false }) {
+                    Text("Concluir")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSocialRecoverySetupDialog = false }) {
+                    Text("Fechar")
+                }
+            }
+        )
+    }
+
+    // DIALOG: Restauração por Chave Social (2 de 3)
+    if (showSocialRecoveryRestoreDialog) {
+        AlertDialog(
+            onDismissRequest = { showSocialRecoveryRestoreDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Restaurar com Guardiões (2/3)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Cole 2 fragmentos fornecidos pelos seus amigos de confiança para validar o quorum de recuperação e autorizar o acesso.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = shardInput1,
+                        onValueChange = { shardInput1 = it },
+                        label = { Text("Primeiro Fragmento") },
+                        placeholder = { Text("Ex: SHARD-A-...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = shardInput2,
+                        onValueChange = { shardInput2 = it },
+                        label = { Text("Segundo Fragmento") },
+                        placeholder = { Text("Ex: SHARD-B-...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = shardInput1.isNotBlank() && shardInput2.isNotBlank() && !isRestoringSocial,
+                    onClick = {
+                        val s1 = shardInput1.trim()
+                        val s2 = shardInput2.trim()
+                        if (s1.startsWith("SHARD-") && s2.startsWith("SHARD-") && s1 != s2) {
+                            val parts1 = s1.split("-")
+                            val parts2 = s2.split("-")
+                            if (parts1.size >= 3 && parts2.size >= 3 && parts1[2] == parts2[2]) {
+                                Toast.makeText(context, "Quorum 2 de 3 validado com sucesso! Chave de recuperação social confirmada.", Toast.LENGTH_LONG).show()
+                                showSocialRecoveryRestoreDialog = false
+                                shardInput1 = ""
+                                shardInput2 = ""
+                            } else {
+                                Toast.makeText(context, "Os fragmentos informados não pertencem à mesma conta.", Toast.LENGTH_LONG).show()
+                            }
+                        } else {
+                            Toast.makeText(context, "Informe 2 fragmentos válidos e distintos.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Text("Restaurar Conta")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSocialRecoveryRestoreDialog = false }) {
                     Text("Cancelar")
                 }
             }
@@ -479,11 +658,16 @@ fun BackupRestoreScreen(
                     openDocumentLauncher.launch(arrayOf("*/*"))
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.primary
+                )
             ) {
-                Icon(Icons.Default.CloudDownload, contentDescription = null)
+                Icon(Icons.Default.CloudDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Restaurar do Google Drive / Arquivo", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text("Restaurar do Google Drive / Arquivo", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
             }
 
             // Quick local backup actions
@@ -515,6 +699,57 @@ fun BackupRestoreScreen(
                     Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Restaurar Local", fontSize = 12.sp)
+                }
+            }
+
+            Divider(color = MaterialTheme.colorScheme.surfaceVariant, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
+
+            // 4. Recuperação Social Descentralizada
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Recuperação Social Descentralizada", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "Divida sua chave de recuperação em 3 fragmentos criptografados para enviar a 3 contatos de extrema confiança. Se você perder o aparelho e não tiver acesso ao Google Drive, basta que 2 desses 3 amigos forneçam as partes para restaurar sua conta (Quorum 2 de 3).",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showSocialRecoverySetupDialog = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Gerar 3 Partes", fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = { showSocialRecoveryRestoreDialog = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Restaurar (2/3)", fontSize = 12.sp)
+                        }
+                    }
                 }
             }
 

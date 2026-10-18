@@ -43,6 +43,13 @@ function extractPhoneVariants(raw: string): string[] {
   return Array.from(variants);
 }
 
+interface BurnerRecord {
+  userId: string;
+  expiresAt: number;
+}
+const activeBurnerIds = new Map<string, BurnerRecord>();
+const userToBurnerMap = new Map<string, string>();
+
 export class UsersController {
   public static async getProfile(req: AuthRequest, res: Response) {
     try {
@@ -135,8 +142,14 @@ export class UsersController {
           });
         }
       } else {
-        // If query looks like a UUID, search by ID
-        const byId = await db.findUserById(query);
+        // Search by exact ID or Burner ID
+        let byId = await db.findUserById(query);
+        if (!byId) {
+          const burner = activeBurnerIds.get(query);
+          if (burner && burner.expiresAt > Date.now()) {
+            byId = await db.findUserById(burner.userId);
+          }
+        }
         if (byId && byId.id !== currentUserId) {
           const isBlocked = await db.isBlocked(currentUserId, byId.id);
           if (!isBlocked) {
@@ -320,11 +333,17 @@ export class UsersController {
       const userId = req.user!.userId;
       const { contactUserId, nickname } = req.body;
 
-      if (!contactUserId || contactUserId === userId) {
+      let targetUserId = contactUserId;
+      const burner = activeBurnerIds.get(contactUserId);
+      if (burner && burner.expiresAt > Date.now()) {
+        targetUserId = burner.userId;
+      }
+
+      if (!targetUserId || targetUserId === userId) {
         return res.status(400).json({ error: 'ID de contato inválido.' });
       }
 
-      const target = await db.findUserById(contactUserId);
+      const target = await db.findUserById(targetUserId);
       if (!target) {
         return res.status(404).json({ error: 'Contato não encontrado.' });
       }
@@ -332,7 +351,7 @@ export class UsersController {
       const contact = await db.addContact({
         id: uuidv4(),
         user_id: userId,
-        contact_user_id: contactUserId,
+        contact_user_id: targetUserId,
         nickname,
         created_at: new Date().toISOString()
       });
@@ -515,6 +534,83 @@ export class UsersController {
         return res.status(400).json({ error: 'Token FCM é obrigatório.' });
       }
       await db.removeFcmToken(token);
+      return res.status(200).json({ success: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // ==========================================
+  // BURNER IDS (Identificadores Descartáveis)
+  // ==========================================
+  public static async generateBurnerId(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+
+      // Remove existing burner if any
+      const existing = userToBurnerMap.get(userId);
+      if (existing) {
+        activeBurnerIds.delete(existing);
+        userToBurnerMap.delete(userId);
+      }
+
+      // Generate unique 8-digit numeric Burner ID
+      let burnerId = '';
+      let attempts = 0;
+      do {
+        burnerId = Math.floor(10000000 + Math.random() * 90000000).toString();
+        attempts++;
+      } while ((activeBurnerIds.has(burnerId) || await db.findUserById(burnerId)) && attempts < 20);
+
+      const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+      activeBurnerIds.set(burnerId, { userId, expiresAt });
+      userToBurnerMap.set(userId, burnerId);
+
+      return res.status(200).json({
+        burnerId,
+        expiresAt,
+        remainingSeconds: 86400
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  public static async getBurnerId(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const burnerId = userToBurnerMap.get(userId);
+
+      if (!burnerId) {
+        return res.status(200).json({ burnerId: null, expiresAt: 0, remainingSeconds: 0 });
+      }
+
+      const record = activeBurnerIds.get(burnerId);
+      if (!record || record.expiresAt <= Date.now()) {
+        activeBurnerIds.delete(burnerId);
+        userToBurnerMap.delete(userId);
+        return res.status(200).json({ burnerId: null, expiresAt: 0, remainingSeconds: 0 });
+      }
+
+      const remainingSeconds = Math.max(0, Math.floor((record.expiresAt - Date.now()) / 1000));
+      return res.status(200).json({
+        burnerId,
+        expiresAt: record.expiresAt,
+        remainingSeconds
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  public static async destroyBurnerId(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const burnerId = userToBurnerMap.get(userId);
+      if (burnerId) {
+        activeBurnerIds.delete(burnerId);
+        userToBurnerMap.delete(userId);
+      }
       return res.status(200).json({ success: true });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });

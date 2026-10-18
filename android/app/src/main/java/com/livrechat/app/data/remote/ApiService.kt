@@ -222,6 +222,31 @@ interface ApiService {
     suspend fun checkVersion(
         @retrofit2.http.Query("versionCode") versionCode: Int
     ): Response<AppVersionCheckResponse>
+
+    @POST("api/users/burner-id")
+    suspend fun generateBurnerId(): Response<Map<String, Any>>
+
+    @GET("api/users/burner-id")
+    suspend fun getBurnerId(): Response<Map<String, Any>>
+
+    @DELETE("api/users/burner-id")
+    suspend fun destroyBurnerId(): Response<BaseResponse>
+
+    // LivreTube (Privacy Video & YouTube Frontend)
+    @GET("api/livretube/trending")
+    suspend fun getLivreTubeTrending(
+        @retrofit2.http.Query("type") type: String? = null
+    ): Response<List<LivreTubeVideoDto>>
+
+    @GET("api/livretube/search")
+    suspend fun searchLivreTube(
+        @retrofit2.http.Query("q") query: String
+    ): Response<List<LivreTubeVideoDto>>
+
+    @GET("api/livretube/video/{id}")
+    suspend fun getLivreTubeVideoDetails(
+        @Path("id") id: String
+    ): Response<LivreTubeVideoDetailsDto>
 }
 
 data class AppVersionCheckResponse(
@@ -237,6 +262,42 @@ data class AppVersionCheckResponse(
     val apkArmv7Url: String = "",
     val apkUniversalUrl: String = "",
     val downloadPortalUrl: String = ""
+)
+
+data class LivreTubeVideoDto(
+    val videoId: String = "",
+    val title: String = "",
+    val author: String = "",
+    val authorUrl: String? = null,
+    val authorThumbnail: String? = null,
+    val thumbnailUrl: String? = null,
+    val lengthSeconds: Int = 0,
+    val durationText: String? = null,
+    val viewCount: Long = 0L,
+    val viewsText: String? = null,
+    val publishedText: String? = null
+)
+
+data class LivreTubeStreamDto(
+    val url: String = "",
+    val quality: String? = null,
+    val container: String? = null,
+    val resolution: String? = null
+)
+
+data class LivreTubeVideoDetailsDto(
+    val videoId: String = "",
+    val title: String = "",
+    val description: String? = null,
+    val author: String = "",
+    val authorThumbnail: String? = null,
+    val subCountText: String? = null,
+    val lengthSeconds: Int = 0,
+    val viewCount: Long = 0L,
+    val streams: List<LivreTubeStreamDto>? = emptyList(),
+    val hlsUrl: String? = null,
+    val embedUrl: String? = null,
+    val fallbackEmbedUrl: String? = null
 )
 
 

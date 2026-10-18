@@ -1,12 +1,18 @@
 package com.livrechat.app.ui.contacts
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -82,6 +88,27 @@ fun SearchContactScreen(
     var isCreatingGroup by remember { mutableStateOf(false) }
     var isSyncingPhoneContacts by remember { mutableStateOf(false) }
     var pendingSyncTrigger by remember { mutableStateOf(0) }
+
+    var showBurnerIdDialog by remember { mutableStateOf(false) }
+    var activeBurnerId by remember { mutableStateOf(prefs.burnerId) }
+    var burnerExpiresAt by remember { mutableStateOf(prefs.burnerIdExpiresAt) }
+    var isManagingBurner by remember { mutableStateOf(false) }
+
+    fun refreshBurnerId() {
+        scope.launch {
+            try {
+                val res = apiService.getBurnerId()
+                if (res.isSuccessful && res.body() != null) {
+                    val bId = res.body()?.get("burnerId") as? String
+                    val exp = (res.body()?.get("expiresAt") as? Number)?.toLong() ?: 0L
+                    activeBurnerId = bId
+                    burnerExpiresAt = exp
+                    prefs.burnerId = bId
+                    prefs.burnerIdExpiresAt = exp
+                }
+            } catch (_: Exception) {}
+        }
+    }
 
     fun loadContacts() {
         scope.launch {
@@ -635,6 +662,197 @@ fun SearchContactScreen(
         )
     }
 
+    // DIALOG: ID Temporário Descartável (Burner ID)
+    if (showBurnerIdDialog) {
+        val hasActiveBurner = !activeBurnerId.isNullOrBlank() && burnerExpiresAt > System.currentTimeMillis()
+        val remainingMillis = if (hasActiveBurner) burnerExpiresAt - System.currentTimeMillis() else 0L
+        val remainingHours = (remainingMillis / (1000 * 60 * 60)).toInt()
+        val remainingMins = ((remainingMillis / (1000 * 60)) % 60).toInt()
+
+        AlertDialog(
+            onDismissRequest = { showBurnerIdDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.VpnKey, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("ID Temporário Descartável", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(
+                        text = "Gere um ID descartável de 8 dígitos para passar a terceiros em transações ou eventos sem expor seu ID definitivo. Ele expira em 24h ou quando você destruí-lo.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (hasActiveBurner) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "SEU BURNER ID ATIVO",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    letterSpacing = 1.sp
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                val formattedId = activeBurnerId?.chunked(4)?.joinToString(" ") ?: ""
+                                Text(
+                                    text = formattedId,
+                                    fontSize = 26.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = 2.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                ) {
+                                    Text(
+                                        text = "⏳ Expira em: ${remainingHours}h ${remainingMins}m",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    activeBurnerId?.let { id ->
+                                        val cb = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        cb.setPrimaryClip(ClipData.newPlainText("Burner ID", id))
+                                        Toast.makeText(context, "ID Temporário copiado!", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Copiar", fontSize = 12.sp)
+                            }
+
+                            Button(
+                                onClick = {
+                                    activeBurnerId?.let { id ->
+                                        val sendIntent = Intent().apply {
+                                            action = Intent.ACTION_SEND
+                                            putExtra(Intent.EXTRA_TEXT, "Adicione-me no LivreChat pelo meu ID temporário (expira em 24h): $id\nBaixe o app: https://livrechat.com.br")
+                                            type = "text/plain"
+                                        }
+                                        context.startActivity(Intent.createChooser(sendIntent, "Compartilhar ID Temporário"))
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Enviar", fontSize = 12.sp)
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                isManagingBurner = true
+                                scope.launch {
+                                    try {
+                                        apiService.destroyBurnerId()
+                                        activeBurnerId = null
+                                        burnerExpiresAt = 0L
+                                        prefs.burnerId = null
+                                        prefs.burnerIdExpiresAt = 0L
+                                        Toast.makeText(context, "ID Temporário destruído com sucesso!", Toast.LENGTH_SHORT).show()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Erro ao destruir ID", Toast.LENGTH_SHORT).show()
+                                    } finally {
+                                        isManagingBurner = false
+                                    }
+                                }
+                            },
+                            enabled = !isManagingBurner,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, DangerRed.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(16.dp), tint = DangerRed)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Destruir ID Imediatamente", color = DangerRed, fontSize = 13.sp)
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                isManagingBurner = true
+                                scope.launch {
+                                    try {
+                                        val res = apiService.generateBurnerId()
+                                        if (res.isSuccessful && res.body() != null) {
+                                            val newId = res.body()?.get("burnerId") as? String
+                                            val exp = (res.body()?.get("expiresAt") as? Number)?.toLong() ?: (System.currentTimeMillis() + 86400000L)
+                                            activeBurnerId = newId
+                                            burnerExpiresAt = exp
+                                            prefs.burnerId = newId
+                                            prefs.burnerIdExpiresAt = exp
+                                            Toast.makeText(context, "Novo Burner ID gerado!", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Erro ao gerar ID temporário", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                    } finally {
+                                        isManagingBurner = false
+                                    }
+                                }
+                            },
+                            enabled = !isManagingBurner,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().height(48.dp)
+                        ) {
+                            if (isManagingBurner) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Gerar ID Temporário (24h)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showBurnerIdDialog = false }) {
+                    Text("Concluir")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBurnerIdDialog = false }) {
+                    Text("Fechar")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             if (isSearchActive) {
@@ -782,7 +1000,7 @@ fun SearchContactScreen(
                                 LivreActionCard(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Default.PersonAddAlt1,
-                                    iconTint = Color(0xFF8E24AA),
+                                    iconTint = MaterialTheme.colorScheme.primary,
                                     title = "Adicionar",
                                     subtitle = "Por ID ou @",
                                     onClick = { showAddContactDialog = true }
@@ -798,22 +1016,20 @@ fun SearchContactScreen(
                                 LivreActionCard(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Default.QrCodeScanner,
-                                    iconTint = Color(0xFF00897B),
+                                    iconTint = MaterialTheme.colorScheme.primary,
                                     title = "Ler QR Code",
                                     subtitle = "Escanear",
                                     onClick = onNavigateToQRCode
                                 )
-                                val selfContact = contactsList.firstOrNull { it.isSelf }
                                 LivreActionCard(
                                     modifier = Modifier.weight(1f),
-                                    icon = Icons.Default.BookmarkBorder,
-                                    iconTint = Color(0xFFF57C00),
-                                    title = "Meu Espaço",
-                                    subtitle = "Notas e Mídia",
+                                    icon = Icons.Default.VpnKey,
+                                    iconTint = MaterialTheme.colorScheme.primary,
+                                    title = "ID Temporário",
+                                    subtitle = "Burner (24h)",
                                     onClick = {
-                                        if (selfContact != null) {
-                                            startChatWithUser(selfContact.userId, selfContact.displayName, selfContact.username, null)
-                                        }
+                                        refreshBurnerId()
+                                        showBurnerIdDialog = true
                                     }
                                 )
                             }
@@ -824,21 +1040,26 @@ fun SearchContactScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
+                                val selfContact = contactsList.firstOrNull { it.isSelf }
                                 LivreActionCard(
                                     modifier = Modifier.weight(1f),
-                                    icon = Icons.Default.Sync,
-                                    iconTint = Color(0xFF2E7D32),
-                                    title = "Sincronizar",
-                                    subtitle = if (isSyncingPhoneContacts) "Puxando..." else "Agenda celular",
-                                    onClick = { syncPhoneContacts() }
+                                    icon = Icons.Default.BookmarkBorder,
+                                    iconTint = MaterialTheme.colorScheme.primary,
+                                    title = "Meu Espaço",
+                                    subtitle = "Notas e Mídia",
+                                    onClick = {
+                                        if (selfContact != null) {
+                                            startChatWithUser(selfContact.userId, selfContact.displayName, selfContact.username, null)
+                                        }
+                                    }
                                 )
                                 LivreActionCard(
                                     modifier = Modifier.weight(1f),
-                                    icon = Icons.Default.ContactPhone,
-                                    iconTint = Color(0xFF1565C0),
-                                    title = "Nova Agenda",
-                                    subtitle = "Salvar celular",
-                                    onClick = { ContactSyncHelper.openAddContactInPhoneBook(context) }
+                                    icon = Icons.Default.Sync,
+                                    iconTint = MaterialTheme.colorScheme.primary,
+                                    title = "Sincronizar",
+                                    subtitle = if (isSyncingPhoneContacts) "Puxando..." else "Agenda celular",
+                                    onClick = { syncPhoneContacts() }
                                 )
                             }
                         }
@@ -850,28 +1071,14 @@ fun SearchContactScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 20.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "Meus Contatos",
-                            fontSize = 14.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        val otherCount = filteredContacts.count { !it.isSelf }
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                        ) {
-                            Text(
-                                text = "$otherCount salvo${if (otherCount != 1) "s" else ""}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
-                        }
                     }
                 }
             }
@@ -1025,6 +1232,7 @@ fun LivreActionCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ContactRowItem(
     contact: ContactUiModel,
@@ -1032,13 +1240,22 @@ fun ContactRowItem(
     onEditClick: (() -> Unit)? = null,
     onDeleteClick: (() -> Unit)? = null
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = if (contact.isSelf) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = {
+                    if (!contact.isSelf && (onEditClick != null || onDeleteClick != null)) {
+                        showMenu = true
+                    }
+                }
+            )
+            .padding(horizontal = 14.dp, vertical = 3.dp)
     ) {
         Row(
             modifier = Modifier
@@ -1075,41 +1292,69 @@ fun ContactRowItem(
             // Quick Chat Button
             IconButton(
                 onClick = onClick,
-                modifier = Modifier.size(34.dp)
+                modifier = Modifier.size(36.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.ChatBubbleOutline,
                     contentDescription = "Conversar",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(19.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
-            if (!contact.isSelf && onEditClick != null) {
-                IconButton(
-                    onClick = onEditClick,
-                    modifier = Modifier.size(34.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "Editar contato",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
+            if (!contact.isSelf && (onEditClick != null || onDeleteClick != null)) {
+                Box {
+                    IconButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Mais opções",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
 
-            if (!contact.isSelf && onDeleteClick != null) {
-                IconButton(
-                    onClick = onDeleteClick,
-                    modifier = Modifier.size(34.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Excluir contato",
-                        tint = DangerRed.copy(alpha = 0.7f),
-                        modifier = Modifier.size(18.dp)
-                    )
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        if (onEditClick != null) {
+                            DropdownMenuItem(
+                                text = { Text("Editar contato") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onEditClick()
+                                }
+                            )
+                        }
+                        if (onDeleteClick != null) {
+                            DropdownMenuItem(
+                                text = { Text("Excluir contato", color = DangerRed) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = null,
+                                        tint = DangerRed,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onDeleteClick()
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }

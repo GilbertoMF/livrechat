@@ -198,6 +198,18 @@ class PreferencesManager(private val context: Context) {
         get() = prefs.getString(KEY_SELF_DESTRUCT_TIMER, "off") ?: "off"
         set(value) = prefs.edit().putString(KEY_SELF_DESTRUCT_TIMER, value).apply()
 
+    var burnerId: String?
+        get() = prefs.getString("burner_id", null)
+        set(value) = prefs.edit().putString("burner_id", value).apply()
+
+    var burnerIdExpiresAt: Long
+        get() = prefs.getLong("burner_id_expires_at", 0L)
+        set(value) = prefs.edit().putLong("burner_id_expires_at", value).apply()
+
+    var mediaCacheRetentionDays: Int
+        get() = prefs.getInt("media_cache_retention_days", 0) // 0 = Nunca, 7, 30, 90 dias
+        set(value) = prefs.edit().putInt("media_cache_retention_days", value).apply()
+
     private val _blockScreenshotsFlow = kotlinx.coroutines.flow.MutableStateFlow(prefs.getBoolean(KEY_BLOCK_SCREENSHOTS, false))
     val blockScreenshotsFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _blockScreenshotsFlow
 

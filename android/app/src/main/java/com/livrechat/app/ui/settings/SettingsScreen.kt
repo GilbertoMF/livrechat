@@ -668,8 +668,9 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = newPhoneInput,
                         onValueChange = { newPhoneInput = it },
-                        label = { Text("Número de Telefone (Para sincronizar agenda)") },
+                        label = { Text("Número de Telefone") },
                         placeholder = { Text("Ex: +55 (11) 98765-4321") },
+                        supportingText = { Text("Para sincronizar contatos da sua agenda telefônica", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
@@ -894,6 +895,11 @@ fun SettingsScreen(
                 Button(onClick = { showThemeAndColorsDialog = false }) {
                     Text("Concluir")
                 }
+            },
+            dismissButton = {
+                TextButton(onClick = { showThemeAndColorsDialog = false }) {
+                    Text("Fechar")
+                }
             }
         )
     }
@@ -946,11 +952,17 @@ fun SettingsScreen(
     if (showSetDuressPinDialog) {
         AlertDialog(
             onDismissRequest = { showSetDuressPinDialog = false },
-            title = { Text("PIN de Coação (Perfil Falso)", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("PIN de Pânico / Emergência", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            },
             text = {
                 Column {
                     Text(
-                        "Se você for forçado sob coação ou ameaça a desbloquear o LivreChat, digite este PIN de emergência. O app abrirá um perfil limpo e inofensivo, sem expor suas conversas reais.",
+                        "Se você for forçado a abrir o aplicativo sob coação (ou digitando esse código de 4 dígitos na Calculadora), o LivreChat abrirá com aparência 100% normal, mas carregará um cofre simulado (conversas e contatos falsos), mantendo seus dados reais totalmente ocultos e inacessíveis.",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -958,7 +970,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = duressPinDraft,
                         onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) duressPinDraft = it },
-                        label = { Text("PIN de Coação (4 dígitos)") },
+                        label = { Text("PIN de Pânico (4 dígitos)") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         modifier = Modifier.fillMaxWidth()
@@ -975,7 +987,7 @@ fun SettingsScreen(
                     },
                     enabled = duressPinDraft.length == 4 && duressPinDraft != prefs.appLockPin
                 ) {
-                    Text("Salvar PIN de Coação")
+                    Text("Salvar PIN de Pânico")
                 }
             },
             dismissButton = {
@@ -1079,8 +1091,8 @@ fun SettingsScreen(
                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    if (prefs.duressPin.isNullOrBlank()) "PIN Coação (Falso)"
-                                    else "PIN Coação: Ativo",
+                                    if (prefs.duressPin.isNullOrBlank()) "🛡️ PIN de Pânico"
+                                    else "🛡️ PIN Pânico: Ativo",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -1256,6 +1268,11 @@ fun SettingsScreen(
                 Button(onClick = { showSecurityDialog = false }) {
                     Text("Salvar")
                 }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSecurityDialog = false }) {
+                    Text("Fechar")
+                }
             }
         )
     }
@@ -1345,6 +1362,11 @@ fun SettingsScreen(
                     Toast.makeText(context, "Configurações salvas", Toast.LENGTH_SHORT).show()
                 }) {
                     Text("Salvar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPrivacyDialog = false }) {
+                    Text("Cancelar")
                 }
             }
         )
@@ -1477,6 +1499,11 @@ fun SettingsScreen(
                 Button(onClick = { showNotificationsDialog = false }) {
                     Text("Salvar")
                 }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNotificationsDialog = false }) {
+                    Text("Fechar")
+                }
             }
         )
     }
@@ -1485,6 +1512,7 @@ fun SettingsScreen(
     if (showStorageDialog) {
         var wifiOnly by remember { mutableStateOf(prefs.mediaAutoDownloadWifiOnly) }
         var hdQuality by remember { mutableStateOf(prefs.hdMediaQuality) }
+        var cacheRetention by remember { mutableStateOf(prefs.mediaCacheRetentionDays) }
         var cacheSizeMb by remember {
             val cacheSize = context.cacheDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()
             mutableStateOf(String.format("%.1f MB", cacheSize / (1024f * 1024f)))
@@ -1570,10 +1598,49 @@ fun SettingsScreen(
                             }
                         )
                     }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+
+                    Text("Autolimpeza de Mídia Inteligente:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Exclui automaticamente o cache de mídia mantendo o histórico de mensagens.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(0 to "Nunca", 7 to "7 Dias", 30 to "30 Dias", 90 to "90 Dias").forEach { (days, label) ->
+                            FilterChip(
+                                selected = cacheRetention == days,
+                                onClick = {
+                                    cacheRetention = days
+                                    prefs.mediaCacheRetentionDays = days
+                                    if (days > 0) {
+                                        scope.launch(Dispatchers.IO) {
+                                            val cutoff = System.currentTimeMillis() - (days.toLong() * 24L * 3600L * 1000L)
+                                            try {
+                                                context.cacheDir.walkTopDown().filter { it.isFile && it.lastModified() < cutoff }.forEach { it.delete() }
+                                                val remaining = context.cacheDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()
+                                                withContext(Dispatchers.Main) {
+                                                    cacheSizeMb = String.format("%.1f MB", remaining / (1024f * 1024f))
+                                                }
+                                            } catch (e: Exception) {}
+                                        }
+                                    }
+                                },
+                                label = { Text(label, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(onClick = { showStorageDialog = false }) {
+                    Text("Concluir")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStorageDialog = false }) {
                     Text("Fechar")
                 }
             }
@@ -1682,7 +1749,9 @@ fun SettingsScreen(
                         }
                         if (otherSessions.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text("Outros Aparelhos Conectados (${otherSessions.size}):", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            val sessionCount = otherSessions.size
+                            val sessionTitle = if (sessionCount == 1) "Outro Aparelho Conectado (1):" else "Outros Aparelhos Conectados ($sessionCount):"
+                            Text(sessionTitle, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(6.dp))
                             LazyColumn(modifier = Modifier.heightIn(max = 200.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(otherSessions) { session ->
@@ -1777,6 +1846,11 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
+                Button(onClick = { showDevicesDialog = false }) {
+                    Text("Concluir")
+                }
+            },
+            dismissButton = {
                 TextButton(onClick = { showDevicesDialog = false }) {
                     Text("Fechar")
                 }
@@ -1820,49 +1894,70 @@ fun SettingsScreen(
                                         Text(contactItem.displayName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                         Text("@${contactItem.username}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    IconButton(
-                                        onClick = {
-                                            prefs.setUserBlocked(contactItem.userId, true)
-                                            scope.launch(Dispatchers.IO) {
-                                                try {
-                                                    apiService.blockUser(mapOf("blockedUserId" to contactItem.userId, "targetUserId" to contactItem.userId))
-                                                    val res = apiService.getBlockedUsers()
-                                                    if (res.isSuccessful && res.body() != null) {
-                                                        withContext(Dispatchers.Main) {
-                                                            blockedUsersList = res.body()!!
+                                    var showContactMenu by remember { mutableStateOf(false) }
+                                    Box {
+                                        IconButton(onClick = { showContactMenu = true }) {
+                                            Icon(
+                                                Icons.Default.MoreVert,
+                                                contentDescription = "Mais opções",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = showContactMenu,
+                                            onDismissRequest = { showContactMenu = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("Bloquear Contato") },
+                                                leadingIcon = {
+                                                    Icon(Icons.Default.Block, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
+                                                },
+                                                onClick = {
+                                                    showContactMenu = false
+                                                    prefs.setUserBlocked(contactItem.userId, true)
+                                                    scope.launch(Dispatchers.IO) {
+                                                        try {
+                                                            apiService.blockUser(mapOf("blockedUserId" to contactItem.userId, "targetUserId" to contactItem.userId))
+                                                            val res = apiService.getBlockedUsers()
+                                                            if (res.isSuccessful && res.body() != null) {
+                                                                withContext(Dispatchers.Main) {
+                                                                    blockedUsersList = res.body()!!
+                                                                }
+                                                            }
+                                                        } catch (e: Exception) {}
+                                                    }
+                                                    Toast.makeText(context, "Contato bloqueado", Toast.LENGTH_SHORT).show()
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Excluir Contato", color = DangerRed) },
+                                                leadingIcon = {
+                                                    Icon(Icons.Default.Delete, contentDescription = null, tint = DangerRed)
+                                                },
+                                                onClick = {
+                                                    showContactMenu = false
+                                                    scope.launch(Dispatchers.IO) {
+                                                        try {
+                                                            apiService.removeContact(contactItem.userId)
+                                                        } catch (e: Exception) {}
+                                                        try {
+                                                            db.contactDao().deleteContact(contactItem.userId)
+                                                        } catch (e: Exception) {}
+                                                        if (contactItem.conversationId != null) {
+                                                            try {
+                                                                apiService.deleteConversation(contactItem.conversationId)
+                                                                apiService.clearConversation(contactItem.conversationId)
+                                                            } catch (e: Exception) {}
+                                                            try {
+                                                                db.conversationDao().deleteConversation(contactItem.conversationId)
+                                                                db.messageDao().clearConversationMessages(contactItem.conversationId)
+                                                            } catch (e: Exception) {}
                                                         }
                                                     }
-                                                } catch (e: Exception) {}
-                                            }
-                                            Toast.makeText(context, "Contato bloqueado", Toast.LENGTH_SHORT).show()
-                                        }
-                                    ) {
-                                        Icon(Icons.Default.Block, contentDescription = "Bloquear", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(20.dp))
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            scope.launch(Dispatchers.IO) {
-                                                try {
-                                                    apiService.removeContact(contactItem.userId)
-                                                } catch (e: Exception) {}
-                                                try {
-                                                    db.contactDao().deleteContact(contactItem.userId)
-                                                } catch (e: Exception) {}
-                                                if (contactItem.conversationId != null) {
-                                                    try {
-                                                        apiService.deleteConversation(contactItem.conversationId)
-                                                        apiService.clearConversation(contactItem.conversationId)
-                                                    } catch (e: Exception) {}
-                                                    try {
-                                                        db.conversationDao().deleteConversation(contactItem.conversationId)
-                                                        db.messageDao().clearConversationMessages(contactItem.conversationId)
-                                                    } catch (e: Exception) {}
+                                                    Toast.makeText(context, "Contato excluído", Toast.LENGTH_SHORT).show()
                                                 }
-                                            }
-                                            Toast.makeText(context, "Contato excluído", Toast.LENGTH_SHORT).show()
+                                            )
                                         }
-                                    ) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Remover", tint = DangerRed, modifier = Modifier.size(20.dp))
                                     }
                                 }
                             }
@@ -1871,6 +1966,11 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
+                Button(onClick = { showManageContactsDialog = false }) {
+                    Text("Concluir")
+                }
+            },
+            dismissButton = {
                 TextButton(onClick = { showManageContactsDialog = false }) {
                     Text("Fechar")
                 }
@@ -1967,6 +2067,9 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
+                Button(onClick = { showBlockedDialog = false }) { Text("Concluir") }
+            },
+            dismissButton = {
                 TextButton(onClick = { showBlockedDialog = false }) { Text("Fechar") }
             }
         )
@@ -2004,7 +2107,10 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                Button(onClick = { showAboutDialog = false }) { Text("Fechar") }
+                Button(onClick = { showAboutDialog = false }) { Text("Concluir") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAboutDialog = false }) { Text("Fechar") }
             }
         )
     }

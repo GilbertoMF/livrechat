@@ -11,6 +11,7 @@ import { MessagesController } from './modules/messages/messages.controller';
 import { CallsController } from './modules/calls/calls.controller';
 import { StatusController } from './modules/status/status.controller';
 import { MediaController, uploadMiddleware } from './modules/media/media.controller';
+import { LivreTubeController } from './modules/livretube/livretube.controller';
 import { WebSocketManager } from './websocket/ws.server';
 import { fcmService } from './services/fcm.service';
 
@@ -33,7 +34,7 @@ app.get(['/', '/download', '/baixar', '/app'], (req, res) => {
 
 // Latest APK redirect
 app.get(['/apks/livrechat-latest.apk', '/download/latest'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.14-universal.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.18-universal.apk');
 });
 
 // Health check
@@ -46,7 +47,7 @@ app.get('/health', async (req, res) => {
   res.status(200).json({
     status: 'online',
     appName: 'LivreChat Server',
-    version: '1.1.15',
+    version: '1.1.18',
     fcmInitialized: fcmService.isAvailable(),
     registeredFcmDevices,
     timestamp: new Date().toISOString()
@@ -58,14 +59,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 26;
+  const LATEST_CODE = 28;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.16',
+    latestVersion: '1.1.18',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -73,10 +74,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.16: Correção definitiva de carregamento de fotos recebidas, toque longo em fotos/mídias com menu completo, tela de chamadas moderna com minimizar e criação de figurinhas corrigida!',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.16-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.16-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.16-universal.apk`,
+      : 'Nova versão 1.1.18: Chegou o LivreTube! Assista a vídeos do YouTube sem anúncios, sem login e com privacidade total direto no app!',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.18-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.18-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.18-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -84,26 +85,50 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.16',
-      versionCode: 26,
+      version: '1.1.18',
+      versionCode: 28,
       minSupportedVersionCode: 13,
-      releaseDate: '2026-10-17',
+      releaseDate: '2026-10-18',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Atualização 1.1.16: Correção de fotos recebidas, toque longo em mídias, tela de chamada moderna e melhorias no criador de figurinhas.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.16-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.16-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.16-universal.apk`,
+      message: 'Atualização 1.1.18: Apresentando o LivreTube — reprodução de vídeos e músicas sem anúncios, sem login no Google e sem rastreamento.',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.18-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.18-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.18-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '24.2 MB',
       sizeMbUniversal: '30.4 MB'
     },
     versions: [
       {
+        version: '1.1.18',
+        versionCode: 28,
+        releaseDate: '2026-10-18',
+        isLatest: true,
+        changelog: 'Versão 1.1.18: Chegou o LivreTube! Nova 4ª aba dedicada para assistir a vídeos do YouTube sem login, sem anúncios comerciais e com privacidade absoluta; Busca rápida por vídeos e canais; Pílulas de categorias (Em Alta, Música, Podcasts, Games, Notícias); Player moderno integrado com controles e proteção Shield.',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.18-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '20.9 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.18-armv7.apk` },
+          { type: 'universal', name: 'APK Universal Completo', size: '30.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.18-universal.apk` }
+        ]
+      },
+      {
+        version: '1.1.17',
+        versionCode: 27,
+        releaseDate: '2026-10-18',
+        isLatest: false,
+        changelog: 'Versão 1.1.17: Relatório Completo de UI/UX implementado; Burner IDs (IDs descartáveis de 8 dígitos válidos por 24h); Recuperação Social Descentralizada em 3 fragmentos com Quorum 2/3; PIN de Pânico/Coação; Modo Blackout Total OLED puro (#000000); Autolimpeza de Armazenamento Inteligente (7, 30, 90 dias); Modais padronizados com hierarquia de botões; Lista de contatos limpa com menu ⋮ e gesto de toque longo.',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.17-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '20.9 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.17-armv7.apk` },
+          { type: 'universal', name: 'APK Universal Completo', size: '30.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.17-universal.apk` }
+        ]
+      },
+      {
         version: '1.1.16',
         versionCode: 26,
         releaseDate: '2026-10-17',
-        isLatest: true,
+        isLatest: false,
         changelog: 'Versão 1.1.16: Correção do carregamento infinito em fotos recebidas com sanitização e auto-recuperação de cache; Menu de ações por toque longo em fotos, vídeos, áudios, documentos e arquivos P2P; Nova tela de chamadas moderna com animação de pulso, criptografia E2E ponta a ponta, botão minimizar e barra de chamada em andamento; Correção de orientação na criação de figurinhas.',
         downloads: [
           { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.16-arm64.apk` },
@@ -423,6 +448,11 @@ app.put('/api/users/preferences', authenticateToken, UsersController.updatePrefe
 app.post('/api/users/fcm-token', authenticateToken, UsersController.registerFcmToken);
 app.delete('/api/users/fcm-token', authenticateToken, UsersController.removeFcmToken);
 
+// Burner IDs (Identificadores Descartáveis)
+app.post('/api/users/burner-id', authenticateToken, UsersController.generateBurnerId);
+app.get('/api/users/burner-id', authenticateToken, UsersController.getBurnerId);
+app.delete('/api/users/burner-id', authenticateToken, UsersController.destroyBurnerId);
+
 // ==========================================
 // MESSAGES & CONVERSATIONS ROUTES
 // ==========================================
@@ -470,6 +500,13 @@ app.post('/api/status/:statusId/react', authenticateToken, StatusController.reac
 // ==========================================
 app.post('/api/media/upload', authenticateToken, uploadMiddleware.single('file'), MediaController.uploadMedia);
 app.post('/api/media/presign', authenticateToken, MediaController.getPresignedUrl);
+
+// ==========================================
+// LIVRETUBE (Privacy Video & YouTube Frontend)
+// ==========================================
+app.get('/api/livretube/trending', LivreTubeController.getTrending);
+app.get('/api/livretube/search', LivreTubeController.search);
+app.get('/api/livretube/video/:id', LivreTubeController.getVideoDetails);
 
 // Attach WebSocket Manager
 export const wsManager = new WebSocketManager(server);

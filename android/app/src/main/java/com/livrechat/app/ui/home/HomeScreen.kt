@@ -111,10 +111,10 @@ fun HomeScreen(
     onStartCall: (String, String, String, String?) -> Unit,
     onNavigateToActiveCall: (() -> Unit)? = null
 ) {
-    // Tabs: 0 = Conversas, 1 = Atualizações (Status), 2 = Chamadas
+    // Tabs: 0 = Conversas, 1 = Flash (Status), 2 = Chamadas, 3 = LivreTube
     var selectedTab by remember { mutableIntStateOf(initialTab) }
     LaunchedEffect(initialTab) {
-        if (initialTab in 0..2) {
+        if (initialTab in 0..3) {
             selectedTab = initialTab
         }
     }
@@ -1134,57 +1134,7 @@ fun HomeScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Quick access tiles: Câmera Instantânea & Galeria
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color(0xFF25D366).copy(alpha = 0.12f),
-                            border = BorderStroke(1.dp, Color(0xFF25D366).copy(alpha = 0.3f)),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable {
-                                    showStatusOptionsDialog = false
-                                    launchStatusCamera()
-                                }
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(14.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF25D366), modifier = Modifier.size(28.dp))
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text("Abrir Câmera", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF25D366))
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color(0xFF007AFF).copy(alpha = 0.12f),
-                            border = BorderStroke(1.dp, Color(0xFF007AFF).copy(alpha = 0.3f)),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable {
-                                    showStatusOptionsDialog = false
-                                    statusImagePickerLauncher.launch("image/*")
-                                }
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(14.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color(0xFF007AFF), modifier = Modifier.size(28.dp))
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text("Abrir Galeria", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF007AFF))
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         }
@@ -2395,6 +2345,7 @@ fun HomeScreen(
                         Icon(imageVector = Icons.Default.Call, contentDescription = "Nova Chamada")
                     }
                 }
+                3 -> {}
             }
         }
     ) { padding ->
@@ -2470,7 +2421,7 @@ fun HomeScreen(
                 }
             }
 
-            // Tabs: Conversas / Atualizações / Chamadas
+            // Tabs: Conversas / Flash / Chamadas / LivreTube
             TabRow(selectedTabIndex = selectedTab) {
                 Tab(
                     selected = selectedTab == 0,
@@ -2499,6 +2450,16 @@ fun HomeScreen(
                         Text(
                             text = "Chamadas",
                             fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                )
+                Tab(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    text = {
+                        Text(
+                            text = "LivreTube",
+                            fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal
                         )
                     }
                 )
@@ -2593,9 +2554,6 @@ fun HomeScreen(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 22.sp
                             )
-                            IconButton(onClick = { loadStatuses() }) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Atualizar", tint = MaterialTheme.colorScheme.primary)
-                            }
                         }
                     }
 
@@ -2607,11 +2565,7 @@ fun HomeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    if (myStatuses.isNotEmpty()) {
-                                        showMyFlashActionDialog = true
-                                    } else {
-                                        showStatusOptionsDialog = true
-                                    }
+                                    showStatusOptionsDialog = true
                                 }
                         ) {
                             Row(
@@ -2679,21 +2633,16 @@ fun HomeScreen(
                                     Text("Meu Flash", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = if (myStatuses.isNotEmpty()) "${myStatuses.size} Flash(s) ativo(s) • Toque para ver ou adicionar" else "Toque para adicionar um Flash",
+                                        text = if (myStatuses.isNotEmpty()) {
+                                            if (myStatuses.size == 1) "1 publicação ativa • Toque na foto para ver"
+                                            else "${myStatuses.size} publicações ativas • Toque na foto para ver"
+                                        } else "Toque para adicionar um Flash",
                                         fontSize = 13.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { showStatusOptionsDialog = true }) {
-                                        Icon(
-                                            imageVector = Icons.Default.AddCircle,
-                                            contentDescription = "Adicionar Flash",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(26.dp)
-                                        )
-                                    }
                                     IconButton(onClick = {
                                         statusCreationMode = "Texto"
                                         showCreateStatusFlow = true
@@ -2710,7 +2659,7 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(14.dp))
                     }
 
-                    // "Flashs recentes"
+                    // "Flashes recentes"
                     val grouped = contactsStatuses.groupBy { it.userId }
                     item {
                         Row(
@@ -2721,14 +2670,14 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Flashs recentes",
+                                text = "Flashes recentes",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             if (contactsStatuses.isNotEmpty()) {
                                 Text(
-                                    text = "${grouped.keys.size} contato(s)",
+                                    text = if (grouped.keys.size == 1) "1 contato" else "${grouped.keys.size} contatos",
                                     fontSize = 12.sp,
                                     color = Color(0xFF25D366),
                                     fontWeight = FontWeight.SemiBold
@@ -2852,7 +2801,7 @@ fun HomeScreen(
                         }
                     }
                 }
-            } else {
+            } else if (selectedTab == 2) {
                 // CALLS TAB
                 if (callHistory.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -2889,6 +2838,9 @@ fun HomeScreen(
                         }
                     }
                 }
+            } else if (selectedTab == 3) {
+                // LIVRETUBE TAB
+                com.livrechat.app.ui.livretube.LivreTubeScreen()
             }
         }
     }
