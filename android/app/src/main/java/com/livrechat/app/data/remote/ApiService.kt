@@ -247,6 +247,16 @@ interface ApiService {
     suspend fun getLivreTubeVideoDetails(
         @Path("id") id: String
     ): Response<LivreTubeVideoDetailsDto>
+
+    // LivreGames (PSP Retro Catalog & Multiplayer)
+    @GET("api/games")
+    suspend fun getGames(
+        @retrofit2.http.Query("category") category: String? = null,
+        @retrofit2.http.Query("search") search: String? = null
+    ): Response<LivreGamesResponseDto>
+
+    @GET("api/games/server-info")
+    suspend fun getGameServerInfo(): Response<LivreGameServerInfoDto>
 }
 
 data class AppVersionCheckResponse(
@@ -299,5 +309,38 @@ data class LivreTubeVideoDetailsDto(
     val embedUrl: String? = null,
     val fallbackEmbedUrl: String? = null
 )
+
+data class LivreGamesResponseDto(
+    val success: Boolean = false,
+    val count: Int = 0,
+    val server: LivreGameServerInfoDto? = null,
+    val games: List<LivreGameDto> = emptyList()
+)
+
+data class LivreGameServerInfoDto(
+    val proAdhocServer: String = "164.152.40.160",
+    val portOffset: Int = 10000,
+    val adhocPort: Int = 27312,
+    val status: String = "online",
+    val serverName: String = "LivreGames Brasil (Oracle Cloud VPS)",
+    val ppssppPlayStoreUrl: String = "https://play.google.com/store/apps/details?id=org.ppsspp.ppsspp",
+    val ppssppApkUrl: String = "https://www.ppsspp.org/files/1_18_1/ppsspp.apk"
+)
+
+data class LivreGameDto(
+    val id: String = "",
+    val title: String = "",
+    val subtitle: String? = null,
+    val category: String = "Ação",
+    val coverUrl: String = "",
+    val downloadUrl: String = "",
+    val size: String = "",
+    val sizeBytes: Long = 0L,
+    val fileName: String = "",
+    val description: String = "",
+    val maxPlayers: Int = 2,
+    val gameCode: String? = null
+)
+
 
 

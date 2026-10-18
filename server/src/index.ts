@@ -12,6 +12,7 @@ import { CallsController } from './modules/calls/calls.controller';
 import { StatusController } from './modules/status/status.controller';
 import { MediaController, uploadMiddleware } from './modules/media/media.controller';
 import { LivreTubeController } from './modules/livretube/livretube.controller';
+import { gamesRouter } from './modules/games/games.controller';
 import { WebSocketManager } from './websocket/ws.server';
 import { fcmService } from './services/fcm.service';
 
@@ -47,7 +48,7 @@ app.get('/health', async (req, res) => {
   res.status(200).json({
     status: 'online',
     appName: 'LivreChat Server',
-    version: '1.1.18',
+    version: '1.1.19',
     fcmInitialized: fcmService.isAvailable(),
     registeredFcmDevices,
     timestamp: new Date().toISOString()
@@ -59,14 +60,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 28;
+  const LATEST_CODE = 29;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.18',
+    latestVersion: '1.1.19',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -74,10 +75,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.18: Chegou o LivreTube! Assista a vídeos do YouTube sem anúncios, sem login e com privacidade total direto no app!',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.18-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.18-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.18-universal.apk`,
+      : 'Nova versão 1.1.19: Chegou o LivreGames! Catálogo integrado de jogos PSP multiplayer sob demanda com servidor Ad-Hoc oficial automático na Oracle Cloud!',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.19-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.19-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.19-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -85,26 +86,38 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.18',
-      versionCode: 28,
+      version: '1.1.19',
+      versionCode: 29,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-18',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Atualização 1.1.18: Apresentando o LivreTube — reprodução de vídeos e músicas sem anúncios, sem login no Google e sem rastreamento.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.18-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.18-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.18-universal.apk`,
+      message: 'Atualização 1.1.19: Apresentando o LivreGames — jogos de PSP sob demanda com multiplayer automático no servidor oficial.',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.19-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.19-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.19-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '24.2 MB',
       sizeMbUniversal: '30.4 MB'
     },
     versions: [
       {
+        version: '1.1.19',
+        versionCode: 29,
+        releaseDate: '2026-10-18',
+        isLatest: true,
+        changelog: 'Versão 1.1.19: Chegou o LivreGames! Catálogo integrado de jogos PSP multiplayer sob demanda (Dragon Ball Z Shin Budokai, GTA VCS, Naruto, Tekken, NFS, Bomberman, PES); Download direto no app com progresso em tempo real; Conexão automática ao servidor oficial Ad-Hoc na Oracle Cloud VPS sem configuração manual; Lançador integrado com suporte a 60 FPS e controles.',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.19-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '20.9 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.19-armv7.apk` },
+          { type: 'universal', name: 'APK Universal Completo', size: '30.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.19-universal.apk` }
+        ]
+      },
+      {
         version: '1.1.18',
         versionCode: 28,
         releaseDate: '2026-10-18',
-        isLatest: true,
+        isLatest: false,
         changelog: 'Versão 1.1.18: Chegou o LivreTube! Nova 4ª aba dedicada para assistir a vídeos do YouTube sem login, sem anúncios comerciais e com privacidade absoluta; Busca rápida por vídeos e canais; Pílulas de categorias (Em Alta, Música, Podcasts, Games, Notícias); Player moderno integrado com controles e proteção Shield.',
         downloads: [
           { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.18-arm64.apk` },
@@ -507,6 +520,11 @@ app.post('/api/media/presign', authenticateToken, MediaController.getPresignedUr
 app.get('/api/livretube/trending', LivreTubeController.getTrending);
 app.get('/api/livretube/search', LivreTubeController.search);
 app.get('/api/livretube/video/:id', LivreTubeController.getVideoDetails);
+
+// ==========================================
+// LIVREGAMES (PSP Retro Catalog & Multiplayer Server)
+// ==========================================
+app.use('/api/games', gamesRouter);
 
 // Attach WebSocket Manager
 export const wsManager = new WebSocketManager(server);

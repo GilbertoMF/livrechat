@@ -39,6 +39,16 @@
     <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
     <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
 
+    <!-- Queries for PPSSPP emulator detection and launching -->
+    <queries>
+        <package android:name="org.ppsspp.ppsspp" />
+        <package android:name="org.ppsspp.ppssppgold" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/octet-stream" />
+        </intent>
+    </queries>
+
     <application
         android:name=".LivreChatApp"
         android:allowBackup="false"
