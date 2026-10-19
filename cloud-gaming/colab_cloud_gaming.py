@@ -549,9 +549,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 """
 
 def setup_environment():
-    print("📦 [1/6] Instalando dependências de sistema (Xvfb, FFmpeg, xdotool, PulseAudio)...")
+    print("📦 [1/6] Instalando dependências de sistema (Xvfb, FFmpeg, xdotool, PulseAudio, Openbox)...", flush=True)
     os.system("apt-get update -qq > /dev/null 2>&1")
-    os.system("apt-get install -y -qq xvfb xdotool ffmpeg pulseaudio libgl1-mesa-dri libsdl2-2.0-0 psmisc squashfs-tools > /dev/null 2>&1")
+    os.system("apt-get install -y -qq xvfb xdotool ffmpeg pulseaudio libgl1-mesa-dri libsdl2-2.0-0 psmisc squashfs-tools openbox > /dev/null 2>&1")
     os.system("pip install -q aiohttp websockets qrcode[pil] > /dev/null 2>&1")
 
     # Baixar jsmpeg.min.js se não existir
@@ -606,8 +606,11 @@ def setup_ppsspp():
 FirstRun = False
 AutoLoadSaveState = 0
 EnableCheats = False
+ConfirmOnQuit = False
 
 [Graphics]
+GPUBackend = 0
+FailedGPUBackends = 1,2,3
 ShowFPSCounter = 0
 InternalResolution = 2
 WindowWidth = {WIDTH}
@@ -629,20 +632,23 @@ ShowTouchControls = False
 """)
 
 def download_game(game_url, filename="game.cso"):
-    print(f"📥 [3/6] Baixando jogo para a memória do Colab: {filename}...")
+    print(f"📥 [3/6] Baixando jogo para a memória do Colab: {filename}...", flush=True)
     games_dir = Path("/content/games")
     games_dir.mkdir(parents=True, exist_ok=True)
     target = games_dir / filename
     if not target.exists() or target.stat().st_size < 1000000:
         os.system(f"wget -q --show-progress -O {target} {game_url}")
-    print(f"✅ Jogo pronto: {target} ({target.stat().st_size // (1024*1024)} MB)")
+    print(f"✅ Jogo pronto: {target} ({target.stat().st_size // (1024*1024)} MB)", flush=True)
     return str(target)
 
 def start_virtual_display():
-    print("🖥️ [4/6] Iniciando display virtual X11 (:1)...")
+    print("🖥️ [4/6] Iniciando display virtual X11 (:1) e gerenciador de janelas Openbox...", flush=True)
     os.system("pkill -9 Xvfb > /dev/null 2>&1")
+    os.system("pkill -9 openbox > /dev/null 2>&1")
     os.system(f"Xvfb :1 -screen 0 {WIDTH}x{HEIGHT}x24 +extension GLX +render -noreset &")
     time.sleep(1)
+    os.system("DISPLAY=:1 openbox & > /dev/null 2>&1")
+    time.sleep(0.5)
 
     # Iniciar PulseAudio em modo root
     os.system("pkill -9 pulseaudio > /dev/null 2>&1")
@@ -730,14 +736,32 @@ async def run_server(game_path):
     print(f"✅ Servidor Web local ativo na porta {PORT}!", flush=True)
 
     # Iniciar Jogo PPSSPP
-    print("🕹️ Iniciando PPSSPP no display :1...", flush=True)
+    ppsspp_env = {
+        **os.environ,
+        "DISPLAY": ":1",
+        "LIBGL_ALWAYS_SOFTWARE": "1",
+        "MESA_GL_VERSION_OVERRIDE": "3.3",
+        "SDL_VIDEODRIVER": "x11",
+        "HOME": "/root",
+        "XDG_CONFIG_HOME": "/root/.config"
+    }
+    print(f"🕹️ Iniciando PPSSPP no display :1 com o jogo {game_path}...", flush=True)
+    ppsspp_log = open("/content/ppsspp.log", "w")
     game_proc = subprocess.Popen(
-        ["./squashfs-root/AppRun", game_path],
-        env={**os.environ, "DISPLAY": ":1"},
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        ["./squashfs-root/AppRun", "--fullscreen", game_path],
+        env=ppsspp_env,
+        stdout=ppsspp_log,
+        stderr=subprocess.STDOUT
     )
-    time.sleep(2)
+    time.sleep(3)
+
+    if game_proc.poll() is not None:
+        print(f"❌ PPSSPP fechou com código {game_proc.returncode}!", flush=True)
+        if os.path.exists("/content/ppsspp.log"):
+            print("--- LOG DO PPSSPP ---\n" + open("/content/ppsspp.log").read()[:1500] + "\n---------------------", flush=True)
+    else:
+        print(f"✅ PPSSPP ativo e renderizando! (PID {game_proc.pid})", flush=True)
+        os.system("DISPLAY=:1 xdotool search --onlyvisible --class PPSSPPSDL windowactivate > /dev/null 2>&1 || true")
 
     # Iniciar FFmpeg Capture & Stream
     print("📹 Iniciando codificador de vídeo a 60 FPS...", flush=True)
@@ -753,7 +777,8 @@ async def run_server(game_path):
         "-muxdelay", "0.001",
         f"http://127.0.0.1:{PORT}/stream_input"
     ]
-    ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ffmpeg_log = open("/content/ffmpeg.log", "w")
+    ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdout=ffmpeg_log, stderr=subprocess.STDOUT)
 
     # Iniciar Cloudflare Tunnel com logfile não-bloqueante
     print("🌐 [6/6] Criando Túnel Seguro Cloudflare...", flush=True)
