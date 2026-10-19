@@ -849,7 +849,10 @@ fun ChatScreen(
                                 plaintext = envelopeSecretText.trim(),
                                 hint = envelopeHint.trim()
                             )
-                            viewModel.sendMessage(conversationId, encryptedEnvelope, replyingToMessage?.id, otherUserId)
+                            val replyContent = replyingToMessage?.let { r ->
+                                if (r.messageType == "text") r.content else "Mídia"
+                            }
+                            viewModel.sendMessage(conversationId, encryptedEnvelope, replyingToMessage?.id, replyContent, otherUserId)
                             envelopeSecretText = ""
                             envelopePin = ""
                             envelopeHint = ""
@@ -2188,10 +2191,30 @@ fun ChatScreen(
                                     if (textInput.isNotBlank()) {
                                         typingDebounceJob?.cancel()
                                         val replyId = replyingToMessage?.id
+                                        val replyContent = replyingToMessage?.let { r ->
+                                            when (r.messageType) {
+                                                "image", "view_once_image" -> {
+                                                    val cap = r.iv?.substringAfter("|")?.ifBlank { null }
+                                                    if (cap != null) "📷 $cap" else "📷 Foto"
+                                                }
+                                                "audio" -> "🎵 Mensagem de voz"
+                                                "video", "view_once_video", "video_note" -> {
+                                                    val cap = r.iv?.substringAfter("|")?.ifBlank { null }
+                                                    if (cap != null) "🎥 $cap" else "🎥 Vídeo"
+                                                }
+                                                "sticker" -> "🎭 Figurinha"
+                                                "file", "p2p_file" -> {
+                                                    val fName = r.iv?.substringBefore("|")?.ifBlank { null } ?: "Documento"
+                                                    "📄 $fName"
+                                                }
+                                                else -> if (r.isDeleted) "🚫 Mensagem apagada" else r.content
+                                            }
+                                        }
                                         viewModel.sendMessage(
                                             conversationId = conversationId,
                                             text = textInput.trim(),
                                             replyToId = replyId,
+                                            replyToContent = replyContent,
                                             targetUserId = otherUserId
                                         )
                                         textInput = ""
@@ -2557,6 +2580,16 @@ fun ChatScreen(
                             activeEnvelopeToUnlock = msg
                             unlockPinAttempt = ""
                             unlockError = null
+                        },
+                        allMessages = messages,
+                        otherDisplayName = otherDisplayName,
+                        onReplyBannerClick = { replyId ->
+                            val targetIdx = messages.indexOfFirst { it.id == replyId }
+                            if (targetIdx >= 0) {
+                                scope.launch {
+                                    listState.animateScrollToItem(targetIdx)
+                                }
+                            }
                         }
                     )
                 }
@@ -2979,7 +3012,10 @@ fun MessageBubble(
     senderAvatarUrl: String? = null,
     onSenderClick: ((String) -> Unit)? = null,
     unlockedEnvelopes: Map<String, String> = emptyMap(),
-    onUnlockEnvelope: ((MessageEntity) -> Unit)? = null
+    onUnlockEnvelope: ((MessageEntity) -> Unit)? = null,
+    allMessages: List<MessageEntity> = emptyList(),
+    otherDisplayName: String = "",
+    onReplyBannerClick: ((String) -> Unit)? = null
 ) {
     val isOutgoing = message.isOutgoing
     val alignment = if (isOutgoing) Alignment.End else Alignment.Start
@@ -3180,6 +3216,42 @@ fun MessageBubble(
 
                         // Render quoted reply banner inside bubble if replying
                         if (!message.replyToContent.isNullOrBlank() || message.replyToId != null) {
+                            val quotedMessage = remember(message.replyToId, allMessages) {
+                                if (!message.replyToId.isNullOrBlank()) {
+                                    allMessages.firstOrNull { it.id == message.replyToId }
+                                } else null
+                            }
+
+                            val quotedAuthor = when {
+                                quotedMessage != null && quotedMessage.isOutgoing -> "Você"
+                                quotedMessage != null && isGroup -> senderDisplayName.ifBlank { "Contato" }
+                                quotedMessage != null -> otherDisplayName.ifBlank { "Contato" }
+                                message.isOutgoing -> otherDisplayName.ifBlank { "Contato" }
+                                else -> "Você"
+                            }
+
+                            val quotedText = when {
+                                quotedMessage != null -> when (quotedMessage.messageType) {
+                                    "image", "view_once_image" -> {
+                                        val cap = quotedMessage.iv?.substringAfter("|")?.ifBlank { null }
+                                        if (cap != null) "📷 $cap" else "📷 Foto"
+                                    }
+                                    "audio" -> "🎵 Mensagem de voz"
+                                    "video", "view_once_video", "video_note" -> {
+                                        val cap = quotedMessage.iv?.substringAfter("|")?.ifBlank { null }
+                                        if (cap != null) "🎥 $cap" else "🎥 Vídeo"
+                                    }
+                                    "sticker" -> "🎭 Figurinha"
+                                    "file", "p2p_file" -> {
+                                        val fName = quotedMessage.iv?.substringBefore("|")?.ifBlank { null } ?: "Documento"
+                                        "📄 $fName"
+                                    }
+                                    else -> if (quotedMessage.isDeleted) "🚫 Mensagem apagada" else quotedMessage.content
+                                }
+                                !message.replyToContent.isNullOrBlank() -> message.replyToContent!!
+                                else -> "Mensagem respondida"
+                            }
+
                             Surface(
                                 color = if (isOutgoing) Color.Black.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
                                 shape = RoundedCornerShape(8.dp),
@@ -3190,6 +3262,9 @@ fun MessageBubble(
                                         end = if (isMediaMsg) 4.dp else 0.dp,
                                         bottom = 6.dp
                                     )
+                                    .clickable(enabled = message.replyToId != null && onReplyBannerClick != null) {
+                                        message.replyToId?.let { onReplyBannerClick?.invoke(it) }
+                                    }
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
@@ -3197,24 +3272,25 @@ fun MessageBubble(
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .width(3.dp)
-                                            .height(28.dp)
+                                            .width(3.5.dp)
+                                            .height(30.dp)
                                             .background(if (isOutgoing) Color.White else MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Resposta",
+                                            text = quotedAuthor,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp,
-                                            color = if (isOutgoing) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.primary
+                                            color = if (isOutgoing) Color.White.copy(alpha = 0.95f) else MaterialTheme.colorScheme.primary
                                         )
+                                        Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = message.replyToContent ?: "Mensagem respondida",
+                                            text = quotedText,
                                             fontSize = 12.sp,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
-                                            color = if (isOutgoing) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = if (isOutgoing) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
@@ -3979,6 +4055,8 @@ fun VideoMessageBubbleContent(
                 if (MediaFileManager.isLocalFilePath(message.content)) {
                     val path = message.content.removePrefix("file://")
                     retriever.setDataSource(path)
+                } else if (message.content.startsWith("http://") || message.content.startsWith("https://")) {
+                    retriever.setDataSource(message.content, HashMap<String, String>())
                 } else {
                     val clean = if (message.content.contains(",")) message.content.substringAfter(",") else message.content
                     val bytes = Base64.decode(clean, Base64.DEFAULT)
@@ -4116,6 +4194,32 @@ fun FileMessageBubbleContent(
     val fileSize = parts.getOrNull(1)?.toLongOrNull() ?: 0L
     val ext = fileName.substringAfterLast(".", "").uppercase()
 
+    val scope = rememberCoroutineScope()
+    var isDownloading by remember(message.id) { mutableStateOf(false) }
+
+    val isLocal = MediaFileManager.isLocalFilePath(message.content) && File(message.content.removePrefix("file://")).exists()
+    val safeCacheName = "doc_" + kotlin.math.abs(message.content.hashCode()) + "_" + fileName
+    val cachedFile = remember(message.content, fileName) { File(context.cacheDir, safeCacheName) }
+    var isCached by remember(message.id, cachedFile.length()) { mutableStateOf(cachedFile.exists() && cachedFile.length() > 0) }
+
+    val isDownloaded = isLocal || isCached
+    val isRemoteUrl = message.content.startsWith("http://") || message.content.startsWith("https://")
+
+    val mime = when (ext.lowercase()) {
+        "pdf" -> "application/pdf"
+        "doc", "docx" -> "application/msword"
+        "xls", "xlsx" -> "application/vnd.ms-excel"
+        "ppt", "pptx" -> "application/vnd.ms-powerpoint"
+        "zip" -> "application/zip"
+        "rar" -> "application/x-rar-compressed"
+        "apk" -> "application/vnd.android.package-archive"
+        "txt" -> "text/plain"
+        "mp3", "m4a", "wav" -> "audio/*"
+        "mp4", "mkv" -> "video/*"
+        "jpg", "jpeg", "png" -> "image/*"
+        else -> "*/*"
+    }
+
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = if (isOutgoing) Color.White.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface,
@@ -4123,16 +4227,47 @@ fun FileMessageBubbleContent(
             .fillMaxWidth()
             .combinedClickable(
                 onClick = {
-                    val mime = when (ext.lowercase()) {
-                        "pdf" -> "application/pdf"
-                        "doc", "docx" -> "application/msword"
-                        "xls", "xlsx" -> "application/vnd.ms-excel"
-                        "zip" -> "application/zip"
-                        "apk" -> "application/vnd.android.package-archive"
-                        "txt" -> "text/plain"
-                        else -> "*/*"
+                    if (isDownloaded) {
+                        val path = if (isLocal) message.content else cachedFile.absolutePath
+                        openMediaFile(context, path, fileName, mime)
+                    } else if (isRemoteUrl) {
+                        isDownloading = true
+                        Toast.makeText(context, "Baixando $fileName...", Toast.LENGTH_SHORT).show()
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                val url = java.net.URL(message.content)
+                                val conn = url.openConnection() as java.net.HttpURLConnection
+                                conn.connectTimeout = 20000
+                                conn.readTimeout = 30000
+                                conn.setRequestProperty("User-Agent", "LivreChat-Android")
+                                conn.connect()
+                                if (conn.responseCode in 200..299) {
+                                    conn.inputStream.use { input ->
+                                        cachedFile.outputStream().use { out ->
+                                            input.copyTo(out)
+                                        }
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        isDownloading = false
+                                        isCached = true
+                                        openMediaFile(context, cachedFile.absolutePath, fileName, mime)
+                                    }
+                                } else {
+                                    withContext(Dispatchers.Main) {
+                                        isDownloading = false
+                                        Toast.makeText(context, "Falha ao baixar arquivo (código HTTP ${conn.responseCode})", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    isDownloading = false
+                                    Toast.makeText(context, "Erro ao baixar: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    } else {
+                        openMediaFile(context, message.content, fileName, mime)
                     }
-                    openMediaFile(context, message.content, fileName, mime)
                 },
                 onLongClick = { onLongClick() }
             )
@@ -4143,16 +4278,31 @@ fun FileMessageBubbleContent(
         ) {
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = if (ext == "PDF") Color(0xFFF44336) else if (ext in listOf("ZIP", "RAR")) Color(0xFFFF9800) else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(40.dp)
+                color = when {
+                    ext == "PDF" -> Color(0xFFF44336)
+                    ext in listOf("ZIP", "RAR", "7Z") -> Color(0xFFFF9800)
+                    ext in listOf("DOC", "DOCX") -> Color(0xFF2196F3)
+                    ext in listOf("XLS", "XLSX") -> Color(0xFF4CAF50)
+                    ext == "APK" -> Color(0xFF00E676)
+                    else -> MaterialTheme.colorScheme.primary
+                },
+                modifier = Modifier.size(42.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.InsertDriveFile,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp)
-                    )
+                    if (isDownloading) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (isDownloaded) Icons.Default.InsertDriveFile else Icons.Default.FileDownload,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
 
@@ -4168,10 +4318,17 @@ fun FileMessageBubbleContent(
                     color = if (isOutgoing) Color.White else MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(2.dp))
+                val statusText = when {
+                    isDownloading -> "Baixando..."
+                    isDownloaded -> "Pronto para abrir"
+                    isRemoteUrl -> "Toque para baixar"
+                    else -> "Documento"
+                }
                 Text(
                     text = listOfNotNull(
                         if (fileSize > 0) formatFileSize(fileSize) else null,
-                        ext.ifBlank { null }
+                        ext.ifBlank { null },
+                        statusText
                     ).joinToString(" • "),
                     fontSize = 11.sp,
                     color = if (isOutgoing) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
@@ -4181,8 +4338,8 @@ fun FileMessageBubbleContent(
             Spacer(modifier = Modifier.width(8.dp))
 
             Icon(
-                imageVector = Icons.Default.OpenInNew,
-                contentDescription = "Abrir",
+                imageVector = if (isDownloaded) Icons.Default.OpenInNew else if (isDownloading) Icons.Default.HourglassEmpty else Icons.Default.Download,
+                contentDescription = if (isDownloaded) "Abrir" else "Baixar",
                 tint = if (isOutgoing) Color.White else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp)
             )
@@ -4521,6 +4678,27 @@ fun FullscreenVideoViewerDialog(
             try {
                 val file = if (MediaFileManager.isLocalFilePath(message.content)) {
                     File(message.content.removePrefix("file://"))
+                } else if (message.content.startsWith("http://") || message.content.startsWith("https://")) {
+                    val safeCacheName = "video_" + kotlin.math.abs(message.content.hashCode()) + "_" + fileName
+                    val cached = File(context.cacheDir, safeCacheName)
+                    if (cached.exists() && cached.length() > 0) {
+                        cached
+                    } else {
+                        val url = java.net.URL(message.content)
+                        val conn = url.openConnection() as java.net.HttpURLConnection
+                        conn.connectTimeout = 20000
+                        conn.readTimeout = 30000
+                        conn.setRequestProperty("User-Agent", "LivreChat-Android")
+                        conn.connect()
+                        if (conn.responseCode in 200..299) {
+                            conn.inputStream.use { input ->
+                                cached.outputStream().use { out ->
+                                    input.copyTo(out)
+                                }
+                            }
+                        }
+                        cached
+                    }
                 } else {
                     val clean = if (message.content.contains(",")) message.content.substringAfter(",") else message.content
                     val bytes = Base64.decode(clean, Base64.DEFAULT)
@@ -4717,23 +4895,64 @@ fun formatFileSize(bytes: Long): String {
     }
 }
 
-fun openMediaFile(context: Context, base64Content: String, fileName: String, mimeType: String) {
+fun openMediaFile(context: Context, rawContent: String, fileName: String, mimeType: String) {
     try {
-        val targetFile: File = if (MediaFileManager.isLocalFilePath(base64Content)) {
-            val local = java.io.File(base64Content.removePrefix("file://"))
-            if (local.exists()) local else {
-                val cleanBase64 = if (base64Content.contains(",")) base64Content.substringAfter(",") else base64Content
+        val targetFile: File? = when {
+            MediaFileManager.isLocalFilePath(rawContent) -> {
+                val local = java.io.File(rawContent.removePrefix("file://"))
+                if (local.exists()) local else null
+            }
+            rawContent.startsWith("http://") || rawContent.startsWith("https://") -> {
+                val safeCacheName = "doc_" + kotlin.math.abs(rawContent.hashCode()) + "_" + fileName
+                val cached = File(context.cacheDir, safeCacheName)
+                if (cached.exists() && cached.length() > 0) {
+                    cached
+                } else {
+                    Toast.makeText(context, "Baixando arquivo...", Toast.LENGTH_SHORT).show()
+                    val thread = Thread {
+                        try {
+                            val url = java.net.URL(rawContent)
+                            val conn = url.openConnection() as java.net.HttpURLConnection
+                            conn.connectTimeout = 20000
+                            conn.readTimeout = 30000
+                            conn.setRequestProperty("User-Agent", "LivreChat-Android")
+                            conn.connect()
+                            if (conn.responseCode in 200..299) {
+                                conn.inputStream.use { input ->
+                                    cached.outputStream().use { out ->
+                                        input.copyTo(out)
+                                    }
+                                }
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    openMediaFile(context, cached.absolutePath, fileName, mimeType)
+                                }
+                            } else {
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    Toast.makeText(context, "Falha ao baixar arquivo (código HTTP ${conn.responseCode})", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                Toast.makeText(context, "Erro ao baixar: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    thread.start()
+                    return
+                }
+            }
+            else -> {
+                val cleanBase64 = if (rawContent.contains(",")) rawContent.substringAfter(",") else rawContent
                 val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
                 val cacheFile = File(context.cacheDir, fileName)
                 FileOutputStream(cacheFile).use { it.write(bytes) }
                 cacheFile
             }
-        } else {
-            val cleanBase64 = if (base64Content.contains(",")) base64Content.substringAfter(",") else base64Content
-            val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
-            val cacheFile = File(context.cacheDir, fileName)
-            FileOutputStream(cacheFile).use { it.write(bytes) }
-            cacheFile
+        }
+
+        if (targetFile == null || !targetFile.exists() || targetFile.length() == 0L) {
+            Toast.makeText(context, "Arquivo não encontrado ou corrompido.", Toast.LENGTH_SHORT).show()
+            return
         }
 
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", targetFile)

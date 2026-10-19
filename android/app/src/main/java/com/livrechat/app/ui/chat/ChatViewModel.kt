@@ -303,7 +303,13 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         }
     }
 
-    fun sendMessage(conversationId: String, text: String, replyToId: String? = null, targetUserId: String? = null) {
+    fun sendMessage(
+        conversationId: String,
+        text: String,
+        replyToId: String? = null,
+        replyToContent: String? = null,
+        targetUserId: String? = null
+    ) {
         if (text.isBlank()) return
 
         val myId = prefs.currentUserId ?: return
@@ -319,6 +325,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
             content = text,
             messageType = "text",
             replyToId = replyToId,
+            replyToContent = replyToContent,
             status = "sending",
             isOutgoing = true,
             createdAt = now

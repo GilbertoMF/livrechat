@@ -36,18 +36,18 @@ app.get(['/', '/download', '/baixar', '/app'], (req, res) => {
 
 // Latest APK redirect
 app.get(['/apks/livrechat-latest.apk', '/download/latest'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.24-universal.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.25-universal.apk');
 });
 
 // Dedicated Architecture Download Routes (3 versions available)
 app.get(['/download/arm64', '/apks/arm64'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.24-arm64.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.25-arm64.apk');
 });
 app.get(['/download/armv7', '/apks/armv7'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.24-armv7.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.25-armv7.apk');
 });
 app.get(['/download/universal', '/apks/universal'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.24-universal.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.25-universal.apk');
 });
 
 // Games static hosting (CSO / ISO files)
@@ -76,14 +76,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 34;
+  const LATEST_CODE = 35;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.24',
+    latestVersion: '1.1.25',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -91,10 +91,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.24: Protocolo Gossip na Rede Offline P2P Mesh (descoberta automática A -> B -> C), novo botão (+) para conversar com qualquer aparelho na malha e roteamento multi-hop com confirmação (✓✓)!',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.24-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.24-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.24-universal.apk`,
+      : 'Nova versão 1.1.25: Correção no carregamento e download de arquivos e documentos (PDF, DOC, ZIP), respostas com citação exata da mensagem original no balão (com navegação por clique e autor) e reprodução de vídeos remotos!',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.25-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.25-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.25-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -102,30 +102,42 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.24',
-      versionCode: 34,
+      version: '1.1.25',
+      versionCode: 35,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-19',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Atualização 1.1.24: Protocolo Gossip na Rede Offline P2P Mesh (descoberta automática A -> B -> C), novo botão (+) para conversar com qualquer aparelho na malha e roteamento multi-hop com confirmação (✓✓)!',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.24-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.24-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.24-universal.apk`,
+      message: 'Atualização 1.1.25: Correção no carregamento e download de arquivos e documentos (PDF, DOC, ZIP), respostas com citação exata da mensagem original no balão (com navegação por clique e autor) e reprodução de vídeos remotos!',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.25-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.25-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.25-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '24.4 MB',
       sizeMbUniversal: '30.6 MB'
     },
     versions: [
       {
+        version: '1.1.25',
+        versionCode: 35,
+        releaseDate: '2026-10-19',
+        isLatest: true,
+        changelog: 'Download e abertura de arquivos e documentos recebidos (PDF, DOC, ZIP, APK, etc.) direto do servidor/nuvem; Balão de resposta agora exibe o texto exato e o autor da mensagem original (com salto animado até a mensagem ao clicar); Suporte aprimorado para reprodução e miniaturas de vídeos remotos.',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.25-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Galaxy A10 / Básicos)', size: '21.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.25-armv7.apk` },
+          { type: 'universal', name: 'APK Universal Completo', size: '30.6 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.25-universal.apk` }
+        ]
+      },
+      {
         version: '1.1.24',
         versionCode: 34,
         releaseDate: '2026-10-19',
-        isLatest: true,
+        isLatest: false,
         changelog: 'Protocolo Gossip P2P Mesh (descoberta automática de aparelhos remotos através de nós intermediários A -> B -> C), novo botão (+) para iniciar conversa com qualquer aparelho offline na malha e roteamento multi-hop com entrega confirmada (✓✓).',
         downloads: [
           { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.24-arm64.apk` },
-          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '21.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.24-armv7.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Galaxy A10 / Básicos)', size: '21.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.24-armv7.apk` },
           { type: 'universal', name: 'APK Universal Completo', size: '30.6 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.24-universal.apk` }
         ]
       },
