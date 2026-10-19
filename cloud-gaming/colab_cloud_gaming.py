@@ -367,30 +367,30 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
     <!-- Controles Touch na Tela -->
     <div id="touch-controls">
-      <div class="shoulder-btn left-shoulder game-btn" data-key="q">L</div>
-      <div class="shoulder-btn right-shoulder game-btn" data-key="e">R</div>
+      <div class="shoulder-btn left-shoulder game-btn" data-btn="l">L</div>
+      <div class="shoulder-btn right-shoulder game-btn" data-btn="r">R</div>
 
       <!-- D-Pad -->
       <div class="dpad-container">
-        <div class="dpad-btn dpad-up game-btn" data-key="Up">▲</div>
-        <div class="dpad-btn dpad-down game-btn" data-key="Down">▼</div>
-        <div class="dpad-btn dpad-left game-btn" data-key="Left">◀</div>
-        <div class="dpad-btn dpad-right game-btn" data-key="Right">▶</div>
+        <div class="dpad-btn dpad-up game-btn" data-btn="up">▲</div>
+        <div class="dpad-btn dpad-down game-btn" data-btn="down">▼</div>
+        <div class="dpad-btn dpad-left game-btn" data-btn="left">◀</div>
+        <div class="dpad-btn dpad-right game-btn" data-btn="right">▶</div>
         <div class="dpad-center"></div>
       </div>
 
       <!-- Select / Start -->
       <div class="system-controls">
-        <button class="sys-btn game-btn" data-key="space">SELECT</button>
-        <button class="sys-btn game-btn" data-key="Return">START</button>
+        <button class="sys-btn game-btn" data-btn="select">SELECT</button>
+        <button class="sys-btn game-btn" data-btn="start">START</button>
       </div>
 
       <!-- Botões de Ação -->
       <div class="action-container">
-        <div class="action-btn btn-triangle game-btn" data-key="i">▲</div>
-        <div class="action-btn btn-square game-btn" data-key="j">■</div>
-        <div class="action-btn btn-circle game-btn" data-key="l">●</div>
-        <div class="action-btn btn-cross game-btn" data-key="k">✕</div>
+        <div class="action-btn btn-triangle game-btn" data-btn="triangle">▲</div>
+        <div class="action-btn btn-square game-btn" data-btn="square">■</div>
+        <div class="action-btn btn-circle game-btn" data-btn="circle">●</div>
+        <div class="action-btn btn-cross game-btn" data-btn="cross">✕</div>
       </div>
     </div>
 
@@ -443,65 +443,86 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       };
     }
 
-    function sendKey(key, state) {
+    function sendBtn(btn, state) {
       if (inputWs && inputWs.readyState === WebSocket.OPEN) {
-        inputWs.send(JSON.stringify({ key: key, state: state }));
+        inputWs.send(JSON.stringify({ btn: btn, state: state }));
       }
       if (state === 'down' && navigator.vibrate) {
-        navigator.vibrate(15);
+        navigator.vibrate(20);
       }
+    }
+
+    // Ao tocar no canvas de vídeo (qualquer ponto da tela), aciona START e CROSS para avançar cutscenes
+    const videoCanvas = document.getElementById('video-canvas');
+    if (videoCanvas) {
+      videoCanvas.addEventListener('pointerdown', () => {
+        sendBtn('start', 'down');
+        sendBtn('cross', 'down');
+        setTimeout(() => {
+          sendBtn('start', 'up');
+          sendBtn('cross', 'up');
+        }, 120);
+      });
     }
 
     // Configurar Multi-touch robusto para todos os botões
     document.querySelectorAll('.game-btn').forEach(btn => {
-      const key = btn.getAttribute('data-key');
+      const b = btn.getAttribute('data-btn');
 
       btn.addEventListener('touchstart', (e) => {
         e.preventDefault();
         btn.classList.add('active');
-        sendKey(key, 'down');
+        sendBtn(b, 'down');
       }, { passive: false });
 
       btn.addEventListener('touchend', (e) => {
         e.preventDefault();
         btn.classList.remove('active');
-        sendKey(key, 'up');
+        sendBtn(b, 'up');
       }, { passive: false });
 
       btn.addEventListener('touchcancel', (e) => {
         e.preventDefault();
         btn.classList.remove('active');
-        sendKey(key, 'up');
+        sendBtn(b, 'up');
       }, { passive: false });
     });
 
-    // Suporte para Teclado Físico (se jogar no PC ou com teclado Bluetooth no celular)
+    // Suporte para Teclado Físico
     const keyMap = {
-      'ArrowUp': 'Up',
-      'ArrowDown': 'Down',
-      'ArrowLeft': 'Left',
-      'ArrowRight': 'Right',
-      'i': 'i', 'I': 'i',
-      'j': 'j', 'J': 'j',
-      'k': 'k', 'K': 'k',
-      'l': 'l', 'L': 'l',
-      'q': 'q', 'Q': 'q',
-      'e': 'e', 'E': 'e',
-      'Enter': 'Return',
-      ' ': 'space'
+      'ArrowUp': 'up',
+      'ArrowDown': 'down',
+      'ArrowLeft': 'left',
+      'ArrowRight': 'right',
+      'w': 'up', 'W': 'up',
+      's': 'down', 'S': 'down',
+      'a': 'left', 'A': 'left',
+      'd': 'right', 'D': 'right',
+      'z': 'cross', 'Z': 'cross',
+      'x': 'circle', 'X': 'circle',
+      'k': 'cross', 'K': 'cross',
+      'l': 'circle', 'L': 'circle',
+      'j': 'square', 'J': 'square',
+      'i': 'triangle', 'I': 'triangle',
+      'q': 'l', 'Q': 'l',
+      'e': 'r', 'E': 'r',
+      'Enter': 'start',
+      ' ': 'start',
+      'Shift': 'select',
+      'v': 'select', 'V': 'select'
     };
 
     window.addEventListener('keydown', (e) => {
       if (keyMap[e.key]) {
         e.preventDefault();
-        sendKey(keyMap[e.key], 'down');
+        sendBtn(keyMap[e.key], 'down');
       }
     });
 
     window.addEventListener('keyup', (e) => {
       if (keyMap[e.key]) {
         e.preventDefault();
-        sendKey(keyMap[e.key], 'up');
+        sendBtn(keyMap[e.key], 'up');
       }
     });
 
@@ -512,23 +533,23 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       if (gamepads && gamepads[0]) {
         const gp = gamepads[0];
         const mappings = [
-          { idx: 0, key: 'k' },      // A / Cross
-          { idx: 1, key: 'l' },      // B / Circle
-          { idx: 2, key: 'j' },      // X / Square
-          { idx: 3, key: 'i' },      // Y / Triangle
-          { idx: 4, key: 'q' },      // L1
-          { idx: 5, key: 'e' },      // R1
-          { idx: 8, key: 'space' },  // Select
-          { idx: 9, key: 'Return' }, // Start
-          { idx: 12, key: 'Up' },    // D-Pad Up
-          { idx: 13, key: 'Down' },  // D-Pad Down
-          { idx: 14, key: 'Left' },  // D-Pad Left
-          { idx: 15, key: 'Right' }  // D-Pad Right
+          { idx: 0, btn: 'cross' },     // A / Cross
+          { idx: 1, btn: 'circle' },    // B / Circle
+          { idx: 2, btn: 'square' },    // X / Square
+          { idx: 3, btn: 'triangle' },  // Y / Triangle
+          { idx: 4, btn: 'l' },         // L1
+          { idx: 5, btn: 'r' },         // R1
+          { idx: 8, btn: 'select' },    // Select
+          { idx: 9, btn: 'start' },     // Start
+          { idx: 12, btn: 'up' },       // D-Pad Up
+          { idx: 13, btn: 'down' },     // D-Pad Down
+          { idx: 14, btn: 'left' },     // D-Pad Left
+          { idx: 15, btn: 'right' }     // D-Pad Right
         ];
         mappings.forEach(m => {
           const pressed = gp.buttons[m.idx] && gp.buttons[m.idx].pressed;
-          if (pressed && !prevButtons[m.idx]) sendKey(m.key, 'down');
-          else if (!pressed && prevButtons[m.idx]) sendKey(m.key, 'up');
+          if (pressed && !prevButtons[m.idx]) sendBtn(m.btn, 'down');
+          else if (!pressed && prevButtons[m.idx]) sendBtn(m.btn, 'up');
           prevButtons[m.idx] = pressed;
         });
       }
@@ -604,6 +625,12 @@ AutoLoadSaveState = 0
 EnableCheats = False
 ConfirmOnQuit = False
 
+[CPU]
+CPUCore = 1
+FastMemoryAccess = False
+IOTimingMethod = 0
+SeparateSASThread = True
+
 [Graphics]
 GPUBackend = 0
 GraphicsBackend = 0
@@ -618,14 +645,35 @@ RenderingMode = 1
 SoftwareRendering = False
 HardwareTransform = True
 SoftwareSkinning = True
+SimulateBlockTransfer = True
 
-[Audio]
+[Sound]
 Enable = True
 AudioBackend = 0
 AudioVolume = 10
+ExtraAudioBuffering = True
 
 [Control]
 ShowTouchControls = False
+"""
+
+    controls_content = """[ControlMapping]
+Up = 1-19,10-19
+Down = 1-20,10-20
+Left = 1-21,10-21
+Right = 1-22,10-22
+Circle = 1-52,1-40,10-190
+Cross = 1-54,1-39,10-189
+Square = 1-29,1-38,10-191
+Triangle = 1-47,1-37,10-188
+Start = 1-62,1-66,10-197
+Select = 1-66,1-62,10-196
+L = 1-45,10-194
+R = 1-51,10-195
+An.Up = 1-37,10-4003
+An.Down = 1-39,10-4002
+An.Left = 1-38,10-4001
+An.Right = 1-40,10-4000
 """
 
     for p in [
@@ -638,6 +686,7 @@ ShowTouchControls = False
     ]:
         p.mkdir(parents=True, exist_ok=True)
         (p / "ppsspp.ini").write_text(ini_content)
+        (p / "controls.ini").write_text(controls_content)
 
 def download_game(game_url, filename="game.cso"):
     print(f"📥 [3/6] Baixando jogo para a memória do Colab: {filename}...", flush=True)
@@ -655,22 +704,44 @@ def start_virtual_display():
     os.system("pkill -9 openbox > /dev/null 2>&1")
     os.system(f"Xvfb :1 -screen 0 {WIDTH}x{HEIGHT}x24 +extension GLX +render -noreset &")
     time.sleep(1)
-    os.system("DISPLAY=:1 openbox & > /dev/null 2>&1")
+
+    # Configurar Openbox para foco automático e tela cheia
+    ob_cfg = Path("/root/.config/openbox")
+    ob_cfg.mkdir(parents=True, exist_ok=True)
+    (ob_cfg / "rc.xml").write_text("""<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <applications>
+    <application class="*">
+      <maximized>yes</maximized>
+      <decor>no</decor>
+      <focus>yes</focus>
+    </application>
+  </applications>
+</openbox_config>""")
+    os.system("DISPLAY=:1 openbox --config-file /root/.config/openbox/rc.xml & > /dev/null 2>&1")
     time.sleep(0.5)
 
     # Desativar drivers Vulkan do host para forçar OpenGL imediato
     os.system("mv /etc/vulkan/icd.d/nvidia_icd.json /etc/vulkan/icd.d/nvidia_icd.json.bak > /dev/null 2>&1 || true")
     os.system("mv /usr/share/vulkan/icd.d/nvidia_icd.json /usr/share/vulkan/icd.d/nvidia_icd.json.bak > /dev/null 2>&1 || true")
 
-    # Configurar e iniciar PulseAudio como root com permissões de acesso
+    # Configurar e iniciar PulseAudio com null-sink para manter o clock de áudio ativo
     os.system("adduser root pulse-access > /dev/null 2>&1 || true")
-    os.system("mkdir -p /var/run/pulse && chmod 777 /var/run/pulse 2>/dev/null || true")
+    os.system("mkdir -p /var/run/pulse /root/.config/pulse && chmod 777 /var/run/pulse /root/.config/pulse 2>/dev/null || true")
+    pulse_pa = """load-module module-native-protocol-unix auth-anonymous=1 socket=/var/run/pulse/native
+load-module module-null-sink sink_name=colab_sound sink_properties=device.description="ColabVirtualSound"
+set-default-sink colab_sound
+"""
+    Path("/etc/pulse/system.pa").write_text(pulse_pa)
     os.system("printf 'default-server = /var/run/pulse/native\\nautospawn = no\\n' > /etc/pulse/client.conf 2>/dev/null || true")
     os.system("pkill -9 pulseaudio > /dev/null 2>&1")
-    os.system("pulseaudio --system --disallow-exit --disable-shm --exit-idle-time=-1 --daemonize=yes > /dev/null 2>&1")
+    os.system("pulseaudio --system --daemonize=yes --disallow-exit --disallow-module-loading=no --disable-shm --exit-idle-time=-1 > /dev/null 2>&1")
     time.sleep(1)
 
+ppsspp_wid = None
+
 async def run_server(game_path):
+    global ppsspp_wid
     from aiohttp import web
 
     print("🚀 [5/6] Iniciando servidor Web e canal de transmissão...")
@@ -715,6 +786,38 @@ async def run_server(game_path):
             connected_stream_clients.discard(ws)
         return ws
 
+    BTN_TO_KEYS = {
+        "cross": ["z", "k"],
+        "circle": ["x", "l"],
+        "square": ["a", "j"],
+        "triangle": ["s", "i"],
+        "start": ["space", "Return"],
+        "select": ["Return", "v"],
+        "l": ["q"],
+        "r": ["w", "e"],
+        "up": ["Up"],
+        "down": ["Down"],
+        "left": ["Left"],
+        "right": ["Right"],
+        "z": ["z"],
+        "x": ["x"],
+        "a": ["a"],
+        "s": ["s"],
+        "k": ["z", "k"],
+        "l": ["x", "l"],
+        "j": ["a", "j"],
+        "i": ["s", "i"],
+        "space": ["space"],
+        "Return": ["Return", "space"],
+        "q": ["q"],
+        "w": ["w"],
+        "e": ["w", "e"],
+        "Up": ["Up"],
+        "Down": ["Down"],
+        "Left": ["Left"],
+        "Right": ["Right"]
+    }
+
     async def handle_ws_input(request):
         ws = web.WebSocketResponse()
         await ws.prepare(request)
@@ -723,11 +826,15 @@ async def run_server(game_path):
                 if msg.type == web.WSMsgType.TEXT:
                     try:
                         data = json.loads(msg.data)
-                        key = data.get("key")
+                        btn = data.get("btn") or data.get("key")
                         state = data.get("state")
-                        if key and state in ("down", "up"):
-                            cmd = f"key{state} {key}\n"
-                            xdotool_proc.stdin.write(cmd)
+                        if btn in BTN_TO_KEYS and state in ("down", "up"):
+                            target_keys = BTN_TO_KEYS[btn]
+                            for k in target_keys:
+                                if ppsspp_wid:
+                                    xdotool_proc.stdin.write(f"key{state} --window {ppsspp_wid} {k}\n")
+                                else:
+                                    xdotool_proc.stdin.write(f"key{state} {k}\n")
                             xdotool_proc.stdin.flush()
                     except Exception:
                         pass
@@ -763,6 +870,7 @@ export VK_DRIVER_FILES=/dev/null
 export VK_LOADER_DRIVERS_DISABLE=*
 export HOME=/root
 export XDG_CONFIG_HOME=/root/.config
+export PULSE_SERVER=/var/run/pulse/native
 
 # Desativar qualquer override interno de áudio no AppRun se existir
 if [ -f "./squashfs-root/AppRun" ]; then
@@ -771,7 +879,6 @@ fi
 
 # Testar se o PulseAudio está aceitando conexões
 if pactl info > /dev/null 2>&1; then
-    export PULSE_SERVER=/var/run/pulse/native
     export SDL_AUDIODRIVER=pulseaudio
 else
     export SDL_AUDIODRIVER=dummy
@@ -798,15 +905,76 @@ exec ./squashfs-root/AppRun --fullscreen "$@"
             print("--- LOG DO PPSSPP ---\n" + open("/content/ppsspp.log").read()[:1500] + "\n---------------------", flush=True)
     else:
         print(f"✅ PPSSPP ativo e renderizando! (PID {game_proc.pid})", flush=True)
-        os.system("DISPLAY=:1 xdotool search --onlyvisible --class PPSSPPSDL windowactivate > /dev/null 2>&1 || true")
+
+    # Localizar janela do PPSSPP para foco e injeção de teclas direta
+    for _ in range(12):
+        try:
+            out = subprocess.check_output(
+                ["xdotool", "search", "--onlyvisible", "--name", "PPSSPP"],
+                env={**os.environ, "DISPLAY": ":1"},
+                text=True
+            ).strip().splitlines()
+            if out:
+                ppsspp_wid = out[0]
+                break
+        except Exception:
+            pass
+        time.sleep(0.4)
+
+    if not ppsspp_wid:
+        try:
+            out = subprocess.check_output(
+                ["xdotool", "search", "--class", "PPSSPP"],
+                env={**os.environ, "DISPLAY": ":1"},
+                text=True
+            ).strip().splitlines()
+            if out:
+                ppsspp_wid = out[0]
+        except Exception:
+            pass
+
+    if ppsspp_wid:
+        print(f"🎯 Janela PPSSPP identificada (ID {ppsspp_wid})! Ativando foco...", flush=True)
+        os.system(f"DISPLAY=:1 xdotool windowactivate --sync {ppsspp_wid} windowfocus --sync {ppsspp_wid} > /dev/null 2>&1")
+
+    # Rotina para avançar automaticamente cutscenes/logos iniciais (Funimation, Atari, etc.)
+    async def auto_skip_intros():
+        await asyncio.sleep(5)
+        print("⚡ Pulando logos e cutscenes iniciais para ir direto ao jogo...", flush=True)
+        for _ in range(10):
+            for k in ["space", "Return", "z"]:
+                try:
+                    if ppsspp_wid:
+                        xdotool_proc.stdin.write(f"keydown --window {ppsspp_wid} {k}\n")
+                        xdotool_proc.stdin.flush()
+                        await asyncio.sleep(0.06)
+                        xdotool_proc.stdin.write(f"keyup --window {ppsspp_wid} {k}\n")
+                        xdotool_proc.stdin.flush()
+                    else:
+                        xdotool_proc.stdin.write(f"keydown {k}\n")
+                        xdotool_proc.stdin.flush()
+                        await asyncio.sleep(0.06)
+                        xdotool_proc.stdin.write(f"keyup {k}\n")
+                        xdotool_proc.stdin.flush()
+                except Exception:
+                    pass
+            await asyncio.sleep(1.2)
+
+    asyncio.create_task(auto_skip_intros())
 
     # Iniciar FFmpeg Capture & Stream
     print("📹 Iniciando codificador de vídeo a 60 FPS...", flush=True)
+    has_pulse = os.system("pactl info > /dev/null 2>&1") == 0
+    if has_pulse:
+        audio_src = ["-f", "pulse", "-i", "colab_sound.monitor"]
+    else:
+        audio_src = ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
+
     ffmpeg_cmd = [
         "ffmpeg", "-y",
         "-f", "x11grab", "-draw_mouse", "0", "-framerate", str(FPS),
         "-video_size", f"{WIDTH}x{HEIGHT}", "-i", ":1.0",
-        "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+        *audio_src,
         "-f", "mpegts",
         "-codec:v", "mpeg1video", "-s", f"{WIDTH}x{HEIGHT}",
         "-b:v", "2800k", "-bf", "0", "-r", str(FPS),
