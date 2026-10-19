@@ -44,6 +44,7 @@ async function main() {
 
   await uploadFile(pyPath, 'cloud-gaming/colab_cloud_gaming.py', 'text/x-python');
   await uploadFile(nbPath, 'cloud-gaming/LivreGames_3D_Cloud.ipynb', 'application/x-ipynb+json');
+  await uploadFile(path.join(rootDir, 'virtualgl.deb'), 'tools/virtualgl.deb', 'application/vnd.debian.binary-package');
 }
 
 main().catch(err => {

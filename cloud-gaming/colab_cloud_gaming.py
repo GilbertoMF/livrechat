@@ -586,6 +586,14 @@ def setup_environment():
         os.system("wget -q -nc https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O cloudflared")
         os.system("chmod +x cloudflared")
 
+    # Instalar VirtualGL com aceleração por hardware EGL na GPU Tesla T4
+    if not os.path.exists("/opt/VirtualGL/bin/vglrun"):
+        print("⚡ Instalando VirtualGL com aceleração de GPU Tesla T4...", flush=True)
+        os.system("wget -q -O /tmp/virtualgl.deb https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/tools/virtualgl.deb")
+        os.system("dpkg -i /tmp/virtualgl.deb > /dev/null 2>&1 || apt-get install -f -y > /dev/null 2>&1")
+        os.system("rm -f /tmp/virtualgl.deb")
+        os.system("/opt/VirtualGL/bin/vglserver_config -config +s +f -t > /dev/null 2>&1 || true")
+
 def setup_ppsspp():
     print("🎮 [2/6] Preparando emulador PPSSPP com aceleração...", flush=True)
     if not os.path.exists("squashfs-root/AppRun"):
@@ -891,7 +899,6 @@ async def run_server(game_path):
     print(f"✅ Servidor Web local ativo na porta {PORT}!", flush=True)
 
     # Criar script launcher para o PPSSPP que garante isolamento e tratamento de áudio
-    launcher_path = Path("/content/run_ppsspp.sh")
     launcher_content = f"""#!/bin/bash
 export DISPLAY=:1
 export SDL_VIDEODRIVER=x11
@@ -899,10 +906,15 @@ export HOME=/root
 export XDG_CONFIG_HOME=/root/.config
 export PULSE_SERVER=/var/run/pulse/native
 
-# Se o Xorg ou driver NVIDIA estiver ativo, usamos aceleração direta de hardware
-if glxinfo 2>/dev/null | grep -iq "NVIDIA"; then
-    echo "⚡ GPU NVIDIA Tesla T4 detectada! Aceleração nativa por hardware ativada."
+# Aceleração por Hardware: VirtualGL intercepta chamadas OpenGL e renderiza na GPU Tesla T4 via EGL
+VGL_CMD=""
+if [ -x "/opt/VirtualGL/bin/vglrun" ]; then
+    echo "⚡ Ativando aceleração de hardware GPU Tesla T4 via VirtualGL EGL..."
+    VGL_CMD="/opt/VirtualGL/bin/vglrun -d egl"
+elif glxinfo 2>/dev/null | grep -iq "NVIDIA"; then
+    echo "⚡ GPU NVIDIA detectada nativamente no Xorg!"
 else
+    echo "⚡ Usando fallback otimizado de CPU"
     export LP_NUM_THREADS=2
     export MESA_GL_VERSION_OVERRIDE=3.3
     export LIBGL_ALWAYS_SOFTWARE=1
@@ -920,7 +932,7 @@ else
     export SDL_AUDIODRIVER=dummy
 fi
 
-exec ./squashfs-root/AppRun --fullscreen "$@"
+exec $VGL_CMD ./squashfs-root/AppRun --fullscreen "$@"
 """
     launcher_path.write_text(launcher_content)
     os.system("chmod +x /content/run_ppsspp.sh")
