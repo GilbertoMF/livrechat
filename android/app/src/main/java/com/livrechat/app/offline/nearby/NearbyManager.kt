@@ -312,14 +312,19 @@ class NearbyManager private constructor(private val context: Context) {
         }
 
         // 2. O pacote é destinado a este nó?
-        if (packet.recipientId == myDeviceId || packet.recipientId == myDeviceName) {
+        val isForMe = packet.recipientId == myDeviceId ||
+                      packet.recipientId.equals(myDeviceName, ignoreCase = true) ||
+                      (packet.recipientName.isNotBlank() && packet.recipientName.equals(myDeviceName, ignoreCase = true)) ||
+                      (packet.hops == 0 && _connectedPeers.value.containsKey(fromEndpointId))
+
+        if (isForMe) {
             Log.i(TAG, "📩 Mensagem entregue a este dispositivo vinda de ${packet.senderName} (Hops: ${packet.hops})")
             scope.launch {
                 val msg = Mensagem(
                     idMensagem = packet.packetId,
                     remetenteId = packet.senderId,
                     remetenteNome = packet.senderName,
-                    destinatarioId = myDeviceId,
+                    destinatarioId = myDeviceName,
                     conteudo = packet.content,
                     timestamp = packet.timestamp,
                     statusEntrega = StatusEntrega.ENTREGUE,
@@ -330,7 +335,7 @@ class NearbyManager private constructor(private val context: Context) {
                 dao.insertMensagem(msg)
 
                 val conversa = Conversa(
-                    id = packet.senderId,
+                    id = packet.senderName,
                     contatoNome = packet.senderName,
                     ultimaMensagem = packet.content,
                     ultimoTimestamp = packet.timestamp,
@@ -339,11 +344,11 @@ class NearbyManager private constructor(private val context: Context) {
                 dao.insertOrUpdateConversa(conversa)
 
                 // Responde com ACK de confirmação de entrega ao remetente
-                sendDeliveryAck(packet.senderId, packet.packetId)
+                sendDeliveryAck(fromEndpointId, packet.senderId, packet.senderName, packet.packetId)
             }
         } else {
             // 3. Lógica de Roteamento em Malha: Não é para mim, sou nó intermediário!
-            Log.i(TAG, "🔄 Roteando pacote ${packet.packetId} destinado a ${packet.recipientId} (Hops atuais: ${packet.hops})")
+            Log.i(TAG, "🔄 Roteando pacote ${packet.packetId} destinado a ${packet.recipientName.ifBlank { packet.recipientId }} (Hops atuais: ${packet.hops})")
 
             if (packet.ttl <= 1) {
                 Log.w(TAG, "Pacote descartado: TTL esgotado (TTL=0)")
@@ -373,6 +378,7 @@ class NearbyManager private constructor(private val context: Context) {
             senderId = myDeviceId,
             senderName = myDeviceName,
             recipientId = recipientId,
+            recipientName = recipientName,
             content = content,
             timestamp = System.currentTimeMillis(),
             type = "TEXT",
@@ -384,7 +390,7 @@ class NearbyManager private constructor(private val context: Context) {
             idMensagem = messageId,
             remetenteId = myDeviceId,
             remetenteNome = myDeviceName,
-            destinatarioId = recipientId,
+            destinatarioId = recipientName,
             conteudo = content,
             timestamp = System.currentTimeMillis(),
             statusEntrega = StatusEntrega.PENDENTE,
@@ -397,7 +403,7 @@ class NearbyManager private constructor(private val context: Context) {
             dao.insertMensagem(localMsg)
             dao.insertOrUpdateConversa(
                 Conversa(
-                    id = recipientId,
+                    id = recipientName,
                     contatoNome = recipientName,
                     ultimaMensagem = content,
                     ultimoTimestamp = localMsg.timestamp,
@@ -405,8 +411,13 @@ class NearbyManager private constructor(private val context: Context) {
                 )
             )
 
-            // Tenta enviar diretamente para o peer conectado ou repassar via malha
-            val directEndpoint = _connectedPeers.value.keys.firstOrNull { it == recipientId }
+            // Localiza endpoint direto por endpointId ou por deviceName
+            val directEndpoint = _connectedPeers.value.entries.firstOrNull { entry ->
+                entry.key == recipientId ||
+                entry.value.deviceName.equals(recipientName, ignoreCase = true) ||
+                entry.value.deviceName.equals(recipientId, ignoreCase = true)
+            }?.key
+
             if (directEndpoint != null) {
                 sendPacketToEndpoint(directEndpoint, packet)
                 dao.updateStatusMensagem(messageId, StatusEntrega.ENVIADO)
@@ -422,19 +433,24 @@ class NearbyManager private constructor(private val context: Context) {
         return localMsg
     }
 
-    private fun sendDeliveryAck(originalSenderId: String, deliveredPacketId: String) {
+    private fun sendDeliveryAck(directEndpointId: String?, originalSenderId: String, originalSenderName: String, deliveredPacketId: String) {
         val ack = MeshPacket(
             packetId = UUID.randomUUID().toString(),
             senderId = myDeviceId,
             senderName = myDeviceName,
             recipientId = originalSenderId,
+            recipientName = originalSenderName,
             content = deliveredPacketId,
             timestamp = System.currentTimeMillis(),
             type = "ACK",
             hops = 0,
             ttl = 5
         )
-        broadcastToAllPeers(ack)
+        if (directEndpointId != null && _connectedPeers.value.containsKey(directEndpointId)) {
+            sendPacketToEndpoint(directEndpointId, ack)
+        } else {
+            broadcastToAllPeers(ack)
+        }
     }
 
     private fun sendPacketToEndpoint(endpointId: String, packet: MeshPacket) {
@@ -464,10 +480,12 @@ class NearbyManager private constructor(private val context: Context) {
     }
 
     private fun drainStoreAndForwardQueue(newlyConnectedEndpointId: String) {
+        val peerName = _connectedPeers.value[newlyConnectedEndpointId]?.deviceName ?: ""
         val toRemove = mutableListOf<MeshPacket>()
         synchronized(storeAndForwardQueue) {
             for (packet in storeAndForwardQueue) {
-                if (packet.recipientId == newlyConnectedEndpointId) {
+                if (packet.recipientId == newlyConnectedEndpointId ||
+                    (peerName.isNotBlank() && packet.recipientName.equals(peerName, ignoreCase = true))) {
                     sendPacketToEndpoint(newlyConnectedEndpointId, packet)
                     toRemove.add(packet)
                 }

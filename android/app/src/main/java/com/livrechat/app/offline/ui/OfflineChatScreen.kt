@@ -46,10 +46,10 @@ fun OfflineChatScreen(
     val dao = remember { OfflineDatabase.getInstance(context).offlineDao() }
     val scope = rememberCoroutineScope()
 
-    val mensagens by dao.getMensagensForContato(contactId).collectAsState(initial = emptyList())
+    val mensagens by dao.getMensagensForContato(contactId, contactName).collectAsState(initial = emptyList())
     val connectedPeers by nearbyManager.connectedPeers.collectAsState()
-    val isDirectPeerConnected = remember(connectedPeers, contactId) {
-        connectedPeers.any { it.endpointId == contactId }
+    val isDirectPeerConnected = remember(connectedPeers, contactId, contactName) {
+        connectedPeers.any { it.endpointId == contactId || it.deviceName.equals(contactName, ignoreCase = true) }
     }
 
     var inputText by remember { mutableStateOf("") }

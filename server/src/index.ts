@@ -36,18 +36,18 @@ app.get(['/', '/download', '/baixar', '/app'], (req, res) => {
 
 // Latest APK redirect
 app.get(['/apks/livrechat-latest.apk', '/download/latest'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.21-universal.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.22-universal.apk');
 });
 
 // Dedicated Architecture Download Routes (3 versions available)
 app.get(['/download/arm64', '/apks/arm64'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.21-arm64.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.22-arm64.apk');
 });
 app.get(['/download/armv7', '/apks/armv7'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.21-armv7.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.22-armv7.apk');
 });
 app.get(['/download/universal', '/apks/universal'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.21-universal.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.22-universal.apk');
 });
 
 // Games static hosting (CSO / ISO files)
@@ -64,7 +64,7 @@ app.get('/health', async (req, res) => {
   res.status(200).json({
     status: 'online',
     appName: 'LivreChat Server',
-    version: '1.1.21',
+    version: '1.1.22',
     fcmInitialized: fcmService.isAvailable(),
     registeredFcmDevices,
     timestamp: new Date().toISOString()
@@ -76,14 +76,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 31;
+  const LATEST_CODE = 32;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.21',
+    latestVersion: '1.1.22',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -91,10 +91,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.21: LivreTube com Mini-player flutuante para navegar pelo app ouvindo seus vídeos, rotação automática de tela horizontal e Nova Aba de Rede Offline P2P Mesh!',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.21-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.21-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.21-universal.apk`,
+      : 'Nova versão 1.1.22: Correção definitiva de mensagens na Rede Offline P2P Mesh (entrega direta e confirmação em tempo real ✓✓)!',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.22-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.22-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.22-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -102,26 +102,38 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.21',
-      versionCode: 31,
+      version: '1.1.22',
+      versionCode: 32,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-19',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Atualização 1.1.21: LivreTube com Mini-player flutuante, rotação horizontal de tela e Modo Rede Offline P2P Mesh!',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.21-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.21-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.21-universal.apk`,
+      message: 'Atualização 1.1.22: Correção definitiva no envio e recebimento de mensagens na Rede Offline P2P Mesh!',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.22-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.22-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.22-universal.apk`,
       downloadPortalUrl: '/download',
-      sizeMbArm64: '24.2 MB',
-      sizeMbUniversal: '30.4 MB'
+      sizeMbArm64: '24.4 MB',
+      sizeMbUniversal: '30.6 MB'
     },
     versions: [
+      {
+        version: '1.1.22',
+        versionCode: 32,
+        releaseDate: '2026-10-19',
+        isLatest: true,
+        changelog: 'Correção definitiva na entrega e exibição de mensagens da Rede Offline P2P Mesh (endereçamento direto, confirmação dupla de entrega ✓✓ e sincronização automática entre contatos).',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.22-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '21.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.22-armv7.apk` },
+          { type: 'universal', name: 'APK Universal Completo', size: '30.6 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.22-universal.apk` }
+        ]
+      },
       {
         version: '1.1.21',
         versionCode: 31,
         releaseDate: '2026-10-19',
-        isLatest: true,
+        isLatest: false,
         changelog: 'Nova Aba de Rede Offline P2P Mesh (funciona 100% sem internet via BLE e Wi-Fi Direct com roteamento Store-and-Forward); LivreTube com mini-player flutuante e rotação de tela horizontal corrigida.',
         downloads: [
           { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.21-arm64.apk` },

@@ -30,8 +30,16 @@ interface OfflineDao {
     suspend fun insertOrUpdateConversa(conversa: Conversa)
 
     // MENSAGENS
-    @Query("SELECT * FROM offline_mensagens WHERE remetenteId = :contactId OR destinatarioId = :contactId ORDER BY timestamp ASC")
-    fun getMensagensForContato(contactId: String): Flow<List<Mensagem>>
+    @Query("""
+        SELECT * FROM offline_mensagens 
+        WHERE remetenteId = :contactId 
+           OR destinatarioId = :contactId 
+           OR remetenteNome = :contactName 
+           OR remetenteId = :contactName 
+           OR destinatarioId = :contactName
+        ORDER BY timestamp ASC
+    """)
+    fun getMensagensForContato(contactId: String, contactName: String): Flow<List<Mensagem>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMensagem(mensagem: Mensagem)
