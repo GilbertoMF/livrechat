@@ -55,7 +55,7 @@ interface OfflineDao {
 
 @Database(
     entities = [Contato::class, Conversa::class, Mensagem::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class OfflineDatabase : RoomDatabase() {
@@ -65,13 +65,21 @@ abstract class OfflineDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: OfflineDatabase? = null
 
+        private val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE offline_mensagens ADD COLUMN relayedVia TEXT DEFAULT NULL")
+            }
+        }
+
         fun getInstance(context: Context): OfflineDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     OfflineDatabase::class.java,
                     "livrechat_offline_mesh.db"
-                ).fallbackToDestructiveMigration().build()
+                ).addMigrations(MIGRATION_1_2)
+                 .fallbackToDestructiveMigration()
+                 .build()
                 INSTANCE = instance
                 instance
             }

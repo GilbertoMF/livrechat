@@ -600,18 +600,19 @@ class NearbyManager private constructor(private val context: Context) {
         }
 
         // 2. O pacote é destinado a este nó?
-        val isForMe = packet.recipientId == myDeviceId ||
-                      packet.recipientId.equals(myDeviceName, ignoreCase = true) ||
-                      (packet.recipientName.isNotBlank() && (
-                          packet.recipientName.equals(myDeviceName, ignoreCase = true) ||
-                          packet.recipientName.contains(myDeviceName, ignoreCase = true) ||
-                          myDeviceName.contains(packet.recipientName, ignoreCase = true)
-                      )) ||
-                      (packet.hops == 0 && _connectedPeers.value.containsKey(fromEndpointId)) ||
-                      _connectedPeers.value.size <= 1
+        val isRecipientMatch = packet.recipientId == myDeviceId ||
+                              packet.recipientId.equals(myDeviceName, ignoreCase = true) ||
+                              (packet.recipientName.isNotBlank() && (
+                                  packet.recipientName.trim().equals(myDeviceName.trim(), ignoreCase = true) ||
+                                  packet.recipientName.trim().contains(myDeviceName.trim(), ignoreCase = true) ||
+                                  myDeviceName.trim().contains(packet.recipientName.trim(), ignoreCase = true)
+                              ))
+        val isBroadcast = packet.recipientId.isBlank() && packet.recipientName.isBlank()
+        val isForMe = isRecipientMatch || isBroadcast
 
         if (isForMe) {
-            Log.i(TAG, "📩 MENSAGEM RECEBIDA de ${packet.senderName}: '${packet.content}' (Hops: ${packet.hops})")
+            val isRelayed = packet.hops > 0 || !packet.relayedVia.isNullOrBlank()
+            Log.i(TAG, "📩 MENSAGEM RECEBIDA de ${packet.senderName}: '${packet.content}' (Hops: ${packet.hops}, via: ${packet.relayedVia})")
             scope.launch {
                 val msg = Mensagem(
                     idMensagem = packet.packetId,
@@ -621,16 +622,25 @@ class NearbyManager private constructor(private val context: Context) {
                     conteudo = packet.content,
                     timestamp = packet.timestamp,
                     statusEntrega = StatusEntrega.ENTREGUE,
-                    isMeshRoute = packet.hops > 0,
+                    isMeshRoute = isRelayed,
                     hops = packet.hops,
-                    ttl = packet.ttl
+                    ttl = packet.ttl,
+                    relayedVia = packet.relayedVia
                 )
                 dao.insertMensagem(msg)
+
+                val conversaSnippet = if (isRelayed && !packet.relayedVia.isNullOrBlank()) {
+                    "🌐 [via ${packet.relayedVia}]: ${packet.content}"
+                } else if (isRelayed) {
+                    "🌐 [via malha]: ${packet.content}"
+                } else {
+                    packet.content
+                }
 
                 val conversa = Conversa(
                     id = packet.senderName,
                     contatoNome = packet.senderName,
-                    ultimaMensagem = packet.content,
+                    ultimaMensagem = conversaSnippet,
                     ultimoTimestamp = packet.timestamp,
                     naoLidas = 1
                 )
@@ -652,32 +662,49 @@ class NearbyManager private constructor(private val context: Context) {
             }
         } else {
             // 3. Roteamento em Malha (Mesh Relay)
-            Log.i(TAG, "🔄 [Relay Intermediário] Roteando pacote ${packet.packetId} de ${packet.senderName} para ${packet.recipientName} (Hops: ${packet.hops})")
+            Log.i(TAG, "🔄 [Relay Intermediário] Roteando pacote ${packet.packetId} de ${packet.senderName} para ${packet.recipientName} (Hops: ${packet.hops}, via: ${packet.relayedVia})")
 
             if (packet.ttl <= 1) {
                 Log.w(TAG, "Pacote descartado: TTL esgotado")
                 return
             }
 
+            // Atualiza a cadeia de saltos: se já tiver nó prévio, concatena com seta "➔"
+            val updatedRelayPath = if (packet.relayedVia.isNullOrBlank()) {
+                myDeviceName
+            } else if (!packet.relayedVia.contains(myDeviceName, ignoreCase = true)) {
+                "${packet.relayedVia} ➔ $myDeviceName"
+            } else {
+                packet.relayedVia
+            }
+
             val relayedPacket = packet.copy(
                 hops = packet.hops + 1,
-                ttl = packet.ttl - 1
+                ttl = packet.ttl - 1,
+                relayedVia = updatedRelayPath
             )
+
+            // Registra para evitar loop
+            forwardedPacketIds.add(packet.packetId)
 
             // Verifica se o destinatário final está conectado diretamente a este nó intermediário
             val directTargetEndpoint = _connectedPeers.value.entries.firstOrNull { entry ->
                 entry.key == packet.recipientId ||
-                entry.value.deviceName.equals(packet.recipientName, ignoreCase = true) ||
-                (packet.recipientName.isNotBlank() && entry.value.deviceName.contains(packet.recipientName, ignoreCase = true))
+                entry.value.deviceName.trim().equals(packet.recipientName.trim(), ignoreCase = true) ||
+                (packet.recipientName.isNotBlank() && entry.value.deviceName.contains(packet.recipientName.trim(), ignoreCase = true)) ||
+                (packet.recipientName.isNotBlank() && packet.recipientName.trim().contains(entry.value.deviceName, ignoreCase = true))
             }?.key
 
             if (directTargetEndpoint != null) {
-                Log.i(TAG, "🎯 Destinatário final ${packet.recipientName} está conectado neste nó! Entregando direto para $directTargetEndpoint...")
+                Log.i(TAG, "🎯 Destinatário final ${packet.recipientName} está conectado neste nó! Entregando direto para $directTargetEndpoint (Relay: $updatedRelayPath)...")
                 sendPacketToEndpoint(directTargetEndpoint, relayedPacket)
             } else {
-                val gateway = meshRoutingTable[packet.recipientName]
+                val gateway = meshRoutingTable[packet.recipientName] ?: meshRoutingTable.entries.firstOrNull {
+                    it.key.contains(packet.recipientName.trim(), ignoreCase = true) || packet.recipientName.trim().contains(it.key, ignoreCase = true)
+                }?.value
+
                 if (gateway != null && gateway != fromEndpointId && _connectedPeers.value.containsKey(gateway)) {
-                    Log.i(TAG, "Roteando para gateway conhecido $gateway...")
+                    Log.i(TAG, "Roteando para gateway conhecido $gateway (Relay: $updatedRelayPath)...")
                     sendPacketToEndpoint(gateway, relayedPacket)
                 } else {
                     storeAndForwardQueue.add(relayedPacket)
@@ -694,6 +721,16 @@ class NearbyManager private constructor(private val context: Context) {
         val messageId = UUID.randomUUID().toString()
         val targetName = recipientName.ifBlank { recipientId }
 
+        // Procura se o destinatário está conectado diretamente
+        val directEndpoint = _connectedPeers.value.entries.firstOrNull { entry ->
+            entry.key == recipientId ||
+            entry.value.deviceName.trim().equals(targetName.trim(), ignoreCase = true) ||
+            entry.value.deviceName.contains(targetName.trim(), ignoreCase = true) ||
+            targetName.trim().contains(entry.value.deviceName, ignoreCase = true)
+        }?.key
+
+        val isDirect = directEndpoint != null
+
         val packet = MeshPacket(
             packetId = messageId,
             senderId = myDeviceId,
@@ -704,7 +741,8 @@ class NearbyManager private constructor(private val context: Context) {
             timestamp = System.currentTimeMillis(),
             type = "TEXT",
             hops = 0,
-            ttl = 5
+            ttl = 5,
+            relayedVia = null
         )
 
         val localMsg = Mensagem(
@@ -715,9 +753,10 @@ class NearbyManager private constructor(private val context: Context) {
             conteudo = content,
             timestamp = System.currentTimeMillis(),
             statusEntrega = StatusEntrega.PENDENTE,
-            isMeshRoute = false,
-            hops = 0,
-            ttl = 5
+            isMeshRoute = !isDirect,
+            hops = if (!isDirect) 1 else 0,
+            ttl = 5,
+            relayedVia = if (!isDirect) "malha mesh" else null
         )
 
         scope.launch {
@@ -726,27 +765,19 @@ class NearbyManager private constructor(private val context: Context) {
                 Conversa(
                     id = targetName,
                     contatoNome = targetName,
-                    ultimaMensagem = content,
+                    ultimaMensagem = if (!isDirect) "🌐 [via malha]: $content" else content,
                     ultimoTimestamp = localMsg.timestamp,
                     naoLidas = 0
                 )
             )
 
-            // 1. Procura conexão direta nos peers conectados
-            val directEndpoint = _connectedPeers.value.entries.firstOrNull { entry ->
-                entry.key == recipientId ||
-                entry.value.deviceName.equals(targetName, ignoreCase = true) ||
-                entry.value.deviceName.contains(targetName, ignoreCase = true) ||
-                targetName.contains(entry.value.deviceName, ignoreCase = true)
-            }?.key
-
-            // 2. Se não estiver conectado direto, procura na tabela de roteamento da malha (Gossip)
+            // 1. Se estiver conectado direto, envia diretamente
             val gatewayEndpoint = directEndpoint ?: meshRoutingTable[targetName] ?: meshRoutingTable.entries.firstOrNull {
-                it.key.equals(targetName, ignoreCase = true) || it.key.contains(targetName, ignoreCase = true)
+                it.key.contains(targetName.trim(), ignoreCase = true) || targetName.trim().contains(it.key, ignoreCase = true)
             }?.value
 
             if (gatewayEndpoint != null && _connectedPeers.value.containsKey(gatewayEndpoint)) {
-                Log.i(TAG, "Roteando mensagem para $targetName através do endpoint $gatewayEndpoint (Direto=${directEndpoint != null})")
+                Log.i(TAG, "Roteando mensagem para $targetName através do endpoint $gatewayEndpoint (Direto=$isDirect)")
                 sendPacketToEndpoint(gatewayEndpoint, packet)
             } else {
                 Log.i(TAG, "Destinatário não conectado diretamente. Armazenando na fila e propagando na malha...")

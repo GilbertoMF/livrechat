@@ -52,7 +52,8 @@ data class Mensagem(
     val statusEntrega: StatusEntrega = StatusEntrega.PENDENTE,
     val isMeshRoute: Boolean = false, // Flag de Roteamento em Malha
     val hops: Int = 0,                // Saltos intermediários percorridos
-    val ttl: Int = 5                  // Time-To-Live para evitar loops
+    val ttl: Int = 5,                 // Time-To-Live para evitar loops
+    val relayedVia: String? = null    // Nome do(s) nó(s) intermediário(s) que repassaram
 )
 
 /**
@@ -68,5 +69,6 @@ data class MeshPacket(
     val timestamp: Long = System.currentTimeMillis(),
     val type: String = "TEXT", // "TEXT", "ACK", "HANDSHAKE"
     val hops: Int = 0,
-    val ttl: Int = 5
+    val ttl: Int = 5,
+    val relayedVia: String? = null    // Nome do(s) nó(s) que intermediaram a entrega
 )

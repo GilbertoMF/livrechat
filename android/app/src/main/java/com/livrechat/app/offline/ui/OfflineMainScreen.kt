@@ -437,12 +437,12 @@ fun OfflineConversationItem(
                 )
             }
 
-            Spacer(modifier = Modifier.height(3.dp))
-
+            val isMeshPreview = conversa.ultimaMensagem.startsWith("🌐")
             Text(
                 text = conversa.ultimaMensagem,
                 fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (isMeshPreview) Color(0xFFA78BFA) else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (isMeshPreview) FontWeight.Medium else FontWeight.Normal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

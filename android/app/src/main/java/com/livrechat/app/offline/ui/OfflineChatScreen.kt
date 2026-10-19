@@ -271,24 +271,44 @@ fun OfflineMessageBubble(
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 // MESH RELAY HOP INDICATOR
-                if (msg.isMeshRoute) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(bottom = 2.dp)
+                val isRelayed = msg.isMeshRoute || msg.hops > 0 || !msg.relayedVia.isNullOrBlank()
+                if (isRelayed) {
+                    val hopCount = if (msg.hops > 0) msg.hops else 1
+                    val hopText = if (hopCount == 1) "1 salto" else "$hopCount saltos"
+                    val label = when {
+                        !msg.relayedVia.isNullOrBlank() && !isMine -> "Via nó: ${msg.relayedVia} ($hopText)"
+                        !msg.relayedVia.isNullOrBlank() && isMine -> "Encaminhada via ${msg.relayedVia}"
+                        !isMine -> "Roteada via nó intermediário ($hopText)"
+                        else -> "Roteada via malha mesh ($hopText)"
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (isMine) Color.Black.copy(alpha = 0.25f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp)
                     ) {
-                        Icon(
-                            Icons.Default.Bolt,
-                            contentDescription = null,
-                            tint = if (isMine) Color(0xFFFFD54F) else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = "Roteada via Malha (${msg.hops} saltos)",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isMine) Color(0xFFFFD54F) else MaterialTheme.colorScheme.primary
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Hub,
+                                contentDescription = "Mesh Relay",
+                                tint = if (isMine) Color(0xFFFFD54F) else Color(0xFF00E676),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "🌐 $label",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isMine) Color(0xFFFFD54F) else Color(0xFF00E676),
+                                maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
 
