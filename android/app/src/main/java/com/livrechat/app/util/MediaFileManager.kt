@@ -163,6 +163,7 @@ object MediaFileManager {
                 if (cachedFile.exists() && cachedFile.length() > 200L) {
                     val cachedBmp = decodeFileWithExif(cachedFile)
                     if (cachedBmp != null) return cachedBmp
+                    cachedFile.delete()
                 }
                 try {
                     val url = java.net.URL(content)
@@ -179,7 +180,11 @@ object MediaFileManager {
                             }
                         }
                         if (cachedFile.exists() && cachedFile.length() > 200L) {
-                            decodeFileWithExif(cachedFile)
+                            val bmp = decodeFileWithExif(cachedFile)
+                            if (bmp == null) {
+                                cachedFile.delete()
+                            }
+                            bmp
                         } else null
                     } else null
                 } catch (e: Throwable) {
@@ -189,7 +194,14 @@ object MediaFileManager {
                 val local = getLocalFile(content)
                 if (local != null && local.length() > 100L) {
                     decodeFileWithExif(local)
-                } else null
+                } else {
+                    val fileName = content.substringAfterLast("/")
+                    val fallback = File(getMediaDir(context), fileName).takeIf { it.exists() && it.length() > 100L }
+                        ?: File(context.cacheDir, fileName).takeIf { it.exists() && it.length() > 100L }
+                    if (fallback != null) {
+                        decodeFileWithExif(fallback)
+                    } else null
+                }
             } else {
                 val clean = if (content.contains(",")) content.substringAfter(",") else content
                 val bytes = Base64.decode(clean, Base64.DEFAULT)

@@ -422,6 +422,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                     if (uploadRes.isSuccessful && !uploadRes.body()?.url.isNullOrBlank()) {
                         payloadToSend = uploadRes.body()!!.url
                         Log.d("ChatViewModel", "Áudio enviado ao R2: $payloadToSend")
+                        db.messageDao().updateContent(clientMessageId, payloadToSend)
                     }
                 }
             } catch (e: Exception) {
@@ -559,11 +560,11 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
             db.conversationDao().updateLastMessage(conversationId, previewText, now)
 
             var finalPayload = payloadToSend
-            try {
-                val fileToUpload = if (MediaFileManager.isLocalFilePath(localContent)) {
-                    java.io.File(localContent.removePrefix("file://"))
-                } else null
+            val fileToUpload = if (MediaFileManager.isLocalFilePath(localContent)) {
+                java.io.File(localContent.removePrefix("file://"))
+            } else null
 
+            try {
                 if (fileToUpload != null && fileToUpload.exists()) {
                     val mime = when (messageType) {
                         "image" -> "image/jpeg"
@@ -579,10 +580,32 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                     if (uploadRes.isSuccessful && !uploadRes.body()?.url.isNullOrBlank()) {
                         finalPayload = uploadRes.body()!!.url
                         Log.d("ChatViewModel", "Mídia enviada ao R2: $finalPayload")
+                        db.messageDao().updateContent(clientMessageId, finalPayload)
                     }
                 }
             } catch (e: Exception) {
                 Log.w("ChatViewModel", "Upload R2 falhou: ${e.message}")
+            }
+
+            // Ensure finalPayload is never a raw local file path across the network
+            if (finalPayload == null || MediaFileManager.isLocalFilePath(finalPayload)) {
+                try {
+                    val f = if (fileToUpload != null && fileToUpload.exists()) fileToUpload else java.io.File(localContent.removePrefix("file://"))
+                    if (f.exists() && f.length() <= 8 * 1024 * 1024) {
+                        val bytes = f.readBytes()
+                        val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                        val mime = when (messageType) {
+                            "image" -> "image/jpeg"
+                            "video" -> "video/mp4"
+                            "audio" -> "audio/mp4"
+                            "sticker" -> "image/png"
+                            else -> "application/octet-stream"
+                        }
+                        finalPayload = "data:$mime;base64,$b64"
+                    }
+                } catch (e: Throwable) {
+                    Log.e("ChatViewModel", "Erro ao converter mídia para Base64 fallback", e)
+                }
             }
 
             val wsSent = connectionManager.getClient().sendChatMessage(
@@ -701,6 +724,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                 val uploadRes = apiService.uploadMedia(body, folderBody)
                 if (uploadRes.isSuccessful && !uploadRes.body()?.url.isNullOrBlank()) {
                     payloadToSend = uploadRes.body()!!.url
+                    db.messageDao().updateContent(clientMessageId, payloadToSend)
                 }
             } catch (e: Exception) {
                 Log.w("ChatViewModel", "Upload video_note R2 falhou: ${e.message}")

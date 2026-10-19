@@ -48,6 +48,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.livrechat.app.ui.common.PhotoAdjustDialog
+import com.livrechat.app.util.MediaFileManager
 import android.media.ExifInterface
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -208,7 +209,7 @@ fun CustomCameraDialog(
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 try {
-                    val tempFile = File(context.cacheDir, "cam_gallery_${System.currentTimeMillis()}.jpg")
+                    val tempFile = File(MediaFileManager.getMediaDir(context), "cam_gallery_${System.currentTimeMillis()}.jpg")
                     context.contentResolver.openInputStream(uri)?.use { inStream ->
                         FileOutputStream(tempFile).use { outStream ->
                             inStream.copyTo(outStream)
@@ -305,7 +306,7 @@ fun CustomCameraDialog(
                                     val rotated = Bitmap.createBitmap(curr, 0, 0, curr.width, curr.height, matrix, true)
                                     capturedBitmap = rotated
                                     coroutineScope.launch(Dispatchers.IO) {
-                                        val f = capturedFile ?: File(context.cacheDir, "cam_${System.currentTimeMillis()}.jpg")
+                                        val f = capturedFile ?: File(MediaFileManager.getMediaDir(context), "cam_${System.currentTimeMillis()}.jpg")
                                         val out = FileOutputStream(f)
                                         rotated.compress(Bitmap.CompressFormat.JPEG, 92, out)
                                         out.flush()
@@ -591,7 +592,7 @@ fun CustomCameraDialog(
                                             activeRecording = null
                                         } else {
                                             val vidCap = videoCapture ?: return@clickable
-                                            val videoFile = File(context.cacheDir, "cam_vid_${System.currentTimeMillis()}.mp4")
+                                            val videoFile = File(MediaFileManager.getMediaDir(context), "cam_vid_${System.currentTimeMillis()}.mp4")
                                             val outputOptions = FileOutputOptions.Builder(videoFile).build()
                                             var pending = vidCap.output.prepareRecording(context, outputOptions)
                                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
@@ -619,7 +620,7 @@ fun CustomCameraDialog(
                                     } else {
                                         val cap = imageCapture ?: return@clickable
                                         isCapturing = true
-                                        val photoFile = File(context.cacheDir, "cam_${System.currentTimeMillis()}.jpg")
+                                        val photoFile = File(MediaFileManager.getMediaDir(context), "cam_${System.currentTimeMillis()}.jpg")
                                         val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
                                          cap.takePicture(
@@ -748,7 +749,7 @@ fun CustomCameraDialog(
                         capturedBitmap = adjusted
                         showAdjustDialog = false
                         coroutineScope.launch(Dispatchers.IO) {
-                            val f = capturedFile ?: File(context.cacheDir, "cam_${System.currentTimeMillis()}.jpg")
+                            val f = capturedFile ?: File(MediaFileManager.getMediaDir(context), "cam_${System.currentTimeMillis()}.jpg")
                             val out = FileOutputStream(f)
                             adjusted.compress(Bitmap.CompressFormat.JPEG, 92, out)
                             out.flush()

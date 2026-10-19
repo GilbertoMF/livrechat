@@ -13,6 +13,10 @@ import com.livrechat.app.data.local.entity.MessageEntity
 import com.livrechat.app.notification.LivreChatNotificationManager
 import com.livrechat.app.util.ChatSoundManager
 import com.livrechat.app.util.MediaFileManager
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -133,10 +137,64 @@ class ConnectionManager(
 
                 for (msg in pending) {
                     var sent = false
+                    var payloadToSend = msg.content
+                    if (MediaFileManager.isLocalFilePath(payloadToSend)) {
+                        val localFile = MediaFileManager.getLocalFile(payloadToSend)
+                            ?: java.io.File(MediaFileManager.getMediaDir(context), payloadToSend.substringAfterLast("/")).takeIf { it.exists() && it.length() > 50L }
+                            ?: java.io.File(context.cacheDir, payloadToSend.substringAfterLast("/")).takeIf { it.exists() && it.length() > 50L }
+
+                        if (localFile != null && localFile.exists()) {
+                            try {
+                                val mime = when (msg.messageType) {
+                                    "image", "view_once_image" -> "image/jpeg"
+                                    "video", "view_once_video", "video_note" -> "video/mp4"
+                                    "audio" -> "audio/mp4"
+                                    "sticker" -> "image/png"
+                                    else -> "application/octet-stream"
+                                }
+                                val reqFile = localFile.asRequestBody(mime.toMediaTypeOrNull())
+                                val body = MultipartBody.Part.createFormData("file", localFile.name, reqFile)
+                                val folder = when {
+                                    msg.messageType == "sticker" -> "stickers"
+                                    msg.messageType == "audio" -> "audio"
+                                    msg.messageType.contains("video") -> "videos"
+                                    else -> "images"
+                                }
+                                val folderBody = folder.toRequestBody("text/plain".toMediaTypeOrNull())
+                                val uploadRes = LivreChatApp.instance.apiClient.apiService.uploadMedia(body, folderBody)
+                                if (uploadRes.isSuccessful && !uploadRes.body()?.url.isNullOrBlank()) {
+                                    val r2Url = uploadRes.body()!!.url
+                                    payloadToSend = r2Url
+                                    db.messageDao().updateContent(msg.id, r2Url)
+                                } else {
+                                    val bytes = localFile.readBytes()
+                                    val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                                    payloadToSend = "data:$mime;base64,$b64"
+                                }
+                            } catch (e: Exception) {
+                                try {
+                                    if (localFile.length() <= 8 * 1024 * 1024) {
+                                        val bytes = localFile.readBytes()
+                                        val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                                        val mime = if (msg.messageType.contains("video")) "video/mp4" else "image/jpeg"
+                                        payloadToSend = "data:$mime;base64,$b64"
+                                    } else {
+                                        continue
+                                    }
+                                } catch (ex: Exception) {
+                                    continue
+                                }
+                            }
+                        } else {
+                            db.messageDao().updateStatus(msg.id, "failed")
+                            continue
+                        }
+                    }
+
                     if (_isConnected.value) {
                         sent = webSocketClient.sendChatMessage(
                             conversationId = msg.conversationId,
-                            content = msg.content,
+                            content = payloadToSend,
                             iv = msg.iv,
                             messageType = msg.messageType,
                             replyToId = msg.replyToId,
@@ -149,7 +207,7 @@ class ConnectionManager(
                             val res = LivreChatApp.instance.apiClient.apiService.sendMessage(
                                 com.livrechat.app.data.remote.model.SendMessageRequest(
                                     conversationId = msg.conversationId,
-                                    content = msg.content,
+                                    content = payloadToSend,
                                     iv = msg.iv,
                                     messageType = msg.messageType,
                                     replyToId = msg.replyToId,

@@ -3791,6 +3791,9 @@ fun ImageMessageBubbleContent(
     }
 
     val shouldBlur = isPeekToViewActive && !isOutgoing && !isRevealed
+    val isDeadLocalPath = remember(message.content, isOutgoing) {
+        MediaFileManager.isLocalFilePath(message.content) && !isOutgoing
+    }
 
     Column {
         Box(
@@ -3806,7 +3809,15 @@ fun ImageMessageBubbleContent(
                                 isRevealed = false
                             },
                             onTap = {
-                                if (loadError) reloadCount++ else onImageClick()
+                                if (loadError) {
+                                    if (!isDeadLocalPath) {
+                                        reloadCount++
+                                    } else {
+                                        Toast.makeText(context, "Esta foto antiga não foi enviada para o servidor pelo remetente.", Toast.LENGTH_LONG).show()
+                                    }
+                                } else {
+                                    onImageClick()
+                                }
                             },
                             onLongPress = {
                                 onLongClick()
@@ -3815,7 +3826,15 @@ fun ImageMessageBubbleContent(
                     } else {
                         detectTapGestures(
                             onTap = {
-                                if (loadError) reloadCount++ else onImageClick()
+                                if (loadError) {
+                                    if (!isDeadLocalPath) {
+                                        reloadCount++
+                                    } else {
+                                        Toast.makeText(context, "Esta foto antiga não foi enviada para o servidor pelo remetente.", Toast.LENGTH_LONG).show()
+                                    }
+                                } else {
+                                    onImageClick()
+                                }
                             },
                             onLongPress = {
                                 onLongClick()
@@ -3893,18 +3912,25 @@ fun ImageMessageBubbleContent(
                         modifier = Modifier.padding(12.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Recarregar imagem",
-                            tint = Color.White,
+                            imageVector = if (isDeadLocalPath) Icons.Default.CloudOff else Icons.Default.Refresh,
+                            contentDescription = if (isDeadLocalPath) "Foto indisponível" else "Recarregar imagem",
+                            tint = Color.White.copy(alpha = 0.85f),
                             modifier = Modifier.size(32.dp)
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Toque para recarregar",
+                            text = if (isDeadLocalPath) "Foto indisponível" else "Toque para recarregar",
                             color = Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         )
+                        if (isDeadLocalPath) {
+                            Text(
+                                text = "Não enviada à nuvem pelo remetente",
+                                color = Color.White.copy(alpha = 0.65f),
+                                fontSize = 10.sp
+                            )
+                        }
                     }
                 }
             }
