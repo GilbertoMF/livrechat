@@ -111,10 +111,10 @@ fun HomeScreen(
     onStartCall: (String, String, String, String?) -> Unit,
     onNavigateToActiveCall: (() -> Unit)? = null
 ) {
-    // Tabs: 0 = Conversas, 1 = Flash (Status), 2 = Chamadas, 3 = LivreTube, 4 = LivreGames
+    // Tabs: 0 = Conversas, 1 = Flash (Status), 2 = Chamadas, 3 = LivreTube
     var selectedTab by remember { mutableIntStateOf(initialTab) }
     LaunchedEffect(initialTab) {
-        if (initialTab in 0..4) {
+        if (initialTab in 0..3) {
             selectedTab = initialTab
         }
     }
@@ -2248,7 +2248,8 @@ fun HomeScreen(
     }
 
 
-    Scaffold(
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
         topBar = {
             TopAppBar(
                 title = {
@@ -2289,16 +2290,6 @@ fun HomeScreen(
                         onClick = onNavigateToQRCode
                     ) {
                         Icon(Icons.Default.QrCode, contentDescription = "Meu QR Code")
-                    }
-                    com.livrechat.app.ui.common.TooltipIconButton(
-                        tooltip = "LivreGames — Jogos Multiplayer",
-                        onClick = { selectedTab = 4 }
-                    ) {
-                        Icon(
-                            Icons.Default.SportsEsports,
-                            contentDescription = "LivreGames",
-                            tint = if (selectedTab == 4) Color(0xFFA78BFA) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                     com.livrechat.app.ui.common.TooltipIconButton(
                         tooltip = "Configurações",
@@ -2476,25 +2467,6 @@ fun HomeScreen(
                             text = "LivreTube",
                             fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal
                         )
-                    }
-                )
-                Tab(
-                    selected = selectedTab == 4,
-                    onClick = { selectedTab = 4 },
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.SportsEsports,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = if (selectedTab == 4) Color(0xFFA78BFA) else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "LivreGames",
-                                fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
                     }
                 )
             }
@@ -2875,11 +2847,14 @@ fun HomeScreen(
             } else if (selectedTab == 3) {
                 // LIVRETUBE TAB
                 com.livrechat.app.ui.livretube.LivreTubeScreen()
-            } else if (selectedTab == 4) {
-                // LIVREGAMES TAB
-                com.livrechat.app.ui.games.LivreGamesScreen()
             }
         }
+    }
+
+    // LIVRETUBE GLOBAL PLAYER OVERLAY (Mini-Player & Fullscreen Landscape/Portrait Player)
+    com.livrechat.app.ui.livretube.LivreTubePlayerOverlay(
+        modifier = Modifier.fillMaxSize()
+    )
     }
 }
 

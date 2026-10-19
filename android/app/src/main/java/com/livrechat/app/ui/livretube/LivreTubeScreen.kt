@@ -66,7 +66,6 @@ fun LivreTubeScreen(
     var selectedCategory by remember { mutableStateOf("all") }
     var isLoading by remember { mutableStateOf(false) }
     var videosList by remember { mutableStateOf<List<LivreTubeVideoDto>>(emptyList()) }
-    var activeVideoPlaying by remember { mutableStateOf<LivreTubeVideoDto?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     fun loadVideos(category: String, query: String = "") {
@@ -259,7 +258,7 @@ fun LivreTubeScreen(
                     items(videosList, key = { it.videoId }) { video ->
                         LivreTubeVideoCard(
                             video = video,
-                            onClick = { activeVideoPlaying = video },
+                            onClick = { LivreTubePlayerManager.play(video) },
                             onShare = {
                                 val sendIntent = Intent().apply {
                                     action = Intent.ACTION_SEND
@@ -279,15 +278,8 @@ fun LivreTubeScreen(
             }
         }
     }
-
-    // ACTIVE VIDEO PLAYER DIALOG
-    activeVideoPlaying?.let { video ->
-        LivreTubePlayerDialog(
-            video = video,
-            onDismiss = { activeVideoPlaying = null }
-        )
-    }
 }
+
 
 @Composable
 fun LivreTubeVideoCard(
@@ -461,201 +453,6 @@ fun LivreTubeVideoCard(
     }
 }
 
-@SuppressLint("SetJavaScriptEnabled")
-@Composable
-fun LivreTubePlayerDialog(
-    video: LivreTubeVideoDto,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    var isPlayerLoading by remember { mutableStateOf(true) }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = Color.Black
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // TOP HEADER WITH CLOSE & TITLE
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = Color.White)
-                    }
-                    Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                        Text(
-                            text = video.title,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = video.author,
-                            fontSize = 11.sp,
-                            color = Color.LightGray,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    IconButton(onClick = {
-                        val sendIntent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_TEXT, "Assista '${video.title}' no LivreTube: https://youtu.be/${video.videoId}")
-                            type = "text/plain"
-                        }
-                        context.startActivity(Intent.createChooser(sendIntent, "Compartilhar"))
-                    }) {
-                        Icon(Icons.Default.Share, contentDescription = "Compartilhar", tint = Color.White)
-                    }
-                }
 
-                // EMBEDDED ZERO-ADS PRIVACY PLAYER (16:9)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                        .background(Color.Black)
-                ) {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { ctx ->
-                            WebView(ctx).apply {
-                                layoutParams = ViewGroup.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.MATCH_PARENT
-                                )
-                                settings.javaScriptEnabled = true
-                                settings.domStorageEnabled = true
-                                settings.mediaPlaybackRequiresUserGesture = false
-                                settings.loadWithOverviewMode = true
-                                settings.useWideViewPort = true
-                                settings.cacheMode = WebSettings.LOAD_DEFAULT
 
-                                webChromeClient = WebChromeClient()
-                                webViewClient = object : WebViewClient() {
-                                    override fun onPageFinished(view: WebView?, url: String?) {
-                                        super.onPageFinished(view, url)
-                                        isPlayerLoading = false
-                                    }
-                                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                                        return false
-                                    }
-                                }
-
-                                val html = """
-                                    <!DOCTYPE html>
-                                    <html>
-                                    <head>
-                                      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-                                      <style>
-                                        * { margin: 0; padding: 0; box-sizing: border-box; background: #000; }
-                                        body, html { width: 100%; height: 100%; overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; }
-                                        iframe { width: 100%; height: 100%; border: none; }
-                                      </style>
-                                    </head>
-                                    <body>
-                                      <iframe 
-                                        src="https://www.youtube-nocookie.com/embed/${video.videoId}?autoplay=1&modestbranding=1&rel=0&playsinline=1"
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                        allowfullscreen>
-                                      </iframe>
-                                    </body>
-                                    </html>
-                                """.trimIndent()
-
-                                loadDataWithBaseURL("https://www.youtube-nocookie.com", html, "text/html", "UTF-8", null)
-                            }
-                        }
-                    )
-
-                    if (isPlayerLoading) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
-                        }
-                    }
-                }
-
-                // BOTTOM CONTROLS & INFO
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(16.dp)
-                ) {
-                    Text(
-                        text = video.title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = buildString {
-                            append(video.author)
-                            if (!video.viewsText.isNullOrBlank()) {
-                                append(" • ")
-                                append(video.viewsText)
-                            }
-                            if (!video.publishedText.isNullOrBlank()) {
-                                append(" • ")
-                                append(video.publishedText)
-                            }
-                        },
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.Shield,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text("LivreTube Shield Ativo", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Text("Sem anúncios comerciais, sem rastreadores e sem login necessário.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Fechar Reprodutor")
-                    }
-                }
-            }
-        }
-    }
-}

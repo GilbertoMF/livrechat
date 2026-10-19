@@ -8,7 +8,7 @@ interface CacheItem {
 }
 
 const cache = new Map<string, CacheItem>();
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes for fresh trending
 
 function getFromCache(key: string): any | null {
   const item = cache.get(key);
@@ -44,29 +44,67 @@ export class LivreTubeController {
         return;
       }
 
-      let searchQuery = 'em alta brasil';
-      if (type === 'music') searchQuery = 'músicas em alta brasil';
-      else if (type === 'podcasts') searchQuery = 'melhores podcasts brasil';
-      else if (type === 'gaming') searchQuery = 'jogos gameplay brasil';
-      else if (type === 'news') searchQuery = 'notícias brasil hoje';
+      let queries: string[] = [];
+      if (type === 'music') {
+        queries = ['lançamento música brasil clipe oficial', 'músicas virais brasil hoje', 'novos clipes brasil'];
+      } else if (type === 'podcasts') {
+        queries = ['cortes podcasts brasil da semana', 'podcasts brasil novidades', 'melhores podcasts brasil'];
+      } else if (type === 'gaming') {
+        queries = ['jogos gameplay brasil novidades', 'gameplay brasil', 'novidades games brasil'];
+      } else if (type === 'news') {
+        queries = ['notícias brasil hoje', 'últimas notícias brasil', 'jornal brasil hoje'];
+      } else {
+        // 'all' / 'Em Alta do Momento'
+        queries = [
+          'notícias brasil hoje',
+          'assuntos do momento brasil',
+          'cortes podcasts brasil da semana',
+          'futebol melhores momentos brasil',
+          'lançamento música brasil'
+        ];
+      }
 
-      const results = await ytSearch(searchQuery);
-      const videos = (results.videos || []).slice(0, 30).map((v: any) => ({
-        videoId: v.videoId,
-        title: v.title,
-        author: v.author?.name || 'Canal',
-        authorUrl: v.author?.url || '',
-        authorThumbnail: v.author?.thumbnail || null,
-        thumbnailUrl: v.thumbnail || `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
-        lengthSeconds: v.seconds || 0,
-        durationText: v.timestamp || '0:00',
-        viewCount: v.views || 0,
-        viewsText: v.views ? formatViews(v.views) : '',
-        publishedText: v.ago || ''
-      }));
+      const searchResults = await Promise.all(
+        queries.map(q => ytSearch(q).catch(() => ({ videos: [] })))
+      );
 
-      setInCache(cacheKey, videos);
-      res.status(200).json(videos);
+      const allVideos: any[] = [];
+      const seen = new Set<string>();
+
+      // Interleave results so the feed has rich variety (news, entertainment, podcasts, music, sports)
+      const maxLen = Math.max(...searchResults.map(r => (r.videos || []).length), 0);
+      for (let i = 0; i < maxLen; i++) {
+        for (const r of searchResults) {
+          const v = (r.videos || [])[i];
+          if (v && v.videoId && !seen.has(v.videoId)) {
+            const lowerTitle = (v.title || '').toLowerCase();
+            const ago = (v.ago || '').toLowerCase();
+            // Filter out old static playlists that plague generic searches
+            const isOld = ago.includes('mo ago') || ago.includes('y ago') || ago.includes('mês') || ago.includes('ano');
+            if (isOld && (lowerTitle.includes('top 50') || lowerTitle.includes('hits tiktok') || lowerTitle.includes('spotify brasil'))) {
+              continue;
+            }
+            seen.add(v.videoId);
+            allVideos.push({
+              videoId: v.videoId,
+              title: v.title,
+              author: v.author?.name || 'Canal',
+              authorUrl: v.author?.url || '',
+              authorThumbnail: (v.author as any)?.thumbnail || null,
+              thumbnailUrl: v.thumbnail || `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
+              lengthSeconds: v.seconds || 0,
+              durationText: v.timestamp || '0:00',
+              viewCount: v.views || 0,
+              viewsText: v.views ? formatViews(v.views) : '',
+              publishedText: v.ago || ''
+            });
+          }
+        }
+      }
+
+      const finalVideos = allVideos.slice(0, 50);
+      setInCache(cacheKey, finalVideos);
+      res.status(200).json(finalVideos);
     } catch (e: any) {
       console.error('[LivreTube] Erro ao buscar trending:', e.message);
       res.status(500).json({ error: 'Falha ao buscar vídeos em alta', message: e.message });
