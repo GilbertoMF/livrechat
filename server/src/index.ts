@@ -36,7 +36,18 @@ app.get(['/', '/download', '/baixar', '/app'], (req, res) => {
 
 // Latest APK redirect
 app.get(['/apks/livrechat-latest.apk', '/download/latest'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.20-universal.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.21-universal.apk');
+});
+
+// Dedicated Architecture Download Routes (3 versions available)
+app.get(['/download/arm64', '/apks/arm64'], (req, res) => {
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.21-arm64.apk');
+});
+app.get(['/download/armv7', '/apks/armv7'], (req, res) => {
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.21-armv7.apk');
+});
+app.get(['/download/universal', '/apks/universal'], (req, res) => {
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.21-universal.apk');
 });
 
 // Games static hosting (CSO / ISO files)
@@ -53,7 +64,7 @@ app.get('/health', async (req, res) => {
   res.status(200).json({
     status: 'online',
     appName: 'LivreChat Server',
-    version: '1.1.20',
+    version: '1.1.21',
     fcmInitialized: fcmService.isAvailable(),
     registeredFcmDevices,
     timestamp: new Date().toISOString()
@@ -107,10 +118,22 @@ app.get('/api/versions', (req, res) => {
     },
     versions: [
       {
+        version: '1.1.21',
+        versionCode: 31,
+        releaseDate: '2026-10-19',
+        isLatest: true,
+        changelog: 'Nova Aba de Rede Offline P2P Mesh (funciona 100% sem internet via BLE e Wi-Fi Direct com roteamento Store-and-Forward); LivreTube com mini-player flutuante e rotação de tela horizontal corrigida.',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.21-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '21.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.21-armv7.apk` },
+          { type: 'universal', name: 'APK Universal Completo', size: '30.6 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.21-universal.apk` }
+        ]
+      },
+      {
         version: '1.1.20',
         versionCode: 30,
         releaseDate: '2026-10-19',
-        isLatest: true,
+        isLatest: false,
         changelog: 'LivreGames Instant Cloud Play (sem download) a 60 FPS com WebAssembly, gamepad touch e multiplayer 1-toque.',
         downloads: [
           { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.20-arm64.apk` },
