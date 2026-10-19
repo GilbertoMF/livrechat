@@ -570,9 +570,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 """
 
 def setup_environment():
-    print("📦 [1/6] Instalando dependências de sistema (Xvfb, FFmpeg, xdotool, PulseAudio, Openbox)...", flush=True)
+    print("📦 [1/6] Instalando dependências de sistema (Xorg, Xvfb, FFmpeg, xdotool, PulseAudio, Openbox)...", flush=True)
     os.system("apt-get update -qq > /dev/null 2>&1")
-    os.system("apt-get install -y -qq xvfb xdotool ffmpeg pulseaudio libgl1-mesa-dri libsdl2-2.0-0 psmisc squashfs-tools openbox > /dev/null 2>&1")
+    os.system("apt-get install -y -qq xvfb xdotool ffmpeg pulseaudio libgl1-mesa-dri libsdl2-2.0-0 psmisc squashfs-tools openbox xserver-xorg-core xserver-xorg-video-dummy mesa-utils > /dev/null 2>&1")
     os.system("pip install -q aiohttp websockets qrcode[pil] > /dev/null 2>&1")
 
     # Baixar jsmpeg.min.js se não existir
@@ -627,7 +627,7 @@ ConfirmOnQuit = False
 
 [CPU]
 CPUCore = 1
-FastMemoryAccess = False
+FastMemoryAccess = True
 IOTimingMethod = 0
 SeparateSASThread = True
 
@@ -636,7 +636,7 @@ GPUBackend = 0
 GraphicsBackend = 0
 FailedGPUBackends = 1,2,3
 ShowFPSCounter = 0
-InternalResolution = 2
+InternalResolution = 1
 WindowWidth = {WIDTH}
 WindowHeight = {HEIGHT}
 FullScreen = True
@@ -645,13 +645,18 @@ RenderingMode = 1
 SoftwareRendering = False
 HardwareTransform = True
 SoftwareSkinning = True
-SimulateBlockTransfer = True
+SimulateBlockTransfer = False
+AutoFrameSkip = True
+FrameSkip = 1
+FrameSkipType = 0
+FrameSkipUnthrottle = True
 
 [Sound]
 Enable = True
 AudioBackend = 0
 AudioVolume = 10
-ExtraAudioBuffering = True
+AudioSync = False
+ExtraAudioBuffering = False
 
 [Control]
 ShowTouchControls = False
@@ -699,11 +704,14 @@ def download_game(game_url, filename="game.cso"):
     return str(target)
 
 def start_virtual_display():
-    print("🖥️ [4/6] Iniciando display virtual X11 (:1) e gerenciador de janelas Openbox...", flush=True)
+    print("🖥️ [4/6] Configurando display com aceleração de GPU Tesla T4...", flush=True)
+    os.system("pkill -9 Xorg > /dev/null 2>&1")
     os.system("pkill -9 Xvfb > /dev/null 2>&1")
     os.system("pkill -9 openbox > /dev/null 2>&1")
-    os.system(f"Xvfb :1 -screen 0 {WIDTH}x{HEIGHT}x24 +extension GLX +render -noreset &")
-    time.sleep(1)
+
+    # Restaurar drivers Vulkan/NVIDIA caso tenham sido desativados
+    os.system("mv /etc/vulkan/icd.d/nvidia_icd.json.bak /etc/vulkan/icd.d/nvidia_icd.json > /dev/null 2>&1 || true")
+    os.system("mv /usr/share/vulkan/icd.d/nvidia_icd.json.bak /usr/share/vulkan/icd.d/nvidia_icd.json > /dev/null 2>&1 || true")
 
     # Configurar Openbox para foco automático e tela cheia
     ob_cfg = Path("/root/.config/openbox")
@@ -718,12 +726,36 @@ def start_virtual_display():
     </application>
   </applications>
 </openbox_config>""")
+
+    # 1. Tentar iniciar Xorg com aceleração direta na GPU NVIDIA Tesla T4
+    gpu_active = False
+    has_nvidia = os.system("which nvidia-smi > /dev/null 2>&1") == 0
+    if has_nvidia:
+        try:
+            os.system("""
+                BUS_ID=$(nvidia-xconfig --query-gpu-info 2>/dev/null | grep 'PCI BusID' | head -n 1 | awk '{print $4}')
+                if [ -n "$BUS_ID" ]; then
+                    nvidia-xconfig -a --allow-empty-initial-configuration --use-display-device=None --virtual=960x544 --busid="$BUS_ID" > /dev/null 2>&1
+                else
+                    nvidia-xconfig -a --allow-empty-initial-configuration --use-display-device=None --virtual=960x544 > /dev/null 2>&1
+                fi
+            """)
+            os.system("Xorg :1 -novtswitch -sharevts -ac +extension GLX +extension Composite -config /etc/X11/xorg.conf > /content/xorg.log 2>&1 &")
+            time.sleep(1.5)
+            if os.system("DISPLAY=:1 glxinfo 2>/dev/null | grep -iq 'NVIDIA'") == 0:
+                print("🚀 Aceleração de GPU NVIDIA Tesla T4 ATIVA via Xorg!", flush=True)
+                gpu_active = True
+        except Exception:
+            pass
+
+    if not gpu_active:
+        print("⚡ Iniciando display virtual Xvfb com aceleração GLX...", flush=True)
+        os.system("pkill -9 Xorg > /dev/null 2>&1")
+        os.system(f"Xvfb :1 -screen 0 {WIDTH}x{HEIGHT}x24 +extension GLX +render -noreset &")
+        time.sleep(1)
+
     os.system("DISPLAY=:1 openbox --config-file /root/.config/openbox/rc.xml & > /dev/null 2>&1")
     time.sleep(0.5)
-
-    # Desativar drivers Vulkan do host para forçar OpenGL imediato
-    os.system("mv /etc/vulkan/icd.d/nvidia_icd.json /etc/vulkan/icd.d/nvidia_icd.json.bak > /dev/null 2>&1 || true")
-    os.system("mv /usr/share/vulkan/icd.d/nvidia_icd.json /usr/share/vulkan/icd.d/nvidia_icd.json.bak > /dev/null 2>&1 || true")
 
     # Configurar e iniciar PulseAudio com null-sink para manter o clock de áudio ativo
     os.system("adduser root pulse-access > /dev/null 2>&1 || true")
@@ -862,15 +894,19 @@ async def run_server(game_path):
     launcher_path = Path("/content/run_ppsspp.sh")
     launcher_content = f"""#!/bin/bash
 export DISPLAY=:1
-export LIBGL_ALWAYS_SOFTWARE=1
-export MESA_GL_VERSION_OVERRIDE=3.3
 export SDL_VIDEODRIVER=x11
-export VK_ICD_FILENAMES=/dev/null
-export VK_DRIVER_FILES=/dev/null
-export VK_LOADER_DRIVERS_DISABLE=*
 export HOME=/root
 export XDG_CONFIG_HOME=/root/.config
 export PULSE_SERVER=/var/run/pulse/native
+
+# Se o Xorg ou driver NVIDIA estiver ativo, usamos aceleração direta de hardware
+if glxinfo 2>/dev/null | grep -iq "NVIDIA"; then
+    echo "⚡ GPU NVIDIA Tesla T4 detectada! Aceleração nativa por hardware ativada."
+else
+    export LP_NUM_THREADS=2
+    export MESA_GL_VERSION_OVERRIDE=3.3
+    export LIBGL_ALWAYS_SOFTWARE=1
+fi
 
 # Desativar qualquer override interno de áudio no AppRun se existir
 if [ -f "./squashfs-root/AppRun" ]; then
@@ -977,7 +1013,8 @@ exec ./squashfs-root/AppRun --fullscreen "$@"
         *audio_src,
         "-f", "mpegts",
         "-codec:v", "mpeg1video", "-s", f"{WIDTH}x{HEIGHT}",
-        "-b:v", "2800k", "-bf", "0", "-r", str(FPS),
+        "-b:v", "2200k", "-bf", "0", "-r", str(FPS),
+        "-threads", "2",
         "-codec:a", "mp2", "-b:a", "128k", "-ar", "44100", "-ac", "2",
         "-muxdelay", "0.001",
         f"http://127.0.0.1:{PORT}/stream_input"
