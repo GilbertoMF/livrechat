@@ -754,6 +754,7 @@ async def run_server(game_path):
         "LIBGL_ALWAYS_SOFTWARE": "1",
         "MESA_GL_VERSION_OVERRIDE": "3.3",
         "SDL_VIDEODRIVER": "x11",
+        "SDL_AUDIODRIVER": "dummy",
         "VK_ICD_FILENAMES": "/dev/null",
         "VK_DRIVER_FILES": "/dev/null",
         "VK_LOADER_DRIVERS_DISABLE": "*",
