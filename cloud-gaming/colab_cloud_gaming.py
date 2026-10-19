@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import asyncio
+import socket
 from pathlib import Path
 
 # Configurações padrão
@@ -574,7 +575,21 @@ def setup_ppsspp():
         os.system("./ppsspp.AppImage --appimage-extract > /dev/null 2>&1")
     
     # Criar configurações personalizadas do PPSSPP
-    config_dir = Path.home() / ".config" / "ppsspp" / "PSP" / "SYSTEM"
+    base_psp = Path.home() / ".config" / "ppsspp" / "PSP"
+    base_psp.mkdir(parents=True, exist_ok=True)
+
+    # Suporte para persistência de Saves no Google Drive se montado
+    drive_base = Path("/content/drive/MyDrive/LivreGames/PSP")
+    if Path("/content/drive/MyDrive").exists():
+        drive_base.mkdir(parents=True, exist_ok=True)
+        drive_saves = drive_base / "SAVEDATA"
+        drive_saves.mkdir(parents=True, exist_ok=True)
+        local_saves = base_psp / "SAVEDATA"
+        if not local_saves.is_symlink() and not local_saves.exists():
+            os.system(f"ln -s '{drive_saves}' '{local_saves}'")
+        print("💾 Google Drive detectado! Saves sincronizados com o seu Drive.")
+
+    config_dir = base_psp / "SYSTEM"
     config_dir.mkdir(parents=True, exist_ok=True)
     
     ini_path = config_dir / "ppsspp.ini"
