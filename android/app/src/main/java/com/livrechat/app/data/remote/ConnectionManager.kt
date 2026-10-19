@@ -312,6 +312,31 @@ class ConnectionManager(
                 }
             }
 
+            val targetReplyId = processedMessage.replyToId
+            if (!targetReplyId.isNullOrBlank() && processedMessage.replyToContent.isNullOrBlank()) {
+                val qm = db.messageDao().getMessageById(targetReplyId)
+                if (qm != null) {
+                    val snippet = when (qm.messageType) {
+                        "image", "view_once_image" -> {
+                            val cap = qm.iv?.substringAfter("|")?.ifBlank { null }
+                            if (cap != null) "📷 $cap" else "📷 Foto"
+                        }
+                        "audio" -> "🎵 Mensagem de voz"
+                        "video", "view_once_video", "video_note" -> {
+                            val cap = qm.iv?.substringAfter("|")?.ifBlank { null }
+                            if (cap != null) "🎥 $cap" else "🎥 Vídeo"
+                        }
+                        "sticker" -> "🎭 Figurinha"
+                        "file", "p2p_file" -> {
+                            val fName = qm.iv?.substringBefore("|")?.ifBlank { null } ?: "Documento"
+                            "📄 $fName"
+                        }
+                        else -> if (qm.isDeleted) "🚫 Mensagem apagada" else qm.content
+                    }
+                    processedMessage = processedMessage.copy(replyToContent = snippet)
+                }
+            }
+
             val previewContent = when (actualType) {
                 "audio" -> "🎤 Mensagem de voz"
                 "image" -> "📷 Foto"

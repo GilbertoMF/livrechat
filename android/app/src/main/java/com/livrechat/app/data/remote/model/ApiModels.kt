@@ -89,6 +89,7 @@ data class MessageDto(
     val iv: String? = null,
     @SerializedName("message_type") val messageType: String = "text",
     @SerializedName("reply_to_id") val replyToId: String? = null,
+    @SerializedName("reply_to_content") val replyToContent: String? = null,
     @SerializedName("is_deleted") val isDeleted: Boolean = false,
     @SerializedName("is_edited") val isEdited: Boolean = false,
     @SerializedName("created_at") val createdAt: String,
@@ -109,6 +110,7 @@ data class SendMessageRequest(
     val iv: String? = null,
     val messageType: String = "text",
     val replyToId: String? = null,
+    val replyToContent: String? = null,
     val clientMessageId: String? = null,
     val targetUserId: String? = null
 )

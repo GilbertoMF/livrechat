@@ -234,9 +234,11 @@ class NearbyManager private constructor(private val context: Context) {
                 isMeshRelayed = false
             )
             val updated = _discoveredPeers.value.toMutableMap()
+            // Remove any previous entry for this same physical device name to avoid duplication
+            updated.entries.removeAll { it.value.deviceName.equals(peerName, ignoreCase = true) }
             updated[endpointId] = peer
             _discoveredPeers.value = updated
-            discoveredPeers.value = updated.values.toList()
+            discoveredPeers.value = updated.values.distinctBy { it.deviceName.trim().lowercase() }
 
             // Salva ou atualiza contato no Room usando o nome do dispositivo como ID estável
             scope.launch {
@@ -298,7 +300,7 @@ class NearbyManager private constructor(private val context: Context) {
             if (existing != null && !existing.isMeshRelayed) {
                 updated.remove(endpointId)
                 _discoveredPeers.value = updated
-                discoveredPeers.value = updated.values.toList()
+                discoveredPeers.value = updated.values.distinctBy { it.deviceName.trim().lowercase() }
             }
         }
     }
@@ -348,9 +350,10 @@ class NearbyManager private constructor(private val context: Context) {
                     Log.i(TAG, "✅ CONECTADO com sucesso ao nó: $peerName ($endpointId)")
                     val peer = ConnectedPeer(endpointId = endpointId, deviceName = peerName)
                     val map = _connectedPeers.value.toMutableMap()
+                    map.entries.removeAll { it.value.deviceName.equals(peerName, ignoreCase = true) && it.key != endpointId }
                     map[endpointId] = peer
                     _connectedPeers.value = map
-                    connectedPeers.value = map.values.toList()
+                    connectedPeers.value = map.values.distinctBy { it.deviceName.trim().lowercase() }
 
                     // Remove da tabela de rotas se agora está direto
                     meshRoutingTable.remove(peerName)
@@ -385,7 +388,7 @@ class NearbyManager private constructor(private val context: Context) {
             val map = _connectedPeers.value.toMutableMap()
             map.remove(endpointId)
             _connectedPeers.value = map
-            connectedPeers.value = map.values.toList()
+            connectedPeers.value = map.values.distinctBy { it.deviceName.trim().lowercase() }
 
             pendingConnectionPeers.remove(peerName)
             initiatedOrIncomingNames.remove(endpointId)
@@ -518,24 +521,24 @@ class NearbyManager private constructor(private val context: Context) {
                 for (nodeName in announcedNodes) {
                     if (nodeName.isBlank() || nodeName.equals(myDeviceName, ignoreCase = true)) continue
 
-                    val isDirect = _connectedPeers.value.values.any { it.deviceName.equals(nodeName, ignoreCase = true) }
+                    val isDirect = _connectedPeers.value.values.any { it.deviceName.equals(nodeName, ignoreCase = true) } ||
+                                   _discoveredPeers.value.values.any { !it.isMeshRelayed && it.deviceName.equals(nodeName, ignoreCase = true) }
                     if (!isDirect) {
                         meshRoutingTable[nodeName] = fromEndpointId
 
-                        val existing = updated[nodeName]
-                        if (existing == null || !existing.isConnected) {
-                            updated[nodeName] = DiscoveredPeer(
-                                endpointId = nodeName,
-                                deviceName = nodeName,
-                                serviceId = SERVICE_ID,
-                                isConnecting = false,
-                                isConnected = false,
-                                isMeshRelayed = true,
-                                relayedVia = packet.senderName,
-                                hops = packet.hops
-                            )
-                            hasChanges = true
-                        }
+                        // Remove any old duplicate entry for this device name before inserting
+                        updated.entries.removeAll { it.value.deviceName.equals(nodeName, ignoreCase = true) }
+                        updated[nodeName] = DiscoveredPeer(
+                            endpointId = nodeName,
+                            deviceName = nodeName,
+                            serviceId = SERVICE_ID,
+                            isConnecting = false,
+                            isConnected = false,
+                            isMeshRelayed = true,
+                            relayedVia = packet.senderName,
+                            hops = packet.hops
+                        )
+                        hasChanges = true
 
                         scope.launch {
                             val contato = Contato(
@@ -552,7 +555,7 @@ class NearbyManager private constructor(private val context: Context) {
 
                 if (hasChanges) {
                     _discoveredPeers.value = updated
-                    discoveredPeers.value = updated.values.toList()
+                    discoveredPeers.value = updated.values.distinctBy { it.deviceName.trim().lowercase() }
                 }
 
                 // Propaga o gossip aos demais peers se TTL permitir

@@ -254,7 +254,8 @@ class WebSocketClient(
                                 content = m.get("content").asStringOrDefault(),
                                 iv = m.get("iv").asStringOrNull(),
                                 messageType = rawMsgType,
-                                replyToId = m.get("reply_to_id").asStringOrNull(),
+                                replyToId = m.get("reply_to_id")?.asStringOrNull(),
+                                replyToContent = m.get("reply_to_content")?.asStringOrNull(),
                                 status = "delivered",
                                 isOutgoing = senderId == currentUserId,
                                 isEdited = m.get("is_edited").asBooleanOrDefault(false),
@@ -403,6 +404,7 @@ class WebSocketClient(
         iv: String?,
         messageType: String = "text",
         replyToId: String? = null,
+        replyToContent: String? = null,
         clientMessageId: String,
         targetUserId: String? = null
     ): Boolean {
@@ -413,6 +415,7 @@ class WebSocketClient(
             iv?.let { addProperty("iv", it) }
             addProperty("messageType", messageType)
             replyToId?.let { addProperty("replyToId", it) }
+            replyToContent?.let { addProperty("replyToContent", it) }
             addProperty("clientMessageId", clientMessageId)
             targetUserId?.let { addProperty("targetUserId", it) }
         }

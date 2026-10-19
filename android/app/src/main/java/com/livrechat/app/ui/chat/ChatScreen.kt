@@ -2590,7 +2590,8 @@ fun ChatScreen(
                                     listState.animateScrollToItem(targetIdx)
                                 }
                             }
-                        }
+                        },
+                        resolveSenderName = resolveSenderName
                     )
                 }
             }
@@ -3015,7 +3016,8 @@ fun MessageBubble(
     onUnlockEnvelope: ((MessageEntity) -> Unit)? = null,
     allMessages: List<MessageEntity> = emptyList(),
     otherDisplayName: String = "",
-    onReplyBannerClick: ((String) -> Unit)? = null
+    onReplyBannerClick: ((String) -> Unit)? = null,
+    resolveSenderName: ((String) -> String)? = null
 ) {
     val isOutgoing = message.isOutgoing
     val alignment = if (isOutgoing) Alignment.End else Alignment.Start
@@ -3216,15 +3218,23 @@ fun MessageBubble(
 
                         // Render quoted reply banner inside bubble if replying
                         if (!message.replyToContent.isNullOrBlank() || message.replyToId != null) {
-                            val quotedMessage = remember(message.replyToId, allMessages) {
+                            var dbQuotedMessage by remember(message.replyToId) { mutableStateOf<MessageEntity?>(null) }
+                            LaunchedEffect(message.replyToId) {
                                 if (!message.replyToId.isNullOrBlank()) {
-                                    allMessages.firstOrNull { it.id == message.replyToId }
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        dbQuotedMessage = LivreChatApp.instance.database.messageDao().getMessageById(message.replyToId)
+                                    }
+                                }
+                            }
+                            val quotedMessage = remember(message.replyToId, allMessages, dbQuotedMessage) {
+                                if (!message.replyToId.isNullOrBlank()) {
+                                    allMessages.firstOrNull { it.id == message.replyToId } ?: dbQuotedMessage
                                 } else null
                             }
 
                             val quotedAuthor = when {
                                 quotedMessage != null && quotedMessage.isOutgoing -> "Você"
-                                quotedMessage != null && isGroup -> senderDisplayName.ifBlank { "Contato" }
+                                quotedMessage != null && isGroup -> resolveSenderName?.invoke(quotedMessage.senderId) ?: (if (quotedMessage.senderId == message.senderId) senderDisplayName.ifBlank { "Membro" } else "Membro")
                                 quotedMessage != null -> otherDisplayName.ifBlank { "Contato" }
                                 message.isOutgoing -> otherDisplayName.ifBlank { "Contato" }
                                 else -> "Você"

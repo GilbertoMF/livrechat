@@ -272,6 +272,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             iv = dto.iv,
                             messageType = dto.messageType,
                             replyToId = dto.replyToId,
+                            replyToContent = dto.replyToContent ?: existingMap[dto.id]?.replyToContent,
                             status = calculatedStatus,
                             isOutgoing = dto.senderId == myId,
                             isEdited = dto.isEdited,
@@ -342,6 +343,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                 iv = null,
                 messageType = "text",
                 replyToId = replyToId,
+                replyToContent = replyToContent,
                 clientMessageId = clientMessageId,
                 targetUserId = target
             )
@@ -355,6 +357,7 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
                             content = text,
                             clientMessageId = clientMessageId,
                             replyToId = replyToId,
+                            replyToContent = replyToContent,
                             targetUserId = target
                         )
                     )

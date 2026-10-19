@@ -132,7 +132,7 @@ export class MessagesController {
   public static async sendMessage(req: AuthRequest, res: Response) {
     try {
       const senderId = req.user!.userId;
-      const { conversationId, content, iv, messageType, replyToId, clientMessageId, targetUserId } = req.body;
+      const { conversationId, content, iv, messageType, replyToId, replyToContent, clientMessageId, targetUserId } = req.body;
 
       const conv = await db.getConversationById(conversationId);
       if (conv?.is_group && conv?.admin_only_message) {
@@ -158,6 +158,7 @@ export class MessagesController {
         iv,
         message_type: messageType || 'text',
         reply_to_id: replyToId,
+        reply_to_content: replyToContent,
         is_deleted: false,
         is_edited: false,
         created_at: now,

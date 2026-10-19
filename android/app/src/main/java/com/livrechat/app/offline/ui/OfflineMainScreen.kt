@@ -80,6 +80,13 @@ fun OfflineMainScreen(
     val discoveredPeers by nearbyManager.discoveredPeers.collectAsState()
     val connectedPeers by nearbyManager.connectedPeers.collectAsState()
 
+    val uniqueDiscoveredPeers = remember(discoveredPeers) {
+        discoveredPeers.distinctBy { it.deviceName.trim().lowercase() }
+    }
+    val uniqueConnectedPeers = remember(connectedPeers) {
+        connectedPeers.distinctBy { it.deviceName.trim().lowercase() }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -171,7 +178,7 @@ fun OfflineMainScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (connectedPeers.isNotEmpty()) "Malha Mesh Conectada (${connectedPeers.size} nós)" else "Buscando vizinhos BLE...",
+                                text = if (uniqueConnectedPeers.isNotEmpty()) "Malha Mesh Conectada (${uniqueConnectedPeers.size} nós)" else "Buscando vizinhos BLE...",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -209,7 +216,7 @@ fun OfflineMainScreen(
                 Tab(
                     selected = selectedSubTab == 1,
                     onClick = { selectedSubTab = 1 },
-                    text = { Text("Radar Próximos (${discoveredPeers.size})", fontWeight = FontWeight.SemiBold) }
+                    text = { Text("Radar Próximos (${uniqueDiscoveredPeers.size})", fontWeight = FontWeight.SemiBold) }
                 )
             }
 
@@ -256,7 +263,7 @@ fun OfflineMainScreen(
                 }
             } else {
                 // TAB 2: DISPOSITIVOS PRÓXIMOS (RADAR & NÓS DA MALHA)
-                if (discoveredPeers.isEmpty()) {
+                if (uniqueDiscoveredPeers.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -287,8 +294,8 @@ fun OfflineMainScreen(
                         contentPadding = PaddingValues(12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(discoveredPeers, key = { it.endpointId }) { peer ->
-                            val isConnected = connectedPeers.any {
+                        items(uniqueDiscoveredPeers, key = { it.deviceName.trim().lowercase() }) { peer ->
+                            val isConnected = uniqueConnectedPeers.any {
                                 it.endpointId == peer.endpointId ||
                                 it.deviceName.equals(peer.deviceName, ignoreCase = true)
                             }

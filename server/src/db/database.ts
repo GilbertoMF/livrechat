@@ -72,6 +72,7 @@ export interface Message {
   iv?: string;
   message_type: string;
   reply_to_id?: string;
+  reply_to_content?: string;
   is_deleted: boolean;
   is_edited: boolean;
   reactions?: string;
@@ -279,6 +280,7 @@ class DatabaseService {
           await client.query('ALTER TABLE statuses ADD COLUMN IF NOT EXISTS views JSONB DEFAULT \'[]\'::jsonb;').catch(() => {});
           await client.query('ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS phone_number VARCHAR(50);').catch(() => {});
           await client.query('CREATE INDEX IF NOT EXISTS idx_user_profiles_phone ON user_profiles(phone_number);').catch(() => {});
+          await client.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_content TEXT;').catch(() => {});
           await client.query(`
             CREATE TABLE IF NOT EXISTS user_fcm_tokens (
               user_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1230,6 +1232,7 @@ class DatabaseService {
               iv: m.iv || undefined,
               message_type: m.message_type,
               reply_to_id: m.reply_to_id || undefined,
+              reply_to_content: m.reply_to_content || undefined,
               is_deleted: m.is_deleted,
               is_edited: m.is_edited,
               created_at: m.created_at?.toISOString?.() || m.created_at,
@@ -1601,8 +1604,8 @@ class DatabaseService {
         await this.ensureConversationMember(msg.conversation_id, msg.sender_id);
 
         await this.pgPool.query(`
-          INSERT INTO messages (id, conversation_id, sender_id, content, iv, message_type, reply_to_id, is_deleted, is_edited, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          INSERT INTO messages (id, conversation_id, sender_id, content, iv, message_type, reply_to_id, reply_to_content, is_deleted, is_edited, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
           ON CONFLICT (id) DO NOTHING
         `, [
           msg.id,
@@ -1612,6 +1615,7 @@ class DatabaseService {
           msg.iv || null,
           msg.message_type || 'text',
           msg.reply_to_id || null,
+          msg.reply_to_content || null,
           msg.is_deleted || false,
           msg.is_edited || false,
           msg.created_at,
@@ -1657,6 +1661,7 @@ class DatabaseService {
           iv: m.iv || undefined,
           message_type: m.message_type,
           reply_to_id: m.reply_to_id || undefined,
+          reply_to_content: m.reply_to_content || undefined,
           is_deleted: m.is_deleted,
           is_edited: m.is_edited,
           created_at: m.created_at?.toISOString?.() || m.created_at,
@@ -1690,6 +1695,7 @@ class DatabaseService {
             iv: m.iv || undefined,
             message_type: m.message_type,
             reply_to_id: m.reply_to_id || undefined,
+            reply_to_content: m.reply_to_content || undefined,
             is_deleted: m.is_deleted,
             is_edited: m.is_edited,
             created_at: m.created_at?.toISOString?.() || m.created_at,
@@ -1734,6 +1740,7 @@ class DatabaseService {
           iv: m.iv || undefined,
           message_type: m.message_type,
           reply_to_id: m.reply_to_id || undefined,
+          reply_to_content: m.reply_to_content || undefined,
           is_deleted: m.is_deleted,
           is_edited: m.is_edited,
           created_at: m.created_at?.toISOString?.() || m.created_at,
@@ -1783,6 +1790,7 @@ class DatabaseService {
             iv: m.iv || undefined,
             message_type: m.message_type,
             reply_to_id: m.reply_to_id || undefined,
+            reply_to_content: m.reply_to_content || undefined,
             is_deleted: m.is_deleted,
             is_edited: m.is_edited,
             created_at: m.created_at?.toISOString?.() || m.created_at,

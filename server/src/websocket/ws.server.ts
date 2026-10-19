@@ -198,7 +198,7 @@ export class WebSocketManager {
       // CHAT MESSAGES
       // ==========================================
       case 'chat:send': {
-        const { conversationId, content, iv, messageType, replyToId, clientMessageId, targetUserId } = event;
+        const { conversationId, content, iv, messageType, replyToId, replyToContent, clientMessageId, targetUserId } = event;
         const msgId = clientMessageId || uuidv4();
         const now = new Date().toISOString();
 
@@ -310,6 +310,7 @@ export class WebSocketManager {
           iv,
           message_type: messageType || 'text',
           reply_to_id: replyToId,
+          reply_to_content: replyToContent,
           is_deleted: false,
           is_edited: false,
           created_at: now,
