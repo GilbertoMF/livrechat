@@ -26,7 +26,8 @@ data class DiscoveredPeer(
     val isConnected: Boolean = false,
     val isMeshRelayed: Boolean = false,
     val relayedVia: String? = null,
-    val hops: Int = 0
+    val hops: Int = 0,
+    val hasInternet: Boolean = false
 )
 
 data class ConnectedPeer(
@@ -97,6 +98,23 @@ class NearbyManager private constructor(private val context: Context) {
 
     private val _connectedPeers = MutableStateFlow<Map<String, ConnectedPeer>>(emptyMap())
     val connectedPeers = MutableStateFlow<List<ConnectedPeer>>(emptyList())
+
+    // Walkie-Talkie PTT em Tempo Real
+    private val _incomingPttSpeaker = MutableStateFlow<String?>(null)
+    val incomingPttSpeaker: StateFlow<String?> = _incomingPttSpeaker.asStateFlow()
+
+    private val _pttActivityTime = MutableStateFlow(0L)
+    val pttActivityTime: StateFlow<Long> = _pttActivityTime.asStateFlow()
+
+    // Ponte de Internet Híbrida (Internet Gateway / Mesh Proxy)
+    private val _isInternetGateway = MutableStateFlow(false)
+    val isInternetGateway: StateFlow<Boolean> = _isInternetGateway.asStateFlow()
+
+    private val _meshGateways = MutableStateFlow<Set<String>>(emptySet())
+    val meshGateways: StateFlow<Set<String>> = _meshGateways.asStateFlow()
+
+    private val _lastProxyStatus = MutableStateFlow<String?>(null)
+    val lastProxyStatus: StateFlow<String?> = _lastProxyStatus.asStateFlow()
 
     // Rastreamento de conexões pendentes para desempate determinístico (evita colisão de handshake)
     private val pendingConnectionPeers = Collections.synchronizedSet(HashSet<String>())
@@ -445,6 +463,9 @@ class NearbyManager private constructor(private val context: Context) {
     fun broadcastGossipAnnouncement() {
         if (_connectedPeers.value.isEmpty()) return
 
+        val hasNet = MeshMediaHelper.isInternetAvailable(context)
+        _isInternetGateway.value = hasNet
+
         val connectedNames = _connectedPeers.value.values.map { it.deviceName }.distinct()
         val allKnownNodes = (connectedNames + meshRoutingTable.keys).distinct().filter {
             !it.equals(myDeviceName, ignoreCase = true)
@@ -462,7 +483,8 @@ class NearbyManager private constructor(private val context: Context) {
             timestamp = System.currentTimeMillis(),
             type = "GOSSIP_ANNOUNCE",
             hops = 1,
-            ttl = 3
+            ttl = 3,
+            hasInternet = hasNet
         )
 
         val json = gson.toJson(packet)
@@ -513,10 +535,23 @@ class NearbyManager private constructor(private val context: Context) {
         // Se for anúncio de nós via Gossip Protocol
         if (packet.type == "GOSSIP_ANNOUNCE") {
             try {
+                if (packet.hasInternet) {
+                    val gateways = _meshGateways.value.toMutableSet()
+                    gateways.add(packet.senderName)
+                    _meshGateways.value = gateways
+                }
+
                 val listType = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
                 val announcedNodes: List<String> = gson.fromJson(packet.content, listType) ?: emptyList()
                 val updated = _discoveredPeers.value.toMutableMap()
                 var hasChanges = false
+
+                // Atualiza flag de internet do remetente direto caso já esteja descoberto
+                val directSender = updated.values.find { it.deviceName.equals(packet.senderName, ignoreCase = true) }
+                if (directSender != null && packet.hasInternet && !directSender.hasInternet) {
+                    updated[directSender.endpointId] = directSender.copy(hasInternet = true)
+                    hasChanges = true
+                }
 
                 for (nodeName in announcedNodes) {
                     if (nodeName.isBlank() || nodeName.equals(myDeviceName, ignoreCase = true)) continue
@@ -525,6 +560,8 @@ class NearbyManager private constructor(private val context: Context) {
                                    _discoveredPeers.value.values.any { !it.isMeshRelayed && it.deviceName.equals(nodeName, ignoreCase = true) }
                     if (!isDirect) {
                         meshRoutingTable[nodeName] = fromEndpointId
+
+                        val hasNet = (nodeName.equals(packet.senderName, ignoreCase = true) && packet.hasInternet) || _meshGateways.value.contains(nodeName)
 
                         // Remove any old duplicate entry for this device name before inserting
                         updated.entries.removeAll { it.value.deviceName.equals(nodeName, ignoreCase = true) }
@@ -536,7 +573,8 @@ class NearbyManager private constructor(private val context: Context) {
                             isConnected = false,
                             isMeshRelayed = true,
                             relayedVia = packet.senderName,
-                            hops = packet.hops
+                            hops = packet.hops,
+                            hasInternet = hasNet
                         )
                         hasChanges = true
 
@@ -568,6 +606,110 @@ class NearbyManager private constructor(private val context: Context) {
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Falha ao processar anúncio Gossip: ${e.message}")
+            }
+            return
+        }
+
+        // Walkie-Talkie Push-to-Talk (PTT Burst) Instantâneo
+        if (packet.type == "PTT_BURST") {
+            Log.i(TAG, "📢 PTT BURST recebido de ${packet.senderName} (Hops: ${packet.hops}, via: ${packet.relayedVia})")
+            val audioData = packet.mediaData ?: packet.content
+            if (audioData.isNotBlank()) {
+                _incomingPttSpeaker.value = packet.senderName
+                _pttActivityTime.value = System.currentTimeMillis()
+                MeshMediaHelper.playAudioBytes(context, audioData) {
+                    _incomingPttSpeaker.value = null
+                }
+            }
+            // Propaga o burst na malha para todos os nós (Walkie-Talkie Broadcast)
+            if (packet.ttl > 1) {
+                val updatedRelayPath = if (packet.relayedVia.isNullOrBlank()) {
+                    myDeviceName
+                } else if (!packet.relayedVia.contains(myDeviceName, ignoreCase = true)) {
+                    "${packet.relayedVia} ➔ $myDeviceName"
+                } else {
+                    packet.relayedVia
+                }
+                val relayedBurst = packet.copy(
+                    hops = packet.hops + 1,
+                    ttl = packet.ttl - 1,
+                    relayedVia = updatedRelayPath
+                )
+                broadcastToOtherPeers(fromEndpointId, relayedBurst)
+            }
+            return
+        }
+
+        // Ponte de Internet Híbrida: Requisição de Ping / Proxy para Gateway
+        if (packet.type == "INTERNET_PROXY_REQ") {
+            val hasNet = MeshMediaHelper.isInternetAvailable(context)
+            if (hasNet) {
+                Log.i(TAG, "🌐 Requisição de Internet Proxy recebida de ${packet.senderName}. Testando conexão com VPS...")
+                scope.launch(Dispatchers.IO) {
+                    val start = System.currentTimeMillis()
+                    var status = ""
+                    try {
+                        val url = java.net.URL("https://livrechat.com.br/api/health")
+                        val conn = url.openConnection() as java.net.HttpURLConnection
+                        conn.connectTimeout = 3000
+                        conn.readTimeout = 3000
+                        val code = conn.responseCode
+                        val elapsed = System.currentTimeMillis() - start
+                        status = "✅ Nuvem Oracle VPS OK (${elapsed}ms, HTTP $code) via Gateway: $myDeviceName"
+                    } catch (e: Exception) {
+                        val elapsed = System.currentTimeMillis() - start
+                        status = "⚡ Internet ativa (${elapsed}ms), VPS inacessível: ${e.message?.take(30)}"
+                    }
+
+                    val respPacket = MeshPacket(
+                        packetId = UUID.randomUUID().toString(),
+                        senderId = myDeviceId,
+                        senderName = myDeviceName,
+                        recipientId = packet.senderName,
+                        recipientName = packet.senderName,
+                        content = status,
+                        timestamp = System.currentTimeMillis(),
+                        type = "INTERNET_PROXY_RESP",
+                        hops = 0,
+                        ttl = 5,
+                        hasInternet = true
+                    )
+
+                    val direct = _connectedPeers.value.entries.firstOrNull {
+                        it.value.deviceName.equals(packet.senderName, ignoreCase = true)
+                    }?.key ?: meshRoutingTable[packet.senderName]
+
+                    if (direct != null && _connectedPeers.value.containsKey(direct)) {
+                        sendPacketToEndpoint(direct, respPacket)
+                    } else {
+                        broadcastToAllPeers(respPacket)
+                    }
+                }
+            } else {
+                if (packet.ttl > 1) {
+                    val relayed = packet.copy(hops = packet.hops + 1, ttl = packet.ttl - 1)
+                    broadcastToOtherPeers(fromEndpointId, relayed)
+                }
+            }
+            return
+        }
+
+        if (packet.type == "INTERNET_PROXY_RESP") {
+            val isForMe = packet.recipientId == myDeviceId ||
+                          packet.recipientName.equals(myDeviceName, ignoreCase = true) ||
+                          packet.recipientName.isBlank()
+            if (isForMe) {
+                Log.i(TAG, "⚡ Resposta do Gateway de Internet recebida: ${packet.content}")
+                _lastProxyStatus.value = packet.content
+            } else {
+                if (packet.ttl > 1) {
+                    val gateway = meshRoutingTable[packet.recipientName]
+                    if (gateway != null && _connectedPeers.value.containsKey(gateway)) {
+                        sendPacketToEndpoint(gateway, packet)
+                    } else {
+                        broadcastToOtherPeers(fromEndpointId, packet)
+                    }
+                }
             }
             return
         }
@@ -612,7 +754,20 @@ class NearbyManager private constructor(private val context: Context) {
 
         if (isForMe) {
             val isRelayed = packet.hops > 0 || !packet.relayedVia.isNullOrBlank()
-            Log.i(TAG, "📩 MENSAGEM RECEBIDA de ${packet.senderName}: '${packet.content}' (Hops: ${packet.hops}, via: ${packet.relayedVia})")
+            val mediaType = packet.mediaType ?: when (packet.type) {
+                "IMAGE" -> "image"
+                "AUDIO" -> "audio"
+                else -> "text"
+            }
+            val mediaData = packet.mediaData
+
+            Log.i(TAG, "📩 MENSAGEM RECEBIDA de ${packet.senderName}: [tipo: $mediaType] '${packet.content}' (Hops: ${packet.hops}, via: ${packet.relayedVia})")
+
+            // Se for imagem, salva no cache local para visualização rápida e persistente
+            if (mediaType == "image" && !mediaData.isNullOrBlank()) {
+                MeshMediaHelper.saveBase64ImageToCache(context, mediaData, packet.packetId)
+            }
+
             scope.launch {
                 val msg = Mensagem(
                     idMensagem = packet.packetId,
@@ -625,16 +780,24 @@ class NearbyManager private constructor(private val context: Context) {
                     isMeshRoute = isRelayed,
                     hops = packet.hops,
                     ttl = packet.ttl,
-                    relayedVia = packet.relayedVia
+                    relayedVia = packet.relayedVia,
+                    mediaType = mediaType,
+                    mediaData = mediaData
                 )
                 dao.insertMensagem(msg)
 
+                val mediaSnippet = when (mediaType) {
+                    "image" -> if (packet.content.isNotBlank() && packet.content != "📷 Foto") "📷 ${packet.content}" else "📷 [Foto na malha]"
+                    "audio" -> "🎤 [Áudio de voz]"
+                    else -> packet.content
+                }
+
                 val conversaSnippet = if (isRelayed && !packet.relayedVia.isNullOrBlank()) {
-                    "🌐 [via ${packet.relayedVia}]: ${packet.content}"
+                    "🌐 [via ${packet.relayedVia}]: $mediaSnippet"
                 } else if (isRelayed) {
-                    "🌐 [via malha]: ${packet.content}"
+                    "🌐 [via malha]: $mediaSnippet"
                 } else {
-                    packet.content
+                    mediaSnippet
                 }
 
                 val conversa = Conversa(
@@ -790,6 +953,153 @@ class NearbyManager private constructor(private val context: Context) {
         }
 
         return localMsg
+    }
+
+    /**
+     * Transmissão PTT Walkie-Talkie em Tempo Real na Malha Mesh
+     */
+    fun broadcastPttAudio(base64Audio: String) {
+        val packetId = UUID.randomUUID().toString()
+        val packet = MeshPacket(
+            packetId = packetId,
+            senderId = myDeviceId,
+            senderName = myDeviceName,
+            recipientId = "*",
+            recipientName = "*",
+            content = "Walkie-Talkie Áudio",
+            timestamp = System.currentTimeMillis(),
+            type = "PTT_BURST",
+            hops = 0,
+            ttl = 4,
+            mediaType = "audio",
+            mediaData = base64Audio
+        )
+        forwardedPacketIds.add(packetId)
+        broadcastToAllPeers(packet)
+        Log.i(TAG, "📢 PTT BURST transmitido para a malha (${base64Audio.length} chars Base64)")
+    }
+
+    /**
+     * Envia foto compactada (< 18KB) ou nota de voz (AMR-NB) através da malha
+     */
+    fun sendMediaMessage(
+        recipientId: String,
+        recipientName: String,
+        mediaType: String,
+        mediaData: String,
+        caption: String = ""
+    ): Mensagem {
+        val messageId = UUID.randomUUID().toString()
+        val targetName = recipientName.ifBlank { recipientId }
+        val displayContent = caption.ifBlank {
+            if (mediaType == "image") "📷 Foto" else "🎤 Áudio de voz"
+        }
+
+        val directEndpoint = _connectedPeers.value.entries.firstOrNull { entry ->
+            entry.key == recipientId ||
+            entry.value.deviceName.trim().equals(targetName.trim(), ignoreCase = true) ||
+            entry.value.deviceName.contains(targetName.trim(), ignoreCase = true) ||
+            targetName.trim().contains(entry.value.deviceName, ignoreCase = true)
+        }?.key
+
+        val isDirect = directEndpoint != null
+
+        val packet = MeshPacket(
+            packetId = messageId,
+            senderId = myDeviceId,
+            senderName = myDeviceName,
+            recipientId = targetName,
+            recipientName = targetName,
+            content = displayContent,
+            timestamp = System.currentTimeMillis(),
+            type = if (mediaType == "image") "IMAGE" else "AUDIO",
+            hops = 0,
+            ttl = 5,
+            mediaType = mediaType,
+            mediaData = mediaData
+        )
+
+        val localMsg = Mensagem(
+            idMensagem = messageId,
+            remetenteId = myDeviceId,
+            remetenteNome = myDeviceName,
+            destinatarioId = targetName,
+            conteudo = displayContent,
+            timestamp = System.currentTimeMillis(),
+            statusEntrega = StatusEntrega.PENDENTE,
+            isMeshRoute = !isDirect,
+            hops = if (!isDirect) 1 else 0,
+            ttl = 5,
+            relayedVia = if (!isDirect) "malha mesh" else null,
+            mediaType = mediaType,
+            mediaData = mediaData
+        )
+
+        scope.launch {
+            dao.insertMensagem(localMsg)
+            dao.insertOrUpdateConversa(
+                Conversa(
+                    id = targetName,
+                    contatoNome = targetName,
+                    ultimaMensagem = if (!isDirect) "🌐 [via malha]: $displayContent" else displayContent,
+                    ultimoTimestamp = localMsg.timestamp,
+                    naoLidas = 0
+                )
+            )
+
+            val gatewayEndpoint = directEndpoint ?: meshRoutingTable[targetName] ?: meshRoutingTable.entries.firstOrNull {
+                it.key.contains(targetName.trim(), ignoreCase = true) || targetName.trim().contains(it.key, ignoreCase = true)
+            }?.value
+
+            if (gatewayEndpoint != null && _connectedPeers.value.containsKey(gatewayEndpoint)) {
+                Log.i(TAG, "Roteando mídia ($mediaType) para $targetName via $gatewayEndpoint (Direto=$isDirect)")
+                sendPacketToEndpoint(gatewayEndpoint, packet)
+            } else {
+                Log.i(TAG, "Destinatário não conectado diretamente para mídia. Armazenando na fila e propagando...")
+                forwardedPacketIds.add(packet.packetId)
+                storeAndForwardQueue.add(packet)
+                if (_connectedPeers.value.isNotEmpty()) {
+                    broadcastToAllPeers(packet)
+                }
+            }
+        }
+        return localMsg
+    }
+
+    /**
+     * Solicita teste de acesso à Internet ou Proxy Nuvem através de um Gateway conhecido na malha
+     */
+    fun requestInternetProxy(gatewayName: String? = null) {
+        val targetGateway = gatewayName ?: _meshGateways.value.firstOrNull() ?: return
+        _lastProxyStatus.value = "Consultando internet via nó $targetGateway..."
+
+        val reqPacket = MeshPacket(
+            packetId = UUID.randomUUID().toString(),
+            senderId = myDeviceId,
+            senderName = myDeviceName,
+            recipientId = targetGateway,
+            recipientName = targetGateway,
+            content = "PING_REQUEST",
+            timestamp = System.currentTimeMillis(),
+            type = "INTERNET_PROXY_REQ",
+            hops = 0,
+            ttl = 5
+        )
+
+        val direct = _connectedPeers.value.entries.firstOrNull {
+            it.value.deviceName.equals(targetGateway, ignoreCase = true)
+        }?.key
+
+        if (direct != null) {
+            sendPacketToEndpoint(direct, reqPacket)
+        } else {
+            val gateway = meshRoutingTable[targetGateway]
+            if (gateway != null && _connectedPeers.value.containsKey(gateway)) {
+                sendPacketToEndpoint(gateway, reqPacket)
+            } else {
+                broadcastToAllPeers(reqPacket)
+            }
+        }
     }
 
     private fun sendDeliveryAck(directEndpointId: String?, originalSenderId: String, originalSenderName: String, deliveredPacketId: String) {

@@ -55,7 +55,7 @@ interface OfflineDao {
 
 @Database(
     entities = [Contato::class, Conversa::class, Mensagem::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class OfflineDatabase : RoomDatabase() {
@@ -71,13 +71,20 @@ abstract class OfflineDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE offline_mensagens ADD COLUMN mediaType TEXT NOT NULL DEFAULT 'text'")
+                db.execSQL("ALTER TABLE offline_mensagens ADD COLUMN mediaData TEXT DEFAULT NULL")
+            }
+        }
+
         fun getInstance(context: Context): OfflineDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     OfflineDatabase::class.java,
                     "livrechat_offline_mesh.db"
-                ).addMigrations(MIGRATION_1_2)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                  .fallbackToDestructiveMigration()
                  .build()
                 INSTANCE = instance

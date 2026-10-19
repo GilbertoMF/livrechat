@@ -13,8 +13,8 @@ android {
         applicationId = "com.livrechat.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 38
-        versionName = "1.1.28"
+        versionCode = 39
+        versionName = "1.1.29"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

@@ -53,7 +53,9 @@ data class Mensagem(
     val isMeshRoute: Boolean = false, // Flag de Roteamento em Malha
     val hops: Int = 0,                // Saltos intermediários percorridos
     val ttl: Int = 5,                 // Time-To-Live para evitar loops
-    val relayedVia: String? = null    // Nome do(s) nó(s) intermediário(s) que repassaram
+    val relayedVia: String? = null,   // Nome do(s) nó(s) intermediário(s) que repassaram
+    val mediaType: String = "text",   // "text", "image", "audio"
+    val mediaData: String? = null     // Base64 ou caminho local do arquivo
 )
 
 /**
@@ -67,8 +69,11 @@ data class MeshPacket(
     val recipientName: String = "",
     val content: String = "",
     val timestamp: Long = System.currentTimeMillis(),
-    val type: String = "TEXT", // "TEXT", "ACK", "HANDSHAKE"
+    val type: String = "TEXT", // "TEXT", "IMAGE", "AUDIO", "PTT_BURST", "GATEWAY_ANNOUNCE", "INTERNET_PROXY_REQ", "INTERNET_PROXY_RESP", "ACK", "GOSSIP_ANNOUNCE"
     val hops: Int = 0,
     val ttl: Int = 5,
-    val relayedVia: String? = null    // Nome do(s) nó(s) que intermediaram a entrega
+    val relayedVia: String? = null,   // Nome do(s) nó(s) que intermediaram a entrega
+    val mediaType: String? = null,
+    val mediaData: String? = null,
+    val hasInternet: Boolean = false
 )

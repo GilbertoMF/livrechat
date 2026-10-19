@@ -91,10 +91,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.28: Identificação detalhada de nós na Rede Offline P2P Mesh (exibe qual celular intermediário retransmitiu a mensagem e quantidade de saltos percorridos).',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.28-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.28-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.28-universal.apk`,
+      : 'Nova versão 1.1.29: 4 Superpoderes da Rede Offline Mesh (Walkie-Talkie PTT, Fotos e Áudios na Malha, Gateway de Internet Híbrido e Mapa Topológico Interativo).',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.29-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.29-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.29-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -102,26 +102,38 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.28',
-      versionCode: 38,
+      version: '1.1.29',
+      versionCode: 39,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-19',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Atualização 1.1.28: Identificação de nós intermediários e saltos na Rede Offline Mesh.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.28-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.28-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.28-universal.apk`,
+      message: 'Atualização 1.1.29: Superpoderes Offline Mesh (Walkie-Talkie PTT, Fotos e Áudios, Gateway de Internet e Mapa Topológico).',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.29-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.29-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.29-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '24.4 MB',
       sizeMbUniversal: '30.6 MB'
     },
     versions: [
       {
+        version: '1.1.29',
+        versionCode: 39,
+        releaseDate: '2026-10-19',
+        isLatest: true,
+        changelog: 'Superpoderes da Rede Offline Mesh: 1. Walkie-Talkie Instantâneo PTT (Push-to-Talk) com bips e viva-voz em tempo real; 2. Envio de fotos leves e notas de voz comprimidas via múltiplos saltos na malha; 3. Ponte de Internet Híbrida (compartilhamento automático de internet com nós sem sinal); 4. Mapa Topológico Interativo da Malha (Radar orbital visual com nós, conexões e partículas animadas).',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.29-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Galaxy A10 / Básicos)', size: '21.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.29-armv7.apk` },
+          { type: 'universal', name: 'APK Universal Completo', size: '30.6 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.29-universal.apk` }
+        ]
+      },
+      {
         version: '1.1.28',
         versionCode: 38,
         releaseDate: '2026-10-19',
-        isLatest: true,
+        isLatest: false,
         changelog: 'Identificação visual e detalhada de nós intermediários na Rede Offline Mesh (exibe qual aparelho repassou e total de saltos); Roteamento multi-hop transparente entre aparelhos vizinhos.',
         downloads: [
           { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.28-arm64.apk` },
