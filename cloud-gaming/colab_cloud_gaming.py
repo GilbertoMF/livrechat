@@ -899,6 +899,7 @@ async def run_server(game_path):
     print(f"✅ Servidor Web local ativo na porta {PORT}!", flush=True)
 
     # Criar script launcher para o PPSSPP que garante isolamento e tratamento de áudio
+    launcher_path = Path("/content/run_ppsspp.sh")
     launcher_content = f"""#!/bin/bash
 export DISPLAY=:1
 export SDL_VIDEODRIVER=x11
