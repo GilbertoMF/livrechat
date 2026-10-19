@@ -551,7 +551,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 def setup_environment():
     print("📦 [1/6] Instalando dependências de sistema (Xvfb, FFmpeg, xdotool, PulseAudio)...")
     os.system("apt-get update -qq > /dev/null 2>&1")
-    os.system("apt-get install -y -qq xvfb xdotool ffmpeg pulseaudio libgl1-mesa-dri libsdl2-2.0-0 psmisc > /dev/null 2>&1")
+    os.system("apt-get install -y -qq xvfb xdotool ffmpeg pulseaudio libgl1-mesa-dri libsdl2-2.0-0 psmisc squashfs-tools > /dev/null 2>&1")
     os.system("pip install -q aiohttp websockets qrcode[pil] > /dev/null 2>&1")
 
     # Baixar jsmpeg.min.js se não existir
@@ -566,13 +566,22 @@ def setup_environment():
         os.system("chmod +x cloudflared")
 
 def setup_ppsspp():
-    print("🎮 [2/6] Preparando emulador PPSSPP com aceleração...")
+    print("🎮 [2/6] Preparando emulador PPSSPP com aceleração...", flush=True)
     if not os.path.exists("squashfs-root/AppRun"):
-        print("⬇️ Baixando PPSSPP AppImage oficial...")
-        os.system("wget -q -nc https://github.com/hrydgard/ppsspp/releases/download/v1.18.1/PPSSPP-v1.18.1-anylinux-x86_64.AppImage -O ppsspp.AppImage")
+        print("⬇️ Baixando PPSSPP oficial do CDN (50 MB)...", flush=True)
+        os.system("rm -rf ppsspp.AppImage squashfs-root")
+        os.system("wget -q -O ppsspp.AppImage https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/tools/ppsspp.AppImage")
         os.system("chmod +x ppsspp.AppImage")
-        print("📂 Extraindo pacote...")
+        print("📂 Extraindo pacote...", flush=True)
         os.system("./ppsspp.AppImage --appimage-extract > /dev/null 2>&1")
+        if os.path.exists("squashfs-root/AppRun"):
+            os.system("chmod +x squashfs-root/AppRun")
+            print("✅ PPSSPP extraído com sucesso!", flush=True)
+        else:
+            print("⚠️ Falha ao extrair AppImage com FUSE. Tentando extração alternativa...", flush=True)
+            os.system("unsquashfs -d squashfs-root ppsspp.AppImage > /dev/null 2>&1")
+            if os.path.exists("squashfs-root/AppRun"):
+                os.system("chmod +x squashfs-root/AppRun")
     
     # Criar configurações personalizadas do PPSSPP
     base_psp = Path.home() / ".config" / "ppsspp" / "PSP"
