@@ -255,8 +255,11 @@ interface ApiService {
         @retrofit2.http.Query("search") search: String? = null
     ): Response<LivreGamesResponseDto>
 
-    @GET("api/games/server-info")
-    suspend fun getGameServerInfo(): Response<LivreGameServerInfoDto>
+    // App Version Check
+    @GET("api/versions/check")
+    suspend fun checkAppVersion(
+        @retrofit2.http.Query("versionCode") versionCode: Int
+    ): Response<AppVersionCheckResponse>
 }
 
 data class AppVersionCheckResponse(

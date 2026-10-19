@@ -65,14 +65,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 30;
+  const LATEST_CODE = 31;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.20',
+    latestVersion: '1.1.21',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -80,10 +80,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.20: Chegou o LivreGames Instant Cloud! Jogue Super Bomberman 2, Mario Kart, Mortal Kombat 3 e mais na nuvem sem baixar nada, com gamepad touch virtual e multiplayer com 1 toque!',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.20-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.20-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.20-universal.apk`,
+      : 'Nova versão 1.1.21: LivreTube com Mini-player flutuante para navegar pelo app ouvindo seus vídeos, rotação automática de tela horizontal e Nova Aba de Rede Offline P2P Mesh!',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.21-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.21-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.21-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -91,16 +91,16 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.20',
-      versionCode: 30,
+      version: '1.1.21',
+      versionCode: 31,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-19',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Atualização 1.1.20: Apresentando o LivreGames Instant Nuvem — jogos clássicos instantâneos a 60 FPS sem download e multiplayer em tempo real com pareamento por código!',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.20-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.20-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.20-universal.apk`,
+      message: 'Atualização 1.1.21: LivreTube com Mini-player flutuante, rotação horizontal de tela e Modo Rede Offline P2P Mesh!',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.21-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.21-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.21-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '24.2 MB',
       sizeMbUniversal: '30.4 MB'

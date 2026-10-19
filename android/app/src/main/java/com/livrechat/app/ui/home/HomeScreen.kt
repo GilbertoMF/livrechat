@@ -111,13 +111,15 @@ fun HomeScreen(
     onStartCall: (String, String, String, String?) -> Unit,
     onNavigateToActiveCall: (() -> Unit)? = null
 ) {
-    // Tabs: 0 = Conversas, 1 = Flash (Status), 2 = Chamadas, 3 = LivreTube
+    // Tabs: 0 = Conversas, 1 = Flash (Status), 2 = Chamadas, 3 = LivreTube, 4 = Rede Offline
     var selectedTab by remember { mutableIntStateOf(initialTab) }
     LaunchedEffect(initialTab) {
-        if (initialTab in 0..3) {
+        if (initialTab in 0..4) {
             selectedTab = initialTab
         }
     }
+
+    var activeOfflineChat by remember { mutableStateOf<Pair<String, String>?>(null) }
     val isDuressActive by LivreChatApp.instance.isDuressModeActive.collectAsState()
     val rawConversations by chatViewModel.conversationsFlow.collectAsState(initial = emptyList())
     val conversations = remember(rawConversations, isDuressActive) {
@@ -2469,6 +2471,25 @@ fun HomeScreen(
                         )
                     }
                 )
+                Tab(
+                    selected = selectedTab == 4,
+                    onClick = { selectedTab = 4 },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.WifiOff,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp),
+                                tint = if (selectedTab == 4) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Rede Offline",
+                                fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                )
             }
 
             if (selectedTab == 0) {
@@ -2847,6 +2868,20 @@ fun HomeScreen(
             } else if (selectedTab == 3) {
                 // LIVRETUBE TAB
                 com.livrechat.app.ui.livretube.LivreTubeScreen()
+            } else if (selectedTab == 4) {
+                // REDE OFFLINE P2P MESH TAB
+                if (activeOfflineChat != null) {
+                    val (chatId, chatName) = activeOfflineChat!!
+                    com.livrechat.app.offline.ui.OfflineChatScreen(
+                        contactId = chatId,
+                        contactName = chatName,
+                        onBack = { activeOfflineChat = null }
+                    )
+                } else {
+                    com.livrechat.app.offline.ui.OfflineMainScreen(
+                        onOpenChat = { id, name -> activeOfflineChat = id to name }
+                    )
+                }
             }
         }
     }

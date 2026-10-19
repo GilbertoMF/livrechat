@@ -126,6 +126,9 @@ dependencies {
     // Google Sign-In for Google Drive Backup
     implementation("com.google.android.gms:play-services-auth:21.0.0")
 
+    // Google Nearby Connections API (Offline P2P Mesh & High-Bandwidth Wi-Fi Direct)
+    implementation("com.google.android.gms:play-services-nearby:19.3.0")
+
     // Firebase Cloud Messaging (FCM High-Priority Data Push)
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging-ktx")
