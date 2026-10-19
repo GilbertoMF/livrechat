@@ -313,8 +313,10 @@ data class LivreTubeVideoDetailsDto(
 data class LivreGamesResponseDto(
     val success: Boolean = false,
     val count: Int = 0,
+    val instantCount: Int = 0,
     val server: LivreGameServerInfoDto? = null,
-    val games: List<LivreGameDto> = emptyList()
+    val games: List<LivreGameDto> = emptyList(),
+    val instantGames: List<InstantGameDto> = emptyList()
 )
 
 data class LivreGameServerInfoDto(
@@ -325,6 +327,21 @@ data class LivreGameServerInfoDto(
     val serverName: String = "LivreGames Brasil (Oracle Cloud VPS)",
     val ppssppPlayStoreUrl: String = "https://play.google.com/store/apps/details?id=org.ppsspp.ppsspp",
     val ppssppApkUrl: String = "https://www.ppsspp.org/files/1_18_1/ppsspp.apk"
+)
+
+data class InstantGameDto(
+    val id: String = "",
+    val title: String = "",
+    val subtitle: String = "",
+    val category: String = "Arcade",
+    val coverUrl: String = "",
+    val romUrl: String = "",
+    val core: String = "snes",
+    val size: String = "1 MB",
+    val maxPlayers: Int = 2,
+    val gameId: Int = 1001,
+    val description: String = "",
+    val instantRunnerUrl: String = ""
 )
 
 data class LivreGameDto(

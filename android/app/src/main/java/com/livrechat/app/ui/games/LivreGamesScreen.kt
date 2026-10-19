@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.livrechat.app.LivreChatApp
+import com.livrechat.app.data.remote.InstantGameDto
 import com.livrechat.app.data.remote.LivreGameDto
 import com.livrechat.app.data.remote.LivreGameServerInfoDto
 import com.livrechat.app.ui.theme.DangerRed
@@ -49,9 +50,17 @@ fun LivreGamesScreen(
     val downloadStates by downloadManager.downloadStates.collectAsState()
 
     var games by remember { mutableStateOf<List<LivreGameDto>>(emptyList()) }
+    var instantGames by remember { mutableStateOf<List<InstantGameDto>>(emptyList()) }
     var serverInfo by remember { mutableStateOf<LivreGameServerInfoDto?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Nuvem Instantânea, 1 = PSP Clássicos
+    var activeInstantGame by remember { mutableStateOf<InstantGameDto?>(null) }
+    var instantRoomCode by remember { mutableStateOf<String?>(null) }
+    var instantMode by remember { mutableStateOf<String?>(null) }
+    var showJoinRoomDialog by remember { mutableStateOf(false) }
+    var roomCodeInput by remember { mutableStateOf("") }
 
     var selectedCategory by remember { mutableStateOf("Todos") }
     var searchQuery by remember { mutableStateOf("") }
@@ -75,6 +84,7 @@ fun LivreGamesScreen(
                     val body = response.body()!!
                     withContext(Dispatchers.Main) {
                         games = body.games
+                        instantGames = body.instantGames
                         serverInfo = body.server
                         isLoading = false
                     }
@@ -100,6 +110,17 @@ fun LivreGamesScreen(
     // Filter games
     val filteredGames = remember(games, selectedCategory, searchQuery) {
         games.filter { game ->
+            val matchesCategory = selectedCategory == "Todos" || game.category.equals(selectedCategory, ignoreCase = true)
+            val matchesSearch = searchQuery.isBlank() ||
+                    game.title.contains(searchQuery, ignoreCase = true) ||
+                    game.description.contains(searchQuery, ignoreCase = true)
+            matchesCategory && matchesSearch
+        }
+    }
+
+    // Filter instant games
+    val filteredInstantGames = remember(instantGames, selectedCategory, searchQuery) {
+        instantGames.filter { game ->
             val matchesCategory = selectedCategory == "Todos" || game.category.equals(selectedCategory, ignoreCase = true)
             val matchesSearch = searchQuery.isBlank() ||
                     game.title.contains(searchQuery, ignoreCase = true) ||
@@ -179,57 +200,182 @@ fun LivreGamesScreen(
                 .padding(padding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Server Status Banner
+            // Main Mode Tabs: Nuvem Instantânea vs PSP
             Surface(
                 color = Color(0xFF151A23),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp),
-                shape = RoundedCornerShape(12.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF232B3B))
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = CircleShape,
-                            color = SuccessGreen,
-                            modifier = Modifier.size(8.dp)
-                        ) {}
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = "Servidor Ad-Hoc Oficial Ativo",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = SuccessGreen
+                Row(modifier = Modifier.padding(4.dp)) {
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { selectedTab = 0 },
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (selectedTab == 0) Color(0xFF8B5CF6) else Color.Transparent
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Bolt,
+                                contentDescription = null,
+                                tint = if (selectedTab == 0) Color.White else Color(0xFFA78BFA),
+                                modifier = Modifier.size(16.dp)
                             )
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Oracle Cloud: ${serverInfo?.proAdhocServer ?: "164.152.40.160"}:${serverInfo?.portOffset ?: 10000}",
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "Nuvem Instantânea",
+                                fontSize = 12.sp,
+                                fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTab == 0) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
                     Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { selectedTab = 1 },
                         shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFF2979FF).copy(alpha = 0.15f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2979FF).copy(alpha = 0.4f)),
-                        modifier = Modifier.clickable { showMultiplayerGuideDialog = true }
+                        color = if (selectedTab == 1) Color(0xFF8B5CF6) else Color.Transparent
                     ) {
-                        Text(
-                            text = "Guia Multiplayer",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF64B5F6),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                        Row(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Download,
+                                contentDescription = null,
+                                tint = if (selectedTab == 1) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "PSP (Download)",
+                                fontSize = 12.sp,
+                                fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTab == 1) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (selectedTab == 0) {
+                // Instant Cloud Banner
+                Surface(
+                    color = Color(0xFF151A23),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.35f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFF00E676),
+                                modifier = Modifier.size(8.dp)
+                            ) {}
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "⚡ 100% Nuvem Sem Download",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF00E676)
+                                )
+                                Text(
+                                    text = "WebAssembly 60 FPS • Multiplayer WebRTC",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF00E676).copy(alpha = 0.15f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E676).copy(alpha = 0.4f)),
+                            modifier = Modifier.clickable { showJoinRoomDialog = true }
+                        ) {
+                            Text(
+                                text = "🔑 Entrar com Código",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF00E676),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
+            } else {
+                // PSP Server Status Banner
+                Surface(
+                    color = Color(0xFF151A23),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF232B3B))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CircleShape,
+                                color = SuccessGreen,
+                                modifier = Modifier.size(8.dp)
+                            ) {}
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Servidor Ad-Hoc Oficial Ativo",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = SuccessGreen
+                                )
+                                Text(
+                                    text = "Oracle Cloud: ${serverInfo?.proAdhocServer ?: "164.152.40.160"}:${serverInfo?.portOffset ?: 10000}",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF2979FF).copy(alpha = 0.15f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2979FF).copy(alpha = 0.4f)),
+                            modifier = Modifier.clickable { showMultiplayerGuideDialog = true }
+                        ) {
+                            Text(
+                                text = "Guia Multiplayer",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF64B5F6),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -351,82 +497,127 @@ fun LivreGamesScreen(
                         }
                     }
                 }
-            } else if (filteredGames.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.SearchOff,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            "Nenhum jogo encontrado.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 14.sp
-                        )
+            } else if (selectedTab == 0) {
+                // TAB 0: JOGOS INSTANTÂNEOS (NUVEM)
+                if (filteredInstantGames.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.SearchOff,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                "Nenhum jogo instantâneo encontrado.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        items(filteredInstantGames, key = { it.id }) { instantGame ->
+                            InstantGameCard(
+                                game = instantGame,
+                                onPlaySolo = {
+                                    activeInstantGame = instantGame
+                                    instantRoomCode = null
+                                    instantMode = null
+                                },
+                                onPlayMultiplayer = {
+                                    activeInstantGame = instantGame
+                                    instantRoomCode = null
+                                    instantMode = "host"
+                                }
+                            )
+                        }
                     }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    items(filteredGames, key = { it.id }) { game ->
-                        GameCard(
-                            game = game,
-                            downloadProgress = downloadStates[game.id],
-                            isDownloaded = downloadManager.isGameDownloaded(game.fileName, game.sizeBytes),
-                            onDownloadClick = {
-                                downloadManager.startDownload(
-                                    gameId = game.id,
-                                    downloadUrl = game.downloadUrl,
-                                    fileName = game.fileName,
-                                    expectedSizeBytes = game.sizeBytes
-                                )
-                            },
-                            onCancelDownload = {
-                                downloadManager.cancelDownload(game.id)
-                            },
-                            onPlayClick = {
-                                val gameFile = downloadManager.getGameFile(game.fileName)
-                                if (gameFile.exists()) {
-                                    // 1. Inject PPSSPP multiplayer network settings
-                                    PpssppConfigManager.injectMultiplayerConfig(
-                                        context = context,
-                                        serverIp = serverInfo?.proAdhocServer ?: "164.152.40.160",
-                                        portOffset = serverInfo?.portOffset ?: 10000
+                // TAB 1: JOGOS PSP (DOWNLOAD)
+                if (filteredGames.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.SearchOff,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                "Nenhum jogo encontrado.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        items(filteredGames, key = { it.id }) { game ->
+                            GameCard(
+                                game = game,
+                                downloadProgress = downloadStates[game.id],
+                                isDownloaded = downloadManager.isGameDownloaded(game.fileName, game.sizeBytes),
+                                onDownloadClick = {
+                                    downloadManager.startDownload(
+                                        gameId = game.id,
+                                        downloadUrl = game.downloadUrl,
+                                        fileName = game.fileName,
+                                        expectedSizeBytes = game.sizeBytes
                                     )
+                                },
+                                onCancelDownload = {
+                                    downloadManager.cancelDownload(game.id)
+                                },
+                                onPlayClick = {
+                                    val gameFile = downloadManager.getGameFile(game.fileName)
+                                    if (gameFile.exists()) {
+                                        // 1. Inject PPSSPP multiplayer network settings
+                                        PpssppConfigManager.injectMultiplayerConfig(
+                                            context = context,
+                                            serverIp = serverInfo?.proAdhocServer ?: "164.152.40.160",
+                                            portOffset = serverInfo?.portOffset ?: 10000
+                                        )
 
-                                    // 2. Check if PPSSPP is installed
-                                    if (!PpssppConfigManager.isPpssppInstalled(context)) {
-                                        selectedGameForGuide = game
-                                        showInstallPpssppDialog = true
-                                    } else {
-                                        // 3. Launch game directly
-                                        val launched = PpssppConfigManager.launchGame(context, gameFile)
-                                        if (launched) {
-                                            Toast.makeText(
-                                                context,
-                                                "Iniciando ${game.title}! Servidor Ad-Hoc conectado.",
-                                                Toast.LENGTH_LONG
-                                            ).show()
+                                        // 2. Check if PPSSPP is installed
+                                        if (!PpssppConfigManager.isPpssppInstalled(context)) {
+                                            selectedGameForGuide = game
+                                            showInstallPpssppDialog = true
                                         } else {
-                                            Toast.makeText(
-                                                context,
-                                                "Abra o PPSSPP e selecione o jogo na pasta do LivreChat.",
-                                                Toast.LENGTH_LONG
-                                            ).show()
+                                            // 3. Launch game directly
+                                            val launched = PpssppConfigManager.launchGame(context, gameFile)
+                                            if (launched) {
+                                                Toast.makeText(
+                                                    context,
+                                                    "Iniciando ${game.title}! Servidor Ad-Hoc conectado.",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            } else {
+                                                Toast.makeText(
+                                                    context,
+                                                    "Abra o PPSSPP e selecione o jogo na pasta do LivreChat.",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
                                         }
                                     }
+                                },
+                                onDeleteClick = {
+                                    gameToDelete = game
                                 }
-                            },
-                            onDeleteClick = {
-                                gameToDelete = game
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -564,6 +755,283 @@ fun LivreGamesScreen(
                 }
             }
         )
+    }
+
+    // Active Instant Game Fullscreen Dialog
+    if (activeInstantGame != null) {
+        val currentUsername = LivreChatApp.instance.preferencesManager.currentDisplayName
+            ?: LivreChatApp.instance.preferencesManager.currentUsername
+            ?: "Jogador"
+        InstantGameDialog(
+            game = activeInstantGame!!,
+            playerName = currentUsername,
+            initialRoomCode = instantRoomCode,
+            initialMode = instantMode,
+            onDismiss = {
+                activeInstantGame = null
+                instantRoomCode = null
+                instantMode = null
+            }
+        )
+    }
+
+    // Join Multiplayer Room Dialog
+    if (showJoinRoomDialog) {
+        var selectedGameForJoin by remember { mutableStateOf(instantGames.firstOrNull()) }
+        AlertDialog(
+            onDismissRequest = { showJoinRoomDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Group,
+                        contentDescription = null,
+                        tint = Color(0xFF00E676)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Entrar em Sala Multiplayer", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Digite o código da sala gerado pelo seu amigo para conectar e jogar na hora:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = roomCodeInput,
+                        onValueChange = { roomCodeInput = it.uppercase() },
+                        placeholder = { Text("EX: BOMB-8921") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text("Selecione o jogo:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(instantGames) { ig ->
+                            val isSel = selectedGameForJoin?.id == ig.id
+                            FilterChip(
+                                selected = isSel,
+                                onClick = { selectedGameForJoin = ig },
+                                label = { Text(ig.title, fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF8B5CF6),
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (roomCodeInput.isNotBlank() && selectedGameForJoin != null) {
+                            activeInstantGame = selectedGameForJoin
+                            instantRoomCode = roomCodeInput.trim()
+                            instantMode = "join"
+                            showJoinRoomDialog = false
+                        } else {
+                            Toast.makeText(context, "Digite o código da sala e selecione o jogo", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF00E676),
+                        contentColor = Color(0xFF0B0E14)
+                    )
+                ) {
+                    Text("Conectar e Jogar", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showJoinRoomDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun InstantGameCard(
+    game: InstantGameDto,
+    onPlaySolo: () -> Unit,
+    onPlayMultiplayer: () -> Unit
+) {
+    Surface(
+        color = Color(0xFF151A23),
+        shape = RoundedCornerShape(16.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.35f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                AsyncImage(
+                    model = game.coverUrl,
+                    contentDescription = game.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(width = 85.dp, height = 115.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF1F2937))
+                )
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF8B5CF6).copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = game.category,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFA78BFA),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF00E676).copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "⚡ INSTANTÂNEO",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF00E676),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = game.title,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    if (game.subtitle.isNotBlank()) {
+                        Text(
+                            text = game.subtitle,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFF232B3B)
+                        ) {
+                            Text(
+                                text = "⚡ 60 FPS Nuvem",
+                                fontSize = 10.sp,
+                                color = Color(0xFFA78BFA),
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFF232B3B)
+                        ) {
+                            Text(
+                                text = "👥 ${game.maxPlayers} Jogadores",
+                                fontSize = 10.sp,
+                                color = Color(0xFF64B5F6),
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = game.description,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Play Solo
+                Button(
+                    onClick = onPlaySolo,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF8B5CF6),
+                        contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(vertical = 10.dp)
+                ) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Jogar Solo",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+
+                // Play Multiplayer
+                Button(
+                    onClick = onPlayMultiplayer,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF00E676),
+                        contentColor = Color(0xFF0B0E14)
+                    ),
+                    contentPadding = PaddingValues(vertical = 10.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Group,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Multiplayer",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
     }
 }
 

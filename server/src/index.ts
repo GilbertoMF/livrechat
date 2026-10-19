@@ -13,6 +13,7 @@ import { StatusController } from './modules/status/status.controller';
 import { MediaController, uploadMiddleware } from './modules/media/media.controller';
 import { LivreTubeController } from './modules/livretube/livretube.controller';
 import { gamesRouter } from './modules/games/games.controller';
+import { netplayManager, netplayRouter } from './modules/games/netplay.server';
 import { WebSocketManager } from './websocket/ws.server';
 import { fcmService } from './services/fcm.service';
 
@@ -35,8 +36,12 @@ app.get(['/', '/download', '/baixar', '/app'], (req, res) => {
 
 // Latest APK redirect
 app.get(['/apks/livrechat-latest.apk', '/download/latest'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.18-universal.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.20-universal.apk');
 });
+
+// Games static hosting (CSO / ISO files)
+const gamesStaticDir = process.env.GAMES_DIR || '/home/ubuntu/livrechat/games';
+app.use('/games', express.static(gamesStaticDir));
 
 // Health check
 app.get('/health', async (req, res) => {
@@ -48,7 +53,7 @@ app.get('/health', async (req, res) => {
   res.status(200).json({
     status: 'online',
     appName: 'LivreChat Server',
-    version: '1.1.19',
+    version: '1.1.20',
     fcmInitialized: fcmService.isAvailable(),
     registeredFcmDevices,
     timestamp: new Date().toISOString()
@@ -60,14 +65,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 29;
+  const LATEST_CODE = 30;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.19',
+    latestVersion: '1.1.20',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -75,10 +80,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.19: Chegou o LivreGames! Catálogo integrado de jogos PSP multiplayer sob demanda com servidor Ad-Hoc oficial automático na Oracle Cloud!',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.19-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.19-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.19-universal.apk`,
+      : 'Nova versão 1.1.20: Chegou o LivreGames Instant Cloud! Jogue Super Bomberman 2, Mario Kart, Mortal Kombat 3 e mais na nuvem sem baixar nada, com gamepad touch virtual e multiplayer com 1 toque!',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.20-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.20-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.20-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -86,30 +91,42 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.19',
-      versionCode: 29,
+      version: '1.1.20',
+      versionCode: 30,
       minSupportedVersionCode: 13,
-      releaseDate: '2026-10-18',
+      releaseDate: '2026-10-19',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Atualização 1.1.19: Apresentando o LivreGames — jogos de PSP sob demanda com multiplayer automático no servidor oficial.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.19-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.19-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.19-universal.apk`,
+      message: 'Atualização 1.1.20: Apresentando o LivreGames Instant Nuvem — jogos clássicos instantâneos a 60 FPS sem download e multiplayer em tempo real com pareamento por código!',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.20-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.20-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.20-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '24.2 MB',
       sizeMbUniversal: '30.4 MB'
     },
     versions: [
       {
+        version: '1.1.20',
+        versionCode: 30,
+        releaseDate: '2026-10-19',
+        isLatest: true,
+        changelog: 'LivreGames Instant Cloud Play (sem download) a 60 FPS com WebAssembly, gamepad touch e multiplayer 1-toque.',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.20-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '20.9 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.20-armv7.apk` },
+          { type: 'universal', name: 'APK Universal Completo', size: '30.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.20-universal.apk` }
+        ]
+      },
+      {
         version: '1.1.19',
         versionCode: 29,
         releaseDate: '2026-10-18',
-        isLatest: true,
-        changelog: 'Versão 1.1.19: Chegou o LivreGames! Catálogo integrado de jogos PSP multiplayer sob demanda (Dragon Ball Z Shin Budokai, GTA VCS, Naruto, Tekken, NFS, Bomberman, PES); Download direto no app com progresso em tempo real; Conexão automática ao servidor oficial Ad-Hoc na Oracle Cloud VPS sem configuração manual; Lançador integrado com suporte a 60 FPS e controles.',
+        isLatest: false,
+        changelog: 'LivreGames PSP com catálogo sob demanda e servidor Ad-Hoc oficial.',
         downloads: [
-          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.19-arm64.apk` },
-          { type: 'armv7', name: 'APK 32-bit ARMv7 (Moto e6i / Básicos)', size: '20.9 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.19-armv7.apk` },
+          { type: 'arm64', name: 'APK Leve ARM64', size: '24.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.19-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7', size: '20.9 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.19-armv7.apk` },
           { type: 'universal', name: 'APK Universal Completo', size: '30.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.19-universal.apk` }
         ]
       },
@@ -525,9 +542,12 @@ app.get('/api/livretube/video/:id', LivreTubeController.getVideoDetails);
 // LIVREGAMES (PSP Retro Catalog & Multiplayer Server)
 // ==========================================
 app.use('/api/games', gamesRouter);
+app.use('/api/games/netplay', netplayRouter);
+app.use('/list', netplayRouter); // Compatibility with EmulatorJS default /list endpoint
 
-// Attach WebSocket Manager
+// Attach WebSocket Manager & Netplay Socket.IO
 export const wsManager = new WebSocketManager(server);
+netplayManager.init(server);
 
 // Start server
 async function startServer() {
@@ -537,6 +557,7 @@ async function startServer() {
     console.log(` LivreChat Server iniciado na porta ${CONFIG.PORT}`);
     console.log(` HTTP API: http://localhost:${CONFIG.PORT}`);
     console.log(` WebSocket: ws://localhost:${CONFIG.PORT}/ws`);
+    console.log(` Netplay Socket.IO: http://localhost:${CONFIG.PORT}/socket.io`);
     console.log(` Modo: ${CONFIG.NODE_ENV}`);
     console.log(`====================================================`);
   });

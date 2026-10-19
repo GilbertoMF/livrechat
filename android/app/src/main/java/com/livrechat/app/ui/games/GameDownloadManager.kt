@@ -102,7 +102,7 @@ class GameDownloadManager(private val context: Context) {
                 inputStream = body.byteStream()
                 outputStream = FileOutputStream(tempFile)
 
-                val buffer = ByteArray(64 * 1024) // 64KB buffer
+                val buffer = ByteArray(128 * 1024) // 128KB high-speed buffer
                 var bytesRead: Int
                 var downloaded: Long = 0L
                 var lastProgressUpdate = System.currentTimeMillis()
