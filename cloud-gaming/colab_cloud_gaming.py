@@ -718,18 +718,20 @@ async def run_server(game_path):
     await runner.setup()
     site = web.TCPSite(runner, '127.0.0.1', PORT)
     await site.start()
-    print(f"✅ Servidor Web local ativo na porta {PORT}!")
+    print(f"✅ Servidor Web local ativo na porta {PORT}!", flush=True)
 
     # Iniciar Jogo PPSSPP
-    print("🕹️ Iniciando PPSSPP no display :1...")
+    print("🕹️ Iniciando PPSSPP no display :1...", flush=True)
     game_proc = subprocess.Popen(
         ["./squashfs-root/AppRun", game_path],
-        env={**os.environ, "DISPLAY": ":1"}
+        env={**os.environ, "DISPLAY": ":1"},
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
     )
     time.sleep(2)
 
     # Iniciar FFmpeg Capture & Stream
-    print("📹 Iniciando codificador de vídeo a 60 FPS...")
+    print("📹 Iniciando codificador de vídeo a 60 FPS...", flush=True)
     ffmpeg_cmd = [
         "ffmpeg", "-y",
         "-f", "x11grab", "-draw_mouse", "0", "-framerate", str(FPS),
@@ -744,38 +746,64 @@ async def run_server(game_path):
     ]
     ffmpeg_proc = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    # Iniciar Cloudflare Tunnel
-    print("🌐 [6/6] Criando Túnel Seguro Cloudflare...")
+    # Iniciar Cloudflare Tunnel com logfile não-bloqueante
+    print("🌐 [6/6] Criando Túnel Seguro Cloudflare...", flush=True)
+    os.system("rm -f /content/cloudflared.log")
     tunnel_proc = subprocess.Popen(
-        ["./cloudflared", "tunnel", "--url", f"http://127.0.0.1:{PORT}"],
-        stderr=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        text=True
+        ["./cloudflared", "tunnel", "--url", f"http://127.0.0.1:{PORT}", "--logfile", "/content/cloudflared.log"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
     )
 
     tunnel_url = None
     start_t = time.time()
-    while time.time() - start_t < 25:
-        line = tunnel_proc.stderr.readline()
-        m = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
-        if m:
-            tunnel_url = m.group(0)
-            break
+    while time.time() - start_t < 35:
+        time.sleep(1)
+        if os.path.exists("/content/cloudflared.log"):
+            try:
+                with open("/content/cloudflared.log", "r", errors="ignore") as f:
+                    log_content = f.read()
+                    m = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', log_content)
+                    if m:
+                        tunnel_url = m.group(0)
+                        break
+            except Exception:
+                pass
 
     if not tunnel_url:
-        print("❌ Erro ao obter URL do túnel. Verifique a conexão.")
+        print("❌ Erro ao obter URL do túnel. Verifique a conexão.", flush=True)
+        if os.path.exists("/content/cloudflared.log"):
+            print("Logs do Cloudflared:\n" + open("/content/cloudflared.log").read()[:500])
         return
 
     # Renderizar Card de Conexão com QR Code
+    # Exibir Link e QR Code no terminal/notebook de forma garantida
+    print("\n" + "="*60, flush=True)
+    print("🎮 LIVREGAMES 3D CLOUD ATIVO!", flush=True)
+    print("⚡ Renderizado pela GPU Tesla T4 no Google Colab", flush=True)
+    print("📱 Abra o link abaixo no seu celular para jogar:", flush=True)
+    print(f"\n👉 LINK: {tunnel_url}\n", flush=True)
+    print("="*60, flush=True)
+
+    try:
+        import qrcode
+        qr = qrcode.QRCode(box_size=1, border=1)
+        qr.add_data(tunnel_url)
+        qr.make(fit=True)
+        print("\n📷 ESCANEIE O QR CODE COM A CÂMERA DO CELULAR:\n", flush=True)
+        qr.print_ascii(invert=True)
+    except Exception:
+        pass
+
     try:
         from IPython.display import HTML, display
         import qrcode
         import io, base64
 
-        qr = qrcode.QRCode(box_size=5, border=2)
-        qr.add_data(tunnel_url)
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
+        qr_img = qrcode.QRCode(box_size=5, border=2)
+        qr_img.add_data(tunnel_url)
+        qr_img.make(fit=True)
+        img = qr_img.make_image(fill_color="black", back_color="white")
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         qr_b64 = base64.b64encode(buf.getvalue()).decode()
@@ -802,12 +830,10 @@ async def run_server(game_path):
         </div>
         """))
     except Exception:
-        print("\n" + "="*60)
-        print("🎮 LIVREGAMES CLOUD ATIVO!")
-        print(f"👉 LINK PARA JOGAR NO CELULAR: {tunnel_url}")
-        print("="*60 + "\n")
+        pass
 
     # Manter servidor ativo
+    print("\n🟢 Servidor ativo e transmitindo a 60 FPS. Bom jogo!\n", flush=True)
     while True:
         await asyncio.sleep(10)
 
