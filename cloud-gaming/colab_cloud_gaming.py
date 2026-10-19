@@ -598,11 +598,7 @@ def setup_ppsspp():
             os.system(f"ln -s '{drive_saves}' '{local_saves}'")
         print("💾 Google Drive detectado! Saves sincronizados com o seu Drive.")
 
-    config_dir = base_psp / "SYSTEM"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    
-    ini_path = config_dir / "ppsspp.ini"
-    ini_path.write_text(f"""[General]
+    ini_content = f"""[General]
 FirstRun = False
 AutoLoadSaveState = 0
 EnableCheats = False
@@ -610,6 +606,7 @@ ConfirmOnQuit = False
 
 [Graphics]
 GPUBackend = 0
+GraphicsBackend = 0
 FailedGPUBackends = 1,2,3
 ShowFPSCounter = 0
 InternalResolution = 2
@@ -629,7 +626,18 @@ AudioVolume = 10
 
 [Control]
 ShowTouchControls = False
-""")
+"""
+
+    for p in [
+        base_psp / "SYSTEM",
+        Path.home() / ".config" / "ppsspp" / "PSP" / "SYSTEM",
+        Path("/root/.config/ppsspp/PSP/SYSTEM"),
+        Path("/content/.config/ppsspp/PSP/SYSTEM"),
+        Path("/content/memstick/PSP/SYSTEM"),
+        Path("/root/memstick/PSP/SYSTEM")
+    ]:
+        p.mkdir(parents=True, exist_ok=True)
+        (p / "ppsspp.ini").write_text(ini_content)
 
 def download_game(game_url, filename="game.cso"):
     print(f"📥 [3/6] Baixando jogo para a memória do Colab: {filename}...", flush=True)
@@ -649,6 +657,10 @@ def start_virtual_display():
     time.sleep(1)
     os.system("DISPLAY=:1 openbox & > /dev/null 2>&1")
     time.sleep(0.5)
+
+    # Desativar drivers Vulkan do host para forçar OpenGL imediato
+    os.system("mv /etc/vulkan/icd.d/nvidia_icd.json /etc/vulkan/icd.d/nvidia_icd.json.bak > /dev/null 2>&1 || true")
+    os.system("mv /usr/share/vulkan/icd.d/nvidia_icd.json /usr/share/vulkan/icd.d/nvidia_icd.json.bak > /dev/null 2>&1 || true")
 
     # Iniciar PulseAudio em modo root
     os.system("pkill -9 pulseaudio > /dev/null 2>&1")
@@ -742,6 +754,9 @@ async def run_server(game_path):
         "LIBGL_ALWAYS_SOFTWARE": "1",
         "MESA_GL_VERSION_OVERRIDE": "3.3",
         "SDL_VIDEODRIVER": "x11",
+        "VK_ICD_FILENAMES": "/dev/null",
+        "VK_DRIVER_FILES": "/dev/null",
+        "VK_LOADER_DRIVERS_DISABLE": "*",
         "HOME": "/root",
         "XDG_CONFIG_HOME": "/root/.config"
     }
