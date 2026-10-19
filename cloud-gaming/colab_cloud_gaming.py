@@ -21,7 +21,18 @@ GAME_NAME = "Dragon Ball Z: Shin Budokai"
 WIDTH = 960
 HEIGHT = 544
 FPS = 60
-PORT = 8080
+
+def get_free_port(preferred=18080):
+    for port in [preferred, 18081, 18082, 19000, 28080, 8585]:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('127.0.0.1', port))
+                return port
+        except OSError:
+            pass
+    return preferred
+
+PORT = get_free_port(18080)
 
 HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -539,7 +550,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 def setup_environment():
     print("📦 [1/6] Instalando dependências de sistema (Xvfb, FFmpeg, xdotool, PulseAudio)...")
     os.system("apt-get update -qq > /dev/null 2>&1")
-    os.system("apt-get install -y -qq xvfb xdotool ffmpeg pulseaudio libgl1-mesa-dri libsdl2-2.0-0 > /dev/null 2>&1")
+    os.system("apt-get install -y -qq xvfb xdotool ffmpeg pulseaudio libgl1-mesa-dri libsdl2-2.0-0 psmisc > /dev/null 2>&1")
     os.system("pip install -q aiohttp websockets qrcode[pil] > /dev/null 2>&1")
 
     # Baixar jsmpeg.min.js se não existir
@@ -685,10 +696,14 @@ async def run_server(game_path):
     app.router.add_get('/ws/stream', handle_ws_stream)
     app.router.add_get('/ws/input', handle_ws_input)
 
+    global PORT
+    PORT = get_free_port(PORT)
+    os.system(f"fuser -k {PORT}/tcp > /dev/null 2>&1")
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '127.0.0.1', PORT)
     await site.start()
+    print(f"✅ Servidor Web local ativo na porta {PORT}!")
 
     # Iniciar Jogo PPSSPP
     print("🕹️ Iniciando PPSSPP no display :1...")
