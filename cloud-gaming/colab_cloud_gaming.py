@@ -662,9 +662,13 @@ def start_virtual_display():
     os.system("mv /etc/vulkan/icd.d/nvidia_icd.json /etc/vulkan/icd.d/nvidia_icd.json.bak > /dev/null 2>&1 || true")
     os.system("mv /usr/share/vulkan/icd.d/nvidia_icd.json /usr/share/vulkan/icd.d/nvidia_icd.json.bak > /dev/null 2>&1 || true")
 
-    # Iniciar PulseAudio em modo root
+    # Configurar e iniciar PulseAudio como root com permissões de acesso
+    os.system("adduser root pulse-access > /dev/null 2>&1 || true")
+    os.system("mkdir -p /var/run/pulse && chmod 777 /var/run/pulse 2>/dev/null || true")
+    os.system("printf 'default-server = /var/run/pulse/native\\nautospawn = no\\n' > /etc/pulse/client.conf 2>/dev/null || true")
     os.system("pkill -9 pulseaudio > /dev/null 2>&1")
     os.system("pulseaudio --system --disallow-exit --disable-shm --exit-idle-time=-1 --daemonize=yes > /dev/null 2>&1")
+    time.sleep(1)
 
 async def run_server(game_path):
     from aiohttp import web
@@ -747,27 +751,44 @@ async def run_server(game_path):
     await site.start()
     print(f"✅ Servidor Web local ativo na porta {PORT}!", flush=True)
 
-    # Iniciar Jogo PPSSPP
-    ppsspp_env = {
-        **os.environ,
-        "DISPLAY": ":1",
-        "LIBGL_ALWAYS_SOFTWARE": "1",
-        "MESA_GL_VERSION_OVERRIDE": "3.3",
-        "SDL_VIDEODRIVER": "x11",
-        "SDL_AUDIODRIVER": "dummy",
-        "VK_ICD_FILENAMES": "/dev/null",
-        "VK_DRIVER_FILES": "/dev/null",
-        "VK_LOADER_DRIVERS_DISABLE": "*",
-        "HOME": "/root",
-        "XDG_CONFIG_HOME": "/root/.config"
-    }
+    # Criar script launcher para o PPSSPP que garante isolamento e tratamento de áudio
+    launcher_path = Path("/content/run_ppsspp.sh")
+    launcher_content = f"""#!/bin/bash
+export DISPLAY=:1
+export LIBGL_ALWAYS_SOFTWARE=1
+export MESA_GL_VERSION_OVERRIDE=3.3
+export SDL_VIDEODRIVER=x11
+export VK_ICD_FILENAMES=/dev/null
+export VK_DRIVER_FILES=/dev/null
+export VK_LOADER_DRIVERS_DISABLE=*
+export HOME=/root
+export XDG_CONFIG_HOME=/root/.config
+
+# Desativar qualquer override interno de áudio no AppRun se existir
+if [ -f "./squashfs-root/AppRun" ]; then
+    sed -i 's/SDL_AUDIODRIVER=pulse.*/#disabled/g' ./squashfs-root/AppRun 2>/dev/null || true
+fi
+
+# Testar se o PulseAudio está aceitando conexões
+if pactl info > /dev/null 2>&1; then
+    export PULSE_SERVER=/var/run/pulse/native
+    export SDL_AUDIODRIVER=pulseaudio
+else
+    export SDL_AUDIODRIVER=dummy
+fi
+
+exec ./squashfs-root/AppRun --fullscreen "$@"
+"""
+    launcher_path.write_text(launcher_content)
+    os.system("chmod +x /content/run_ppsspp.sh")
+
     print(f"🕹️ Iniciando PPSSPP no display :1 com o jogo {game_path}...", flush=True)
     ppsspp_log = open("/content/ppsspp.log", "w")
     game_proc = subprocess.Popen(
-        ["./squashfs-root/AppRun", "--fullscreen", game_path],
-        env=ppsspp_env,
+        ["/bin/bash", "/content/run_ppsspp.sh", game_path],
         stdout=ppsspp_log,
-        stderr=subprocess.STDOUT
+        stderr=subprocess.STDOUT,
+        cwd=str(Path.cwd())
     )
     time.sleep(3)
 
