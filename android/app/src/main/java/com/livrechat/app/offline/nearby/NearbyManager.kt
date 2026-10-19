@@ -21,9 +21,12 @@ import java.util.UUID
 data class DiscoveredPeer(
     val endpointId: String,
     val deviceName: String,
-    val serviceId: String,
+    val serviceId: String = NearbyManager.SERVICE_ID,
     val isConnecting: Boolean = false,
-    val isConnected: Boolean = false
+    val isConnected: Boolean = false,
+    val isMeshRelayed: Boolean = false,
+    val relayedVia: String? = null,
+    val hops: Int = 0
 )
 
 data class ConnectedPeer(
@@ -36,6 +39,7 @@ data class ConnectedPeer(
  * Gerenciador Singleton de Conexões Offline P2P via Google Nearby Connections API
  * Estratégia: Strategy.P2P_CLUSTER (Suporte a malha multidirecional M-para-N)
  * Transporte: BLE passivo + Wi-Fi Direct / Wi-Fi Aware de alta velocidade sob demanda
+ * Protocolo Gossip: Anúncio e propagação automática de nós conhecidos na malha
  */
 class NearbyManager private constructor(private val context: Context) {
 
@@ -98,6 +102,10 @@ class NearbyManager private constructor(private val context: Context) {
     private val pendingConnectionPeers = Collections.synchronizedSet(HashSet<String>())
     private val initiatedOrIncomingNames = Collections.synchronizedMap(HashMap<String, String>())
 
+    // Tabela de Roteamento Gossip Mesh: Nome do Destinatário -> EndpointId do intermediário (Gateway)
+    val meshRoutingTable = Collections.synchronizedMap(HashMap<String, String>())
+    private var gossipJob: Job? = null
+
     // Cache de pacotes já roteados para evitar loops na malha (Deduplicação de pacotes)
     private val forwardedPacketIds = Collections.synchronizedSet(HashSet<String>())
 
@@ -115,6 +123,9 @@ class NearbyManager private constructor(private val context: Context) {
         }
         startAdvertising()
         startDiscovery()
+        if (_connectedPeers.value.isNotEmpty()) {
+            startGossipLoop()
+        }
     }
 
     fun restartMeshNetwork() {
@@ -129,6 +140,7 @@ class NearbyManager private constructor(private val context: Context) {
     fun stopMeshNetwork() {
         stopAdvertising()
         stopDiscovery()
+        stopGossipLoop()
         try {
             connectionsClient.stopAllEndpoints()
         } catch (e: Exception) {
@@ -136,6 +148,7 @@ class NearbyManager private constructor(private val context: Context) {
         }
         pendingConnectionPeers.clear()
         initiatedOrIncomingNames.clear()
+        meshRoutingTable.clear()
         _connectedPeers.value = emptyMap()
         connectedPeers.value = emptyList()
         _discoveredPeers.value = emptyMap()
@@ -217,7 +230,8 @@ class NearbyManager private constructor(private val context: Context) {
             val peer = DiscoveredPeer(
                 endpointId = endpointId,
                 deviceName = peerName,
-                serviceId = info.serviceId
+                serviceId = info.serviceId,
+                isMeshRelayed = false
             )
             val updated = _discoveredPeers.value.toMutableMap()
             updated[endpointId] = peer
@@ -277,11 +291,15 @@ class NearbyManager private constructor(private val context: Context) {
         }
 
         override fun onEndpointLost(endpointId: String) {
-            Log.i(TAG, "Dispositivo perdeu proximidade: $endpointId")
+            Log.i(TAG, "Dispositivo perdeu proximidade física: $endpointId")
             val updated = _discoveredPeers.value.toMutableMap()
-            updated.remove(endpointId)
-            _discoveredPeers.value = updated
-            discoveredPeers.value = updated.values.toList()
+            // Só remove se não for alcançável via malha Gossip
+            val existing = updated[endpointId]
+            if (existing != null && !existing.isMeshRelayed) {
+                updated.remove(endpointId)
+                _discoveredPeers.value = updated
+                discoveredPeers.value = updated.values.toList()
+            }
         }
     }
 
@@ -334,11 +352,17 @@ class NearbyManager private constructor(private val context: Context) {
                     _connectedPeers.value = map
                     connectedPeers.value = map.values.toList()
 
+                    // Remove da tabela de rotas se agora está direto
+                    meshRoutingTable.remove(peerName)
+
                     scope.launch {
                         dao.updateConexaoContato(peerName, endpointId, true)
                         dao.updateConexaoContato(endpointId, endpointId, true)
                         // Despacha mensagens pendentes armazenadas localmente para este nó
                         drainStoreAndForwardQueue(endpointId)
+                        // Anuncia os nós da malha via Gossip Protocol
+                        broadcastGossipAnnouncement()
+                        startGossipLoop()
                     }
                 }
                 ConnectionsStatusCodes.STATUS_CONNECTION_REJECTED -> {
@@ -366,6 +390,9 @@ class NearbyManager private constructor(private val context: Context) {
             pendingConnectionPeers.remove(peerName)
             initiatedOrIncomingNames.remove(endpointId)
 
+            // Limpa rotas que usavam este nó como gateway
+            meshRoutingTable.entries.removeIf { it.value == endpointId }
+
             scope.launch {
                 dao.desconectarEndpoint(endpointId)
                 if (peerName.isNotBlank()) {
@@ -373,19 +400,78 @@ class NearbyManager private constructor(private val context: Context) {
                 }
             }
 
-            // Se não há nenhum nó conectado, reinicia a malha para reestabelecer o radar
-            scope.launch {
-                delay(2000)
-                if (_connectedPeers.value.isEmpty()) {
-                    Log.d(TAG, "Nenhum peer restante conectado, garantindo que o radar está ativo...")
-                    startMeshNetwork()
+            if (_connectedPeers.value.isEmpty()) {
+                stopGossipLoop()
+                // Se não há nenhum nó conectado, reinicia a malha para reestabelecer o radar
+                scope.launch {
+                    delay(2000)
+                    if (_connectedPeers.value.isEmpty()) {
+                        Log.d(TAG, "Nenhum peer restante conectado, garantindo que o radar está ativo...")
+                        startMeshNetwork()
+                    }
                 }
+            } else {
+                // Atualiza os peers restantes via gossip
+                broadcastGossipAnnouncement()
             }
         }
     }
 
     // -------------------------------------------------------------------------
-    // 3. PAYLOAD CALLBACK E LÓGICA DE REDE EM MALHA (STORE-AND-FORWARD MESH)
+    // 3. GOSSIP PROTOCOL (ANÚNCIO E PROPAGAÇÃO DE NÓS DA MALHA)
+    // -------------------------------------------------------------------------
+
+    private fun startGossipLoop() {
+        gossipJob?.cancel()
+        gossipJob = scope.launch {
+            while (isActive) {
+                delay(8000)
+                broadcastGossipAnnouncement()
+            }
+        }
+    }
+
+    private fun stopGossipLoop() {
+        gossipJob?.cancel()
+        gossipJob = null
+    }
+
+    /**
+     * Anuncia para todos os nós conectados os outros aparelhos que este nó conhece
+     */
+    fun broadcastGossipAnnouncement() {
+        if (_connectedPeers.value.isEmpty()) return
+
+        val connectedNames = _connectedPeers.value.values.map { it.deviceName }.distinct()
+        val allKnownNodes = (connectedNames + meshRoutingTable.keys).distinct().filter {
+            !it.equals(myDeviceName, ignoreCase = true)
+        }
+        if (allKnownNodes.isEmpty()) return
+
+        val gossipPayloadJson = gson.toJson(allKnownNodes)
+        val packet = MeshPacket(
+            packetId = UUID.randomUUID().toString(),
+            senderId = myDeviceId,
+            senderName = myDeviceName,
+            recipientId = "*",
+            recipientName = "*",
+            content = gossipPayloadJson,
+            timestamp = System.currentTimeMillis(),
+            type = "GOSSIP_ANNOUNCE",
+            hops = 1,
+            ttl = 3
+        )
+
+        val json = gson.toJson(packet)
+        val payload = Payload.fromBytes(json.toByteArray(StandardCharsets.UTF_8))
+        val peers = _connectedPeers.value.keys.toList()
+        if (peers.isNotEmpty()) {
+            connectionsClient.sendPayload(peers, payload)
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. PAYLOAD CALLBACK E LÓGICA DE REDE EM MALHA (STORE-AND-FORWARD MESH)
     // -------------------------------------------------------------------------
 
     private val payloadCallback = object : PayloadCallback() {
@@ -421,11 +507,91 @@ class NearbyManager private constructor(private val context: Context) {
             forwardedPacketIds.clear()
         }
 
+        // Se for anúncio de nós via Gossip Protocol
+        if (packet.type == "GOSSIP_ANNOUNCE") {
+            try {
+                val listType = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
+                val announcedNodes: List<String> = gson.fromJson(packet.content, listType) ?: emptyList()
+                val updated = _discoveredPeers.value.toMutableMap()
+                var hasChanges = false
+
+                for (nodeName in announcedNodes) {
+                    if (nodeName.isBlank() || nodeName.equals(myDeviceName, ignoreCase = true)) continue
+
+                    val isDirect = _connectedPeers.value.values.any { it.deviceName.equals(nodeName, ignoreCase = true) }
+                    if (!isDirect) {
+                        meshRoutingTable[nodeName] = fromEndpointId
+
+                        val existing = updated[nodeName]
+                        if (existing == null || !existing.isConnected) {
+                            updated[nodeName] = DiscoveredPeer(
+                                endpointId = nodeName,
+                                deviceName = nodeName,
+                                serviceId = SERVICE_ID,
+                                isConnecting = false,
+                                isConnected = false,
+                                isMeshRelayed = true,
+                                relayedVia = packet.senderName,
+                                hops = packet.hops
+                            )
+                            hasChanges = true
+                        }
+
+                        scope.launch {
+                            val contato = Contato(
+                                id = nodeName,
+                                nomeDispositivo = nodeName,
+                                endpointId = null,
+                                isConectadoDireto = false,
+                                ultimoVisto = System.currentTimeMillis()
+                            )
+                            dao.insertOrUpdateContato(contato)
+                        }
+                    }
+                }
+
+                if (hasChanges) {
+                    _discoveredPeers.value = updated
+                    discoveredPeers.value = updated.values.toList()
+                }
+
+                // Propaga o gossip aos demais peers se TTL permitir
+                if (packet.ttl > 1) {
+                    val relayedGossip = packet.copy(
+                        hops = packet.hops + 1,
+                        ttl = packet.ttl - 1
+                    )
+                    broadcastToOtherPeers(fromEndpointId, relayedGossip)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Falha ao processar anúncio Gossip: ${e.message}")
+            }
+            return
+        }
+
         // Se for pacote de confirmação de entrega (ACK)
         if (packet.type == "ACK") {
-            scope.launch {
-                dao.updateStatusMensagem(packet.content, StatusEntrega.ENTREGUE)
-                Log.i(TAG, "✅ Confirmação de entrega (ACK) recebida para mensagem ID: ${packet.content}")
+            // Verifica se este ACK é para nós ou se devemos retransmitir
+            val isAckForMe = packet.recipientId == myDeviceId ||
+                             packet.recipientName.equals(myDeviceName, ignoreCase = true) ||
+                             packet.recipientName.isBlank()
+
+            if (isAckForMe) {
+                scope.launch {
+                    dao.updateStatusMensagem(packet.content, StatusEntrega.ENTREGUE)
+                    Log.i(TAG, "✅ Confirmação de entrega (ACK) recebida para mensagem ID: ${packet.content}")
+                }
+            } else {
+                // Repassa o ACK para o autor da mensagem
+                val gateway = _connectedPeers.value.entries.firstOrNull {
+                    it.value.deviceName.equals(packet.recipientName, ignoreCase = true)
+                }?.key ?: meshRoutingTable[packet.recipientName]
+
+                if (gateway != null && _connectedPeers.value.containsKey(gateway)) {
+                    sendPacketToEndpoint(gateway, packet)
+                } else {
+                    broadcastToOtherPeers(fromEndpointId, packet)
+                }
             }
             return
         }
@@ -483,7 +649,7 @@ class NearbyManager private constructor(private val context: Context) {
             }
         } else {
             // 3. Roteamento em Malha (Mesh Relay)
-            Log.i(TAG, "🔄 Roteando pacote ${packet.packetId} destinado a ${packet.recipientName} (Hops: ${packet.hops})")
+            Log.i(TAG, "🔄 [Relay Intermediário] Roteando pacote ${packet.packetId} de ${packet.senderName} para ${packet.recipientName} (Hops: ${packet.hops})")
 
             if (packet.ttl <= 1) {
                 Log.w(TAG, "Pacote descartado: TTL esgotado")
@@ -495,8 +661,26 @@ class NearbyManager private constructor(private val context: Context) {
                 ttl = packet.ttl - 1
             )
 
-            storeAndForwardQueue.add(relayedPacket)
-            broadcastToOtherPeers(fromEndpointId, relayedPacket)
+            // Verifica se o destinatário final está conectado diretamente a este nó intermediário
+            val directTargetEndpoint = _connectedPeers.value.entries.firstOrNull { entry ->
+                entry.key == packet.recipientId ||
+                entry.value.deviceName.equals(packet.recipientName, ignoreCase = true) ||
+                (packet.recipientName.isNotBlank() && entry.value.deviceName.contains(packet.recipientName, ignoreCase = true))
+            }?.key
+
+            if (directTargetEndpoint != null) {
+                Log.i(TAG, "🎯 Destinatário final ${packet.recipientName} está conectado neste nó! Entregando direto para $directTargetEndpoint...")
+                sendPacketToEndpoint(directTargetEndpoint, relayedPacket)
+            } else {
+                val gateway = meshRoutingTable[packet.recipientName]
+                if (gateway != null && gateway != fromEndpointId && _connectedPeers.value.containsKey(gateway)) {
+                    Log.i(TAG, "Roteando para gateway conhecido $gateway...")
+                    sendPacketToEndpoint(gateway, relayedPacket)
+                } else {
+                    storeAndForwardQueue.add(relayedPacket)
+                    broadcastToOtherPeers(fromEndpointId, relayedPacket)
+                }
+            }
         }
     }
 
@@ -545,7 +729,7 @@ class NearbyManager private constructor(private val context: Context) {
                 )
             )
 
-            // Localiza endpoint direto conectado que corresponda ao destinatário
+            // 1. Procura conexão direta nos peers conectados
             val directEndpoint = _connectedPeers.value.entries.firstOrNull { entry ->
                 entry.key == recipientId ||
                 entry.value.deviceName.equals(targetName, ignoreCase = true) ||
@@ -553,9 +737,14 @@ class NearbyManager private constructor(private val context: Context) {
                 targetName.contains(entry.value.deviceName, ignoreCase = true)
             }?.key
 
-            if (directEndpoint != null) {
-                Log.i(TAG, "Enviando mensagem direta para $targetName via endpoint $directEndpoint")
-                sendPacketToEndpoint(directEndpoint, packet)
+            // 2. Se não estiver conectado direto, procura na tabela de roteamento da malha (Gossip)
+            val gatewayEndpoint = directEndpoint ?: meshRoutingTable[targetName] ?: meshRoutingTable.entries.firstOrNull {
+                it.key.equals(targetName, ignoreCase = true) || it.key.contains(targetName, ignoreCase = true)
+            }?.value
+
+            if (gatewayEndpoint != null && _connectedPeers.value.containsKey(gatewayEndpoint)) {
+                Log.i(TAG, "Roteando mensagem para $targetName através do endpoint $gatewayEndpoint (Direto=${directEndpoint != null})")
+                sendPacketToEndpoint(gatewayEndpoint, packet)
             } else {
                 Log.i(TAG, "Destinatário não conectado diretamente. Armazenando na fila e propagando na malha...")
                 forwardedPacketIds.add(packet.packetId)
@@ -582,14 +771,21 @@ class NearbyManager private constructor(private val context: Context) {
             hops = 0,
             ttl = 5
         )
+
+        // Se temos conexão direta com o remetente original
         if (directEndpointId != null && _connectedPeers.value.containsKey(directEndpointId)) {
             val json = gson.toJson(ack)
             val payload = Payload.fromBytes(json.toByteArray(StandardCharsets.UTF_8))
             connectionsClient.sendPayload(directEndpointId, payload).addOnSuccessListener {
-                Log.d(TAG, "ACK enviado com sucesso para $directEndpointId")
+                Log.d(TAG, "ACK enviado direto com sucesso para $directEndpointId")
             }
         } else {
-            broadcastToAllPeers(ack)
+            val gateway = meshRoutingTable[originalSenderName]
+            if (gateway != null && _connectedPeers.value.containsKey(gateway)) {
+                sendPacketToEndpoint(gateway, ack)
+            } else {
+                broadcastToAllPeers(ack)
+            }
         }
     }
 
