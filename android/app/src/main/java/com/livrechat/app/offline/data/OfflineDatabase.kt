@@ -16,10 +16,10 @@ interface OfflineDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateContato(contato: Contato)
 
-    @Query("UPDATE offline_contatos SET endpointId = :endpointId, isConectadoDireto = :isConectado, ultimoVisto = :timestamp WHERE id = :id")
+    @Query("UPDATE offline_contatos SET endpointId = :endpointId, isConectadoDireto = :isConectado, ultimoVisto = :timestamp WHERE id = :id OR nomeDispositivo = :id")
     suspend fun updateConexaoContato(id: String, endpointId: String?, isConectado: Boolean, timestamp: Long = System.currentTimeMillis())
 
-    @Query("UPDATE offline_contatos SET isConectadoDireto = 0 WHERE endpointId = :endpointId")
+    @Query("UPDATE offline_contatos SET isConectadoDireto = 0 WHERE endpointId = :endpointId OR id = :endpointId OR nomeDispositivo = :endpointId")
     suspend fun desconectarEndpoint(endpointId: String)
 
     // CONVERSAS
@@ -37,6 +37,8 @@ interface OfflineDao {
            OR remetenteNome = :contactName 
            OR remetenteId = :contactName 
            OR destinatarioId = :contactName
+           OR remetenteNome LIKE '%' || :contactName || '%'
+           OR destinatarioId LIKE '%' || :contactName || '%'
         ORDER BY timestamp ASC
     """)
     fun getMensagensForContato(contactId: String, contactName: String): Flow<List<Mensagem>>

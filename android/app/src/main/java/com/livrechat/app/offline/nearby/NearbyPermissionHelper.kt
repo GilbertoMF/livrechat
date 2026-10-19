@@ -41,4 +41,37 @@ object NearbyPermissionHelper {
             ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
         }
     }
+
+    fun isBluetoothEnabled(): Boolean {
+        return try {
+            val adapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+            adapter != null && adapter.isEnabled
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun isLocationEnabled(context: Context): Boolean {
+        return try {
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+            if (locationManager != null) {
+                androidx.core.location.LocationManagerCompat.isLocationEnabled(locationManager)
+            } else false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun isWifiEnabled(context: Context): Boolean {
+        return try {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+            wifiManager?.isWifiEnabled ?: false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun isHardwareReady(context: Context): Boolean {
+        return hasNearbyPermissions(context) && isBluetoothEnabled() && isLocationEnabled(context)
+    }
 }

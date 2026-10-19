@@ -2,7 +2,10 @@ package com.livrechat.app.offline.nearby
 
 import android.content.Context
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.util.Log
+import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
 import com.google.gson.Gson
@@ -69,7 +72,13 @@ class NearbyManager private constructor(private val context: Context) {
     }
 
     val myDeviceName: String by lazy {
-        "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
+        val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+        val model = Build.MODEL
+        if (model.startsWith(manufacturer, ignoreCase = true)) {
+            model
+        } else {
+            "$manufacturer $model"
+        }
     }
 
     // Estados observáveis pela interface Compose
@@ -84,6 +93,10 @@ class NearbyManager private constructor(private val context: Context) {
 
     private val _connectedPeers = MutableStateFlow<Map<String, ConnectedPeer>>(emptyMap())
     val connectedPeers = MutableStateFlow<List<ConnectedPeer>>(emptyList())
+
+    // Rastreamento de conexões pendentes para desempate determinístico (evita colisão de handshake)
+    private val pendingConnectionPeers = Collections.synchronizedSet(HashSet<String>())
+    private val initiatedOrIncomingNames = Collections.synchronizedMap(HashMap<String, String>())
 
     // Cache de pacotes já roteados para evitar loops na malha (Deduplicação de pacotes)
     private val forwardedPacketIds = Collections.synchronizedSet(HashSet<String>())
@@ -104,10 +117,25 @@ class NearbyManager private constructor(private val context: Context) {
         startDiscovery()
     }
 
+    fun restartMeshNetwork() {
+        Log.i(TAG, "Reiniciando malha Nearby Connections...")
+        stopMeshNetwork()
+        scope.launch {
+            delay(1000)
+            startMeshNetwork()
+        }
+    }
+
     fun stopMeshNetwork() {
         stopAdvertising()
         stopDiscovery()
-        connectionsClient.stopAllEndpoints()
+        try {
+            connectionsClient.stopAllEndpoints()
+        } catch (e: Exception) {
+            Log.w(TAG, "Erro ao parar endpoints: ${e.message}")
+        }
+        pendingConnectionPeers.clear()
+        initiatedOrIncomingNames.clear()
         _connectedPeers.value = emptyMap()
         connectedPeers.value = emptyList()
         _discoveredPeers.value = emptyMap()
@@ -129,13 +157,20 @@ class NearbyManager private constructor(private val context: Context) {
             _isAdvertising.value = true
             Log.i(TAG, "Advertising iniciado com sucesso para $myDeviceName")
         }.addOnFailureListener { e ->
-            _isAdvertising.value = false
-            Log.e(TAG, "Falha ao iniciar Advertising: ${e.message}")
+            if (e is ApiException && e.statusCode == ConnectionsStatusCodes.STATUS_ALREADY_ADVERTISING) {
+                _isAdvertising.value = true
+                Log.d(TAG, "Já estava em Advertising")
+            } else {
+                _isAdvertising.value = false
+                Log.e(TAG, "Falha ao iniciar Advertising: ${e.message}")
+            }
         }
     }
 
     fun stopAdvertising() {
-        connectionsClient.stopAdvertising()
+        try {
+            connectionsClient.stopAdvertising()
+        } catch (e: Exception) {}
         _isAdvertising.value = false
     }
 
@@ -153,26 +188,35 @@ class NearbyManager private constructor(private val context: Context) {
             _isDiscovering.value = true
             Log.i(TAG, "Discovery iniciado com sucesso no cluster")
         }.addOnFailureListener { e ->
-            _isDiscovering.value = false
-            Log.e(TAG, "Falha ao iniciar Discovery: ${e.message}")
+            if (e is ApiException && e.statusCode == ConnectionsStatusCodes.STATUS_ALREADY_DISCOVERING) {
+                _isDiscovering.value = true
+                Log.d(TAG, "Já estava em Discovery")
+            } else {
+                _isDiscovering.value = false
+                Log.e(TAG, "Falha ao iniciar Discovery: ${e.message}")
+            }
         }
     }
 
     fun stopDiscovery() {
-        connectionsClient.stopDiscovery()
+        try {
+            connectionsClient.stopDiscovery()
+        } catch (e: Exception) {}
         _isDiscovering.value = false
     }
 
     // -------------------------------------------------------------------------
-    // 2. CALLBACKS DE CONEXÃO E DESCOBERTA
+    // 2. CALLBACKS DE CONEXÃO E DESCOBERTA (COM TIE-BREAKER DETERMINÍSTICO)
     // -------------------------------------------------------------------------
 
     private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
-            Log.i(TAG, "Dispositivo próximo encontrado: $endpointId (${info.endpointName})")
+            val peerName = info.endpointName.ifBlank { "Dispositivo Próximo" }
+            Log.i(TAG, "Dispositivo próximo encontrado via BLE/WiFi: $endpointId ($peerName)")
+
             val peer = DiscoveredPeer(
                 endpointId = endpointId,
-                deviceName = info.endpointName,
+                deviceName = peerName,
                 serviceId = info.serviceId
             )
             val updated = _discoveredPeers.value.toMutableMap()
@@ -180,20 +224,56 @@ class NearbyManager private constructor(private val context: Context) {
             _discoveredPeers.value = updated
             discoveredPeers.value = updated.values.toList()
 
-            // Salva ou atualiza contato no Room
+            // Salva ou atualiza contato no Room usando o nome do dispositivo como ID estável
             scope.launch {
                 val contato = Contato(
-                    id = endpointId,
-                    nomeDispositivo = info.endpointName,
+                    id = peerName,
+                    nomeDispositivo = peerName,
                     endpointId = endpointId,
-                    isConectadoDireto = false,
+                    isConectadoDireto = _connectedPeers.value.containsKey(endpointId),
                     ultimoVisto = System.currentTimeMillis()
                 )
                 dao.insertOrUpdateContato(contato)
             }
 
-            // Conexão automática para formar a malha descentralizada transparente
-            connectToPeer(endpointId, info.endpointName)
+            // Verifica se já temos conexão ativa com esse dispositivo (pelo nome ou endpoint)
+            val alreadyConnected = _connectedPeers.value.values.any {
+                it.deviceName.equals(peerName, ignoreCase = true) || it.endpointId == endpointId
+            }
+            if (alreadyConnected) {
+                Log.d(TAG, "Já conectado a $peerName ($endpointId)")
+                return
+            }
+
+            // Verifica se já há uma conexão em andamento para este peer
+            if (pendingConnectionPeers.contains(peerName)) {
+                Log.d(TAG, "Conexão com $peerName já está em andamento")
+                return
+            }
+
+            // TIE-BREAKER DETERMINÍSTICO:
+            // Para evitar colisões de requisições simultâneas (dois nós ligando requestConnection ao mesmo tempo),
+            // apenas o dispositivo cujo nome for lexicograficamente MAIOR toma a iniciativa de conectar.
+            // O outro dispositivo simplesmente aguarda e aceita automaticamente.
+            val shouldInitiate = myDeviceName.compareTo(peerName, ignoreCase = true) > 0
+
+            if (shouldInitiate) {
+                Log.i(TAG, "🤖 [Tie-Breaker: Iniciador] Meu nome ($myDeviceName) > ($peerName). Conectando a $endpointId...")
+                connectToPeer(endpointId, peerName)
+            } else {
+                Log.i(TAG, "🎧 [Tie-Breaker: Ouvinte] Meu nome ($myDeviceName) < ($peerName). Aguardando conexão de $peerName...")
+                // Fallback de segurança: se o outro nó não iniciar a conexão em 4 segundos, tentamos
+                scope.launch {
+                    delay(4000)
+                    val stillDisconnected = !_connectedPeers.value.values.any {
+                        it.deviceName.equals(peerName, ignoreCase = true)
+                    }
+                    if (stillDisconnected && !pendingConnectionPeers.contains(peerName)) {
+                        Log.i(TAG, "⏰ Fallback timer ativado: Iniciando conexão com $peerName ($endpointId)...")
+                        connectToPeer(endpointId, peerName)
+                    }
+                }
+            }
         }
 
         override fun onEndpointLost(endpointId: String) {
@@ -207,28 +287,47 @@ class NearbyManager private constructor(private val context: Context) {
 
     fun connectToPeer(endpointId: String, peerName: String) {
         if (_connectedPeers.value.containsKey(endpointId)) return
-        Log.i(TAG, "Iniciando conexão com $peerName ($endpointId)")
+        if (pendingConnectionPeers.contains(peerName)) return
+
+        pendingConnectionPeers.add(peerName)
+        initiatedOrIncomingNames[endpointId] = peerName
+
+        Log.i(TAG, "Solicitando conexão P2P para $peerName ($endpointId)")
         connectionsClient.requestConnection(
             myDeviceName,
             endpointId,
             connectionLifecycleCallback
         ).addOnFailureListener { e ->
-            Log.w(TAG, "Falha ao requisitar conexão com $endpointId: ${e.message}")
+            Log.w(TAG, "Falha na requisição de conexão com $peerName ($endpointId): ${e.message}")
+            pendingConnectionPeers.remove(peerName)
         }
     }
 
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
-            Log.i(TAG, "Conexão iniciada com ${connectionInfo.endpointName} ($endpointId). Aceitando automaticamente...")
+            val peerName = connectionInfo.endpointName.ifBlank { "Dispositivo Próximo" }
+            Log.i(TAG, "Conexão iniciada com $peerName ($endpointId). Aceitando automaticamente...")
+            initiatedOrIncomingNames[endpointId] = peerName
+
             // Aceita conexão de maneira automática para fluidez da malha P2P
             connectionsClient.acceptConnection(endpointId, payloadCallback)
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Erro ao aceitar conexão com $endpointId: ${e.message}")
+                    pendingConnectionPeers.remove(peerName)
+                }
         }
 
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
+            val peerName = initiatedOrIncomingNames[endpointId]
+                ?: _discoveredPeers.value[endpointId]?.deviceName
+                ?: "Dispositivo Próximo"
+
+            pendingConnectionPeers.remove(peerName)
+
             when (result.status.statusCode) {
-                ConnectionsStatusCodes.STATUS_OK -> {
-                    val peerName = _discoveredPeers.value[endpointId]?.deviceName ?: "Dispositivo Próximo"
-                    Log.i(TAG, "✅ Conectado com sucesso ao nó: $peerName ($endpointId)")
+                ConnectionsStatusCodes.STATUS_OK,
+                ConnectionsStatusCodes.STATUS_ALREADY_CONNECTED_TO_ENDPOINT -> {
+                    Log.i(TAG, "✅ CONECTADO com sucesso ao nó: $peerName ($endpointId)")
                     val peer = ConnectedPeer(endpointId = endpointId, deviceName = peerName)
                     val map = _connectedPeers.value.toMutableMap()
                     map[endpointId] = peer
@@ -236,29 +335,51 @@ class NearbyManager private constructor(private val context: Context) {
                     connectedPeers.value = map.values.toList()
 
                     scope.launch {
+                        dao.updateConexaoContato(peerName, endpointId, true)
                         dao.updateConexaoContato(endpointId, endpointId, true)
-                        // Tenta despachar pacotes pendentes de Store-and-Forward para este nó
+                        // Despacha mensagens pendentes armazenadas localmente para este nó
                         drainStoreAndForwardQueue(endpointId)
                     }
                 }
                 ConnectionsStatusCodes.STATUS_CONNECTION_REJECTED -> {
-                    Log.w(TAG, "Conexão rejeitada por $endpointId")
+                    Log.w(TAG, "Conexão rejeitada por $peerName ($endpointId)")
                 }
                 ConnectionsStatusCodes.STATUS_ERROR -> {
-                    Log.e(TAG, "Erro na conexão com $endpointId")
+                    Log.e(TAG, "Erro na conexão com $peerName ($endpointId)")
+                }
+                else -> {
+                    Log.w(TAG, "Status de conexão: ${result.status.statusCode} com $peerName")
                 }
             }
         }
 
         override fun onDisconnected(endpointId: String) {
-            Log.i(TAG, "Desconectado do nó: $endpointId")
+            val peer = _connectedPeers.value[endpointId]
+            val peerName = peer?.deviceName ?: initiatedOrIncomingNames[endpointId] ?: "Dispositivo"
+            Log.i(TAG, "Desconectado do nó: $endpointId ($peerName)")
+
             val map = _connectedPeers.value.toMutableMap()
             map.remove(endpointId)
             _connectedPeers.value = map
             connectedPeers.value = map.values.toList()
 
+            pendingConnectionPeers.remove(peerName)
+            initiatedOrIncomingNames.remove(endpointId)
+
             scope.launch {
                 dao.desconectarEndpoint(endpointId)
+                if (peerName.isNotBlank()) {
+                    dao.updateConexaoContato(peerName, null, false)
+                }
+            }
+
+            // Se não há nenhum nó conectado, reinicia a malha para reestabelecer o radar
+            scope.launch {
+                delay(2000)
+                if (_connectedPeers.value.isEmpty()) {
+                    Log.d(TAG, "Nenhum peer restante conectado, garantindo que o radar está ativo...")
+                    startMeshNetwork()
+                }
             }
         }
     }
@@ -282,9 +403,8 @@ class NearbyManager private constructor(private val context: Context) {
         }
 
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
-            // Monitoramento de progresso de pacotes grandes (Wi-Fi Direct / Imagens)
             if (update.status == PayloadTransferUpdate.Status.SUCCESS) {
-                Log.d(TAG, "Payload enviado com sucesso para $endpointId")
+                Log.d(TAG, "Transferência concluída com sucesso para endpoint $endpointId")
             }
         }
     }
@@ -297,16 +417,15 @@ class NearbyManager private constructor(private val context: Context) {
         }
         forwardedPacketIds.add(packet.packetId)
 
-        // Limite de segurança de memória para o cache de IDs
         if (forwardedPacketIds.size > 2000) {
             forwardedPacketIds.clear()
         }
 
+        // Se for pacote de confirmação de entrega (ACK)
         if (packet.type == "ACK") {
-            // Confirmação de Entrega recebida via Malha
             scope.launch {
                 dao.updateStatusMensagem(packet.content, StatusEntrega.ENTREGUE)
-                Log.i(TAG, "✅ Confirmação de entrega recebida para mensagem ${packet.content}")
+                Log.i(TAG, "✅ Confirmação de entrega (ACK) recebida para mensagem ID: ${packet.content}")
             }
             return
         }
@@ -314,11 +433,16 @@ class NearbyManager private constructor(private val context: Context) {
         // 2. O pacote é destinado a este nó?
         val isForMe = packet.recipientId == myDeviceId ||
                       packet.recipientId.equals(myDeviceName, ignoreCase = true) ||
-                      (packet.recipientName.isNotBlank() && packet.recipientName.equals(myDeviceName, ignoreCase = true)) ||
-                      (packet.hops == 0 && _connectedPeers.value.containsKey(fromEndpointId))
+                      (packet.recipientName.isNotBlank() && (
+                          packet.recipientName.equals(myDeviceName, ignoreCase = true) ||
+                          packet.recipientName.contains(myDeviceName, ignoreCase = true) ||
+                          myDeviceName.contains(packet.recipientName, ignoreCase = true)
+                      )) ||
+                      (packet.hops == 0 && _connectedPeers.value.containsKey(fromEndpointId)) ||
+                      _connectedPeers.value.size <= 1
 
         if (isForMe) {
-            Log.i(TAG, "📩 Mensagem entregue a este dispositivo vinda de ${packet.senderName} (Hops: ${packet.hops})")
+            Log.i(TAG, "📩 MENSAGEM RECEBIDA de ${packet.senderName}: '${packet.content}' (Hops: ${packet.hops})")
             scope.launch {
                 val msg = Mensagem(
                     idMensagem = packet.packetId,
@@ -343,15 +467,26 @@ class NearbyManager private constructor(private val context: Context) {
                 )
                 dao.insertOrUpdateConversa(conversa)
 
-                // Responde com ACK de confirmação de entrega ao remetente
+                // Feedback tátil/vibração ao receber mensagem
+                try {
+                    val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator?.vibrate(VibrationEffect.createOneShot(120, VibrationEffect.DEFAULT_AMPLITUDE))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        vibrator?.vibrate(120)
+                    }
+                } catch (e: Exception) {}
+
+                // Responde imediatamente com ACK de confirmação de entrega ao remetente
                 sendDeliveryAck(fromEndpointId, packet.senderId, packet.senderName, packet.packetId)
             }
         } else {
-            // 3. Lógica de Roteamento em Malha: Não é para mim, sou nó intermediário!
-            Log.i(TAG, "🔄 Roteando pacote ${packet.packetId} destinado a ${packet.recipientName.ifBlank { packet.recipientId }} (Hops atuais: ${packet.hops})")
+            // 3. Roteamento em Malha (Mesh Relay)
+            Log.i(TAG, "🔄 Roteando pacote ${packet.packetId} destinado a ${packet.recipientName} (Hops: ${packet.hops})")
 
             if (packet.ttl <= 1) {
-                Log.w(TAG, "Pacote descartado: TTL esgotado (TTL=0)")
+                Log.w(TAG, "Pacote descartado: TTL esgotado")
                 return
             }
 
@@ -360,10 +495,7 @@ class NearbyManager private constructor(private val context: Context) {
                 ttl = packet.ttl - 1
             )
 
-            // Guarda na fila de Store-and-Forward local para entrega futura se encontrar o nó
             storeAndForwardQueue.add(relayedPacket)
-
-            // Repassa imediatamente para todos os outros nós conectados
             broadcastToOtherPeers(fromEndpointId, relayedPacket)
         }
     }
@@ -373,12 +505,14 @@ class NearbyManager private constructor(private val context: Context) {
      */
     fun sendMessage(recipientId: String, recipientName: String, content: String): Mensagem {
         val messageId = UUID.randomUUID().toString()
+        val targetName = recipientName.ifBlank { recipientId }
+
         val packet = MeshPacket(
             packetId = messageId,
             senderId = myDeviceId,
             senderName = myDeviceName,
-            recipientId = recipientId,
-            recipientName = recipientName,
+            recipientId = targetName,
+            recipientName = targetName,
             content = content,
             timestamp = System.currentTimeMillis(),
             type = "TEXT",
@@ -390,7 +524,7 @@ class NearbyManager private constructor(private val context: Context) {
             idMensagem = messageId,
             remetenteId = myDeviceId,
             remetenteNome = myDeviceName,
-            destinatarioId = recipientName,
+            destinatarioId = targetName,
             conteudo = content,
             timestamp = System.currentTimeMillis(),
             statusEntrega = StatusEntrega.PENDENTE,
@@ -403,30 +537,32 @@ class NearbyManager private constructor(private val context: Context) {
             dao.insertMensagem(localMsg)
             dao.insertOrUpdateConversa(
                 Conversa(
-                    id = recipientName,
-                    contatoNome = recipientName,
+                    id = targetName,
+                    contatoNome = targetName,
                     ultimaMensagem = content,
                     ultimoTimestamp = localMsg.timestamp,
                     naoLidas = 0
                 )
             )
 
-            // Localiza endpoint direto por endpointId ou por deviceName
+            // Localiza endpoint direto conectado que corresponda ao destinatário
             val directEndpoint = _connectedPeers.value.entries.firstOrNull { entry ->
                 entry.key == recipientId ||
-                entry.value.deviceName.equals(recipientName, ignoreCase = true) ||
-                entry.value.deviceName.equals(recipientId, ignoreCase = true)
+                entry.value.deviceName.equals(targetName, ignoreCase = true) ||
+                entry.value.deviceName.contains(targetName, ignoreCase = true) ||
+                targetName.contains(entry.value.deviceName, ignoreCase = true)
             }?.key
 
             if (directEndpoint != null) {
+                Log.i(TAG, "Enviando mensagem direta para $targetName via endpoint $directEndpoint")
                 sendPacketToEndpoint(directEndpoint, packet)
-                dao.updateStatusMensagem(messageId, StatusEntrega.ENVIADO)
             } else {
-                // Inunda os peers conectados para busca em malha (Flooding Mesh)
+                Log.i(TAG, "Destinatário não conectado diretamente. Armazenando na fila e propagando na malha...")
                 forwardedPacketIds.add(packet.packetId)
-                broadcastToAllPeers(packet)
                 storeAndForwardQueue.add(packet)
-                dao.updateStatusMensagem(messageId, StatusEntrega.ENVIADO)
+                if (_connectedPeers.value.isNotEmpty()) {
+                    broadcastToAllPeers(packet)
+                }
             }
         }
 
@@ -438,7 +574,7 @@ class NearbyManager private constructor(private val context: Context) {
             packetId = UUID.randomUUID().toString(),
             senderId = myDeviceId,
             senderName = myDeviceName,
-            recipientId = originalSenderId,
+            recipientId = originalSenderName.ifBlank { originalSenderId },
             recipientName = originalSenderName,
             content = deliveredPacketId,
             timestamp = System.currentTimeMillis(),
@@ -447,7 +583,11 @@ class NearbyManager private constructor(private val context: Context) {
             ttl = 5
         )
         if (directEndpointId != null && _connectedPeers.value.containsKey(directEndpointId)) {
-            sendPacketToEndpoint(directEndpointId, ack)
+            val json = gson.toJson(ack)
+            val payload = Payload.fromBytes(json.toByteArray(StandardCharsets.UTF_8))
+            connectionsClient.sendPayload(directEndpointId, payload).addOnSuccessListener {
+                Log.d(TAG, "ACK enviado com sucesso para $directEndpointId")
+            }
         } else {
             broadcastToAllPeers(ack)
         }
@@ -456,9 +596,18 @@ class NearbyManager private constructor(private val context: Context) {
     private fun sendPacketToEndpoint(endpointId: String, packet: MeshPacket) {
         val json = gson.toJson(packet)
         val payload = Payload.fromBytes(json.toByteArray(StandardCharsets.UTF_8))
-        connectionsClient.sendPayload(endpointId, payload).addOnFailureListener { e ->
-            Log.e(TAG, "Falha ao enviar payload para $endpointId: ${e.message}")
-        }
+        connectionsClient.sendPayload(endpointId, payload)
+            .addOnSuccessListener {
+                Log.i(TAG, "Payload entregue ao rádio para envio ao nó $endpointId (msg: ${packet.packetId})")
+                scope.launch {
+                    dao.updateStatusMensagem(packet.packetId, StatusEntrega.ENVIADO)
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Falha ao enviar payload para $endpointId: ${e.message}")
+                // Armazena na fila para reenvio automático quando a conexão for reestabelecida
+                storeAndForwardQueue.add(packet)
+            }
     }
 
     private fun broadcastToOtherPeers(excludeEndpointId: String, packet: MeshPacket) {
@@ -475,7 +624,11 @@ class NearbyManager private constructor(private val context: Context) {
         if (peers.isNotEmpty()) {
             val json = gson.toJson(packet)
             val payload = Payload.fromBytes(json.toByteArray(StandardCharsets.UTF_8))
-            connectionsClient.sendPayload(peers, payload)
+            connectionsClient.sendPayload(peers, payload).addOnSuccessListener {
+                scope.launch {
+                    dao.updateStatusMensagem(packet.packetId, StatusEntrega.ENVIADO)
+                }
+            }
         }
     }
 
@@ -484,8 +637,15 @@ class NearbyManager private constructor(private val context: Context) {
         val toRemove = mutableListOf<MeshPacket>()
         synchronized(storeAndForwardQueue) {
             for (packet in storeAndForwardQueue) {
-                if (packet.recipientId == newlyConnectedEndpointId ||
-                    (peerName.isNotBlank() && packet.recipientName.equals(peerName, ignoreCase = true))) {
+                val matches = packet.recipientId == newlyConnectedEndpointId ||
+                              packet.recipientId.equals(peerName, ignoreCase = true) ||
+                              (peerName.isNotBlank() && (
+                                  packet.recipientName.equals(peerName, ignoreCase = true) ||
+                                  packet.recipientName.contains(peerName, ignoreCase = true) ||
+                                  peerName.contains(packet.recipientName, ignoreCase = true)
+                              )) ||
+                              packet.recipientName.isBlank()
+                if (matches) {
                     sendPacketToEndpoint(newlyConnectedEndpointId, packet)
                     toRemove.add(packet)
                 }

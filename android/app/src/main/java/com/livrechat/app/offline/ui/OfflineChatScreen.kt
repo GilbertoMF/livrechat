@@ -24,6 +24,7 @@ import com.livrechat.app.offline.data.Mensagem
 import com.livrechat.app.offline.data.OfflineDatabase
 import com.livrechat.app.offline.data.StatusEntrega
 import com.livrechat.app.offline.nearby.NearbyManager
+import com.livrechat.app.offline.nearby.NearbyPermissionHelper
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -49,16 +50,39 @@ fun OfflineChatScreen(
     val mensagens by dao.getMensagensForContato(contactId, contactName).collectAsState(initial = emptyList())
     val connectedPeers by nearbyManager.connectedPeers.collectAsState()
     val isDirectPeerConnected = remember(connectedPeers, contactId, contactName) {
-        connectedPeers.any { it.endpointId == contactId || it.deviceName.equals(contactName, ignoreCase = true) }
+        connectedPeers.any { 
+            it.endpointId == contactId || 
+            it.deviceName.equals(contactName, ignoreCase = true) ||
+            it.deviceName.contains(contactName, ignoreCase = true) ||
+            contactName.contains(it.deviceName, ignoreCase = true)
+        }
     }
+
+    var isGpsEnabled by remember { mutableStateOf(NearbyPermissionHelper.isLocationEnabled(context)) }
+    var isBtEnabled by remember { mutableStateOf(NearbyPermissionHelper.isBluetoothEnabled()) }
 
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+
+    LaunchedEffect(Unit) {
+        nearbyManager.startMeshNetwork()
+    }
 
     LaunchedEffect(mensagens.size) {
         if (mensagens.isNotEmpty()) {
             listState.animateScrollToItem(mensagens.size - 1)
         }
+    }
+
+    val statusText = when {
+        isDirectPeerConnected -> "P2P Direto Conectado"
+        connectedPeers.isNotEmpty() -> "Malha Mesh (${connectedPeers.size} nós)"
+        else -> "Buscando conexão..."
+    }
+    val statusColor = when {
+        isDirectPeerConnected -> Color(0xFF00E676)
+        connectedPeers.isNotEmpty() -> Color(0xFFA78BFA)
+        else -> Color(0xFFFFB74D)
     }
 
     Scaffold(
@@ -75,11 +99,11 @@ fun OfflineChatScreen(
                             Box(
                                 modifier = Modifier
                                     .size(7.dp)
-                                    .background(if (isDirectPeerConnected) Color(0xFF00E676) else Color(0xFFA78BFA), CircleShape)
+                                    .background(statusColor, CircleShape)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (isDirectPeerConnected) "P2P Direto Conectado" else "Roteamento via Malha Mesh",
+                                text = statusText,
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -89,6 +113,16 @@ fun OfflineChatScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        nearbyManager.restartMeshNetwork()
+                        isGpsEnabled = NearbyPermissionHelper.isLocationEnabled(context)
+                        isBtEnabled = NearbyPermissionHelper.isBluetoothEnabled()
+                        android.widget.Toast.makeText(context, "Reconectando nós próximos...", android.widget.Toast.LENGTH_SHORT).show()
+                    }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Reconectar")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -142,13 +176,45 @@ fun OfflineChatScreen(
             }
         }
     ) { padding ->
-        Box(
+        Column(
             modifier = modifier
                 .fillMaxSize()
                 .padding(padding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            if (mensagens.isEmpty()) {
+            if (!isGpsEnabled || !isBtEnabled) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (!isBtEnabled) "Ative o Bluetooth para enviar/receber sem internet." else "No Android 10/11, a Localização (GPS) precisa estar ligada na barra de status.",
+                            fontSize = 11.sp,
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        TextButton(onClick = {
+                            val intent = if (!isBtEnabled) {
+                                android.content.Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                            } else {
+                                android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                            }
+                            try { context.startActivity(intent) } catch (e: Exception) {}
+                        }) {
+                            Text("Ativar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                if (mensagens.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -176,6 +242,7 @@ fun OfflineChatScreen(
             }
         }
     }
+}
 }
 
 @Composable

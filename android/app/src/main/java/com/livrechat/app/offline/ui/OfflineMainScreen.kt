@@ -50,6 +50,8 @@ fun OfflineMainScreen(
 
     var selectedSubTab by remember { mutableIntStateOf(0) } // 0: Conversas, 1: Dispositivos Próximos
     var hasPermissions by remember { mutableStateOf(NearbyPermissionHelper.hasNearbyPermissions(context)) }
+    var isGpsEnabled by remember { mutableStateOf(NearbyPermissionHelper.isLocationEnabled(context)) }
+    var isBtEnabled by remember { mutableStateOf(NearbyPermissionHelper.isBluetoothEnabled()) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -79,7 +81,7 @@ fun OfflineMainScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // PERMISSION ALERT BANNER
+        // 1. PERMISSION ALERT BANNER
         if (!hasPermissions) {
             Surface(
                 color = MaterialTheme.colorScheme.errorContainer,
@@ -103,45 +105,92 @@ fun OfflineMainScreen(
                     }
                 }
             }
+        } else if (!isBtEnabled || !isGpsEnabled) {
+            // 2. HARDWARE RADIO ALERT (BLUETOOTH / GPS)
+            Surface(
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (!isBtEnabled) "Bluetooth Desativado" else "Localização (GPS) Desativada",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Text(
+                            text = if (!isBtEnabled) "Ative o Bluetooth para escanear aparelhos." else "O Android 10/11 exige o GPS ativo na barra de status para descobrir dispositivos.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            val intent = if (!isBtEnabled) {
+                                android.content.Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                            } else {
+                                android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                            }
+                            try { context.startActivity(intent) } catch (e: Exception) {}
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                    ) {
+                        Text("Ativar", fontSize = 11.sp)
+                    }
+                }
+            }
         }
 
-        // MESH STATUS BAR
+        // 3. THIS DEVICE CARD & MESH STATUS BAR
         Surface(
             color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .background(if (connectedPeers.isNotEmpty()) Color(0xFF00E676) else Color(0xFFFFB74D), CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (connectedPeers.isNotEmpty()) "Malha Mesh Conectada (${connectedPeers.size} nós)" else "Buscando vizinhos BLE...",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                IconButton(
-                    onClick = {
-                        nearbyManager.stopMeshNetwork()
-                        nearbyManager.startMeshNetwork()
-                        Toast.makeText(context, "Radar P2P Reiniciado", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.size(28.dp)
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Reiniciar radar", modifier = Modifier.size(18.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .background(if (connectedPeers.isNotEmpty()) Color(0xFF00E676) else Color(0xFFFFB74D), CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (connectedPeers.isNotEmpty()) "Malha Mesh Conectada (${connectedPeers.size} nós)" else "Buscando vizinhos BLE...",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            nearbyManager.restartMeshNetwork()
+                            isGpsEnabled = NearbyPermissionHelper.isLocationEnabled(context)
+                            isBtEnabled = NearbyPermissionHelper.isBluetoothEnabled()
+                            Toast.makeText(context, "Radar P2P Reiniciado", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Reiniciar radar", modifier = Modifier.size(18.dp))
+                    }
                 }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "📱 Seu aparelho: ${nearbyManager.myDeviceName}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
@@ -234,12 +283,15 @@ fun OfflineMainScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(discoveredPeers, key = { it.endpointId }) { peer ->
-                        val isConnected = connectedPeers.any { it.endpointId == peer.endpointId }
+                        val isConnected = connectedPeers.any { 
+                            it.endpointId == peer.endpointId || 
+                            it.deviceName.equals(peer.deviceName, ignoreCase = true) 
+                        }
                         NearbyPeerCard(
                             peer = peer,
                             isConnected = isConnected,
                             onConnect = { nearbyManager.connectToPeer(peer.endpointId, peer.deviceName) },
-                            onChat = { onOpenChat(peer.endpointId, peer.deviceName) }
+                            onChat = { onOpenChat(peer.deviceName, peer.deviceName) }
                         )
                     }
                 }
@@ -366,7 +418,14 @@ fun NearbyPeerCard(
             }
 
             Button(
-                onClick = onChat,
+                onClick = {
+                    if (isConnected) {
+                        onChat()
+                    } else {
+                        onConnect()
+                        onChat()
+                    }
+                },
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
