@@ -76,14 +76,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 40;
+  const LATEST_CODE = 41;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.30',
+    latestVersion: '1.1.31',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -91,10 +91,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.30: 6 Superpoderes Transformadores (Canais PX Walkie-Talkie, Radar e Bússola Tática P2P, IA On-Device de Transcrição e Resumo, LivreParty Assistir Vídeos Juntos, Mensagens Dead Drop com Autodestruição e Backup Descentralizado Shamir 2/3).',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.30-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.30-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.30-universal.apk`,
+      : 'Nova versão 1.1.31: Correção do layout da barra LivreParty e áudios no chat + Nova Aba de Jogos (LivreGames - Jogos Instantâneos WebAssembly & PSP Clássicos com Multiplayer Ad-Hoc).',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.31-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.31-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.31-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -102,26 +102,48 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.30',
-      versionCode: 40,
+      version: '1.1.31',
+      versionCode: 41,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-20',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Atualização 1.1.29: Superpoderes Offline Mesh (Walkie-Talkie PTT, Fotos e Áudios, Gateway de Internet e Mapa Topológico).',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.29-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.29-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.29-universal.apk`,
+      message: 'Versão 1.1.31: Correção de layout da barra LivreParty + Aba de Jogos LivreGames com Emulador WebAssembly e Multiplayer Ad-Hoc.',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.31-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.31-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.31-universal.apk`,
       downloadPortalUrl: '/download',
-      sizeMbArm64: '24.4 MB',
-      sizeMbUniversal: '30.6 MB'
+      sizeMbArm64: '25.7 MB',
+      sizeMbUniversal: '32.2 MB'
     },
     versions: [
+      {
+        version: '1.1.31',
+        versionCode: 41,
+        releaseDate: '2026-10-20',
+        isLatest: true,
+        changelog: '1. Correção visual na tela de chat: a barra do LivreParty e os balões de áudio não se sobrepõem mais; 2. Nova aba de Jogos (LivreGames): jogue clássicos instantâneos e PSP com download direto e servidor Ad-Hoc multiplayer.',
+        apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.31-arm64.apk`,
+        apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.31-armv7.apk`,
+        apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.31-universal.apk`
+      },
+      {
+        version: '1.1.30',
+        versionCode: 40,
+        releaseDate: '2026-10-20',
+        isLatest: false,
+        changelog: '6 Superpoderes: Canais de Rádio Walkie-Talkie PX, Radar Tático e Bússola P2P, IA On-Device local, LivreParty sincronizada, Mensagens Dead Drop com autodestruição, e Backup Shamir 2/3.',
+        downloads: [
+          { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '25.7 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.30-arm64.apk` },
+          { type: 'armv7', name: 'APK 32-bit ARMv7 (Galaxy A10 / Básicos)', size: '22.3 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.30-armv7.apk` },
+          { type: 'universal', name: 'APK Universal Completo', size: '32.2 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.30-universal.apk` }
+        ]
+      },
       {
         version: '1.1.29',
         versionCode: 39,
         releaseDate: '2026-10-19',
-        isLatest: true,
+        isLatest: false,
         changelog: 'Superpoderes da Rede Offline Mesh: 1. Walkie-Talkie Instantâneo PTT (Push-to-Talk) com bips e viva-voz em tempo real; 2. Envio de fotos leves e notas de voz comprimidas via múltiplos saltos na malha; 3. Ponte de Internet Híbrida (compartilhamento automático de internet com nós sem sinal); 4. Mapa Topológico Interativo da Malha (Radar orbital visual com nós, conexões e partículas animadas).',
         downloads: [
           { type: 'arm64', name: 'APK Leve ARM64 (POCO / Modernos)', size: '24.4 MB', url: `${CDN_APKS_BASE}/livrechat-v1.1.29-arm64.apk` },

@@ -111,10 +111,10 @@ fun HomeScreen(
     onStartCall: (String, String, String, String?) -> Unit,
     onNavigateToActiveCall: (() -> Unit)? = null
 ) {
-    // Tabs: 0 = Conversas, 1 = Flash (Status), 2 = Chamadas, 3 = LivreTube, 4 = Rede Offline
+    // Tabs: 0 = Conversas, 1 = Flash (Status), 2 = Chamadas, 3 = LivreTube, 4 = Jogos (LivreGames), 5 = Rede Offline
     var selectedTab by remember { mutableIntStateOf(initialTab) }
     LaunchedEffect(initialTab) {
-        if (initialTab in 0..4) {
+        if (initialTab in 0..5) {
             selectedTab = initialTab
         }
     }
@@ -2294,6 +2294,16 @@ fun HomeScreen(
                         Icon(Icons.Default.QrCode, contentDescription = "Meu QR Code")
                     }
                     com.livrechat.app.ui.common.TooltipIconButton(
+                        tooltip = "LivreGames — Jogos Multiplayer",
+                        onClick = { selectedTab = 4 }
+                    ) {
+                        Icon(
+                            Icons.Default.SportsEsports,
+                            contentDescription = "Jogos",
+                            tint = if (selectedTab == 4) Color(0xFFA78BFA) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    com.livrechat.app.ui.common.TooltipIconButton(
                         tooltip = "Configurações",
                         onClick = onNavigateToSettings
                     ) {
@@ -2350,6 +2360,7 @@ fun HomeScreen(
                 }
                 3 -> {}
                 4 -> {}
+                5 -> {}
             }
         }
     ) { padding ->
@@ -2477,15 +2488,34 @@ fun HomeScreen(
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
+                                imageVector = Icons.Default.SportsEsports,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = if (selectedTab == 4) Color(0xFFA78BFA) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Jogos",
+                                fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                )
+                Tab(
+                    selected = selectedTab == 5,
+                    onClick = { selectedTab = 5 },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
                                 imageVector = Icons.Default.WifiOff,
                                 contentDescription = null,
                                 modifier = Modifier.size(15.dp),
-                                tint = if (selectedTab == 4) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = if (selectedTab == 5) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = "Rede Offline",
-                                fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal
+                                fontWeight = if (selectedTab == 5) FontWeight.Bold else FontWeight.Normal
                             )
                         }
                     }
@@ -2869,6 +2899,9 @@ fun HomeScreen(
                 // LIVRETUBE TAB
                 com.livrechat.app.ui.livretube.LivreTubeScreen()
             } else if (selectedTab == 4) {
+                // JOGOS TAB (LIVREGAMES)
+                com.livrechat.app.ui.games.LivreGamesScreen()
+            } else if (selectedTab == 5) {
                 // REDE OFFLINE P2P MESH TAB
                 if (activeOfflineChat != null) {
                     val (chatId, chatName) = activeOfflineChat!!

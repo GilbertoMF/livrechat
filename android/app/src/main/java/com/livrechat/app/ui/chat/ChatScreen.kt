@@ -2463,60 +2463,6 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Version incompatibility / Chat Error Banner
-            if (!chatErrorMessage.isNullOrBlank()) {
-                Surface(
-                    color = MaterialTheme.colorScheme.errorContainer,
-                    shape = RoundedCornerShape(12.dp),
-                    shadowElevation = 6.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .align(Alignment.TopCenter)
-                        .zIndex(20f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Security,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Aviso de Compatibilidade",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = chatErrorMessage!!,
-                                fontSize = 12.sp,
-                                lineHeight = 16.sp,
-                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        IconButton(
-                            onClick = { viewModel.clearChatError() },
-                            modifier = Modifier.size(26.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Fechar",
-                                tint = MaterialTheme.colorScheme.onErrorContainer,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
             // Custom chat wallpaper
             if (!currentWallpaper.isNullOrBlank()) {
                 if (currentWallpaper!!.startsWith("pattern:")) {
@@ -2561,6 +2507,62 @@ fun ChatScreen(
                 }
             }
 
+            // Foreground Layout: Column holding all top banners and the messages area
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Version incompatibility / Chat Error Banner
+            if (!chatErrorMessage.isNullOrBlank()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    shadowElevation = 6.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Security,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Aviso de Compatibilidade",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = chatErrorMessage!!,
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp,
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = { viewModel.clearChatError() },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Fechar",
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             // Active Call Banner inside ChatScreen
             val activeCallVm = com.livrechat.app.ui.call.CallViewModel.activeInstance
             val chatCallState by (activeCallVm?.callState?.collectAsState() ?: remember { mutableStateOf(com.livrechat.app.webrtc.CallState.IDLE) })
@@ -2574,9 +2576,7 @@ fun ChatScreen(
                     shadowElevation = 6.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                        .align(Alignment.TopCenter)
-                        .zIndex(20f)
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
                         .clickable { onNavigateToActiveCall?.invoke() }
                 ) {
                     Row(
@@ -2634,9 +2634,7 @@ fun ChatScreen(
                     tonalElevation = 4.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                        .align(Alignment.TopCenter)
-                        .zIndex(15f)
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
                         .clickable {
                             val targetIndex = messages.indexOfFirst { it.id == pinnedId }
                             if (targetIndex >= 0) {
@@ -2775,17 +2773,23 @@ fun ChatScreen(
                 }
             }
 
-            LazyColumn(
-                state = listState,
+            // Chat Messages Area inside weight(1f) Box
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 12.dp),
-                contentPadding = PaddingValues(
-                    top = if (!currentConv?.pinnedMessageId.isNullOrBlank()) 56.dp else 8.dp,
-                    bottom = 16.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .fillMaxWidth()
+                    .weight(1f)
             ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp),
+                    contentPadding = PaddingValues(
+                        top = 8.dp,
+                        bottom = 16.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                 items(messages, key = { it.id }) { message ->
                     MessageBubble(
                         message = message,
@@ -2829,7 +2833,7 @@ fun ChatScreen(
             }
 
             // Floating "Scroll to Bottom" button when user scrolled up and new messages exist
-            AnimatedVisibility(
+            androidx.compose.animation.AnimatedVisibility(
                 visible = showScrollToBottomButton,
                 enter = fadeIn() + scaleIn(),
                 exit = fadeOut() + scaleOut(),
@@ -2870,8 +2874,10 @@ fun ChatScreen(
                     }
                 }
             }
+            }
         }
     }
+}
 
     if (showAttachmentSheet) {
         ModalBottomSheet(
