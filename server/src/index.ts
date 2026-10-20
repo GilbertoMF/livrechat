@@ -76,14 +76,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 45;
+  const LATEST_CODE = 46;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.35',
+    latestVersion: '1.1.36',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -91,10 +91,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.35: Botões e telas 100% organizados! Tela do jogo livre de obstruções (controles e topbar nos cantos e fora da área 4:3), Select/Start nas laterais e Tela de Sala Multiplayer responsiva em 2 colunas sem cortes!',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.35-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.35-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.35-universal.apk`,
+      : 'Nova versão 1.1.36: Correção no catálogo LivreGames — O primeiro jogo não fica mais cortado/encolhido no topo, com barra de busca e filtros de console organizados!',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.36-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.36-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.36-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -102,26 +102,36 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.35',
-      versionCode: 45,
+      version: '1.1.36',
+      versionCode: 46,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-20',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Versão 1.1.35: Telas e botões organizados — Tela de gameplay 100% livre com botões de topo flutuantes nos cantos pretos (sem sobreposição do HUD), Select e Start realocados para as margens laterais, e modal de sala multiplayer responsivo em grid com fechamento inteligente.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.35-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.35-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.35-universal.apk`,
+      message: 'Versão 1.1.36: Correção de layout no catálogo LivreGames — O primeiro jogo não fica mais cortado/encolhido no topo, com barra de busca e filtros de console organizados.',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.36-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.36-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.36-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '25.7 MB',
       sizeMbUniversal: '32.2 MB'
     },
     versions: [
       {
+        version: '1.1.36',
+        versionCode: 46,
+        releaseDate: '2026-10-20',
+        isLatest: true,
+        changelog: '1. Correção no layout do LivreGames: o primeiro card de jogo agora aparece completo e centralizado sem ficar encolhido ou escondido atrás da barra de título; 2. Barra de pesquisa e seletor de consoles (SNES/PSP/Todos) e gêneros integrados de forma limpa e fluida.',
+        apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.36-arm64.apk`,
+        apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.36-armv7.apk`,
+        apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.36-universal.apk`
+      },
+      {
         version: '1.1.35',
         versionCode: 45,
         releaseDate: '2026-10-20',
-        isLatest: true,
+        isLatest: false,
         changelog: '1. Tela de jogo desobstruída: topo flutuante nos cantos laterais transparentes sem cobrir o HUD; 2. Botões Select e Start movidos do centro da tela para as laterais sob o direcional e ABXY; 3. Tela de Sala Multiplayer adaptada para modo paisagem em 2 colunas sem cortes; 4. Ocultação automática da barra superior ao abrir modais.',
         apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.35-arm64.apk`,
         apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.35-armv7.apk`,

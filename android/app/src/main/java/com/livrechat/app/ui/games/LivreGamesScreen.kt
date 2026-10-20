@@ -455,7 +455,6 @@ fun LivreGamesScreen(
                     }
                 }
             }
-            }
 
             // Search Bar
             OutlinedTextField(
@@ -581,7 +580,7 @@ fun LivreGamesScreen(
 
             // Games List
             if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = Color(0xFF8B5CF6))
                         Spacer(modifier = Modifier.height(12.dp))
@@ -593,7 +592,7 @@ fun LivreGamesScreen(
                     }
                 }
             } else if (errorMessage != null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
                         Icon(
                             Icons.Default.CloudOff,
@@ -620,7 +619,7 @@ fun LivreGamesScreen(
             } else if (selectedTab == 0) {
                 // TAB 0: SUPER NINTENDO (SNES) - NUVEM INSTANTÂNEA
                 if (filteredInstantGames.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
                                 Icons.Default.SearchOff,
@@ -638,7 +637,7 @@ fun LivreGamesScreen(
                     }
                 } else {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
@@ -662,7 +661,7 @@ fun LivreGamesScreen(
             } else if (selectedTab == 1) {
                 // TAB 1: PLAYSTATION PORTABLE (PSP) - DOWNLOAD & AD-HOC
                 if (filteredGames.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
                                 Icons.Default.SearchOff,
@@ -680,7 +679,7 @@ fun LivreGamesScreen(
                     }
                 } else {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
@@ -743,7 +742,7 @@ fun LivreGamesScreen(
             } else {
                 // TAB 2: TODOS OS CONSOLES (SNES + PSP)
                 if (filteredInstantGames.isEmpty() && filteredGames.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
                                 Icons.Default.SearchOff,
@@ -761,7 +760,7 @@ fun LivreGamesScreen(
                     }
                 } else {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
@@ -869,6 +868,7 @@ fun LivreGamesScreen(
                 }
             }
         }
+    }
 
     // Install PPSSPP Dialog
     if (showInstallPpssppDialog) {
