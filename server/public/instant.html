@@ -52,14 +52,14 @@
     }
 
     .ejs_virtualGamepad_left {
-      bottom: 40px !important;
+      bottom: 35px !important;
       left: 15px !important;
       width: 140px !important;
       height: 140px !important;
     }
 
     .ejs_virtualGamepad_right {
-      bottom: 40px !important;
+      bottom: 35px !important;
       right: 15px !important;
       width: 140px !important;
       height: 140px !important;
@@ -69,7 +69,7 @@
     .ejs_dpad_main {
       width: 130px !important;
       height: 130px !important;
-      opacity: 0.85 !important;
+      opacity: 0.9 !important;
       filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
     }
     .ejs_dpad_vertical,
@@ -84,12 +84,12 @@
     /* SHOULDER BUTTONS L & R */
     .ejs_virtualGamepad_button.b_l,
     .ejs_virtualGamepad_button.b_r {
-      width: 72px !important;
+      width: 76px !important;
       height: 38px !important;
       line-height: 34px !important;
       border-radius: 12px !important;
-      background: linear-gradient(180deg, rgba(51, 65, 85, 0.8) 0%, rgba(30, 41, 59, 0.95) 100%) !important;
-      border: 1.5px solid rgba(148, 163, 184, 0.4) !important;
+      background: linear-gradient(180deg, rgba(51, 65, 85, 0.85) 0%, rgba(30, 41, 59, 0.95) 100%) !important;
+      border: 1.5px solid rgba(148, 163, 184, 0.45) !important;
       box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.2) !important;
       color: #fff !important;
       font-size: 0 !important; /* Hide localized ESQ/DIR */
@@ -109,12 +109,12 @@
     }
     .ejs_virtualGamepad_button.b_l {
       left: 10px !important;
-      top: -55px !important;
+      top: -52px !important;
     }
     .ejs_virtualGamepad_button.b_r {
       right: 10px !important;
       left: auto !important;
-      top: -55px !important;
+      top: -52px !important;
     }
     .ejs_virtualGamepad_button.b_l:active,
     .ejs_virtualGamepad_button.b_l.ejs_virtualGamepad_button_down,
@@ -222,31 +222,78 @@
       display: none !important;
     }
 
-    /* Hide EmulatorJS header/settings icon */
-    #game .ejs_menu_button,
-    #game .ejs_settings_button {
+    /* Forcefully hide ALL EmulatorJS menu, header, and settings elements */
+    [class*="ejs_menu"],
+    [class*="ejs_settings"],
+    [class*="ejs_header"],
+    .ejs_menu_button,
+    .ejs_settings_button,
+    #ejs_menu,
+    #game .ejs_menu_button {
       display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
     }
 
+    /* LANDSCAPE OPTIMIZED CONTROLS: Clean screen, controls completely in pillarboxes */
     @media (orientation: landscape) {
       .ejs_virtualGamepad_left {
-        bottom: 15px !important;
-        left: 25px !important;
+        bottom: 44px !important;
+        left: 20px !important;
+        width: 130px !important;
+        height: 130px !important;
       }
       .ejs_virtualGamepad_right {
-        bottom: 15px !important;
-        right: 25px !important;
+        bottom: 44px !important;
+        right: 20px !important;
+        width: 140px !important;
+        height: 140px !important;
       }
       .ejs_virtualGamepad_button.b_l {
-        top: -45px !important;
+        top: -46px !important;
         left: 10px !important;
+        width: 76px !important;
+        height: 36px !important;
       }
       .ejs_virtualGamepad_button.b_r {
-        top: -45px !important;
+        top: -46px !important;
         right: 10px !important;
+        left: auto !important;
+        width: 76px !important;
+        height: 36px !important;
       }
+      /* Remove Select/Start from center game screen! Move to side margins under D-Pad & ABXY */
       .ejs_virtualGamepad_bottom {
-        bottom: 10px !important;
+        position: fixed !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 8px !important;
+        width: 100% !important;
+        height: 32px !important;
+        transform: none !important;
+        display: block !important;
+        pointer-events: none !important;
+        background: transparent !important;
+      }
+      .ejs_virtualGamepad_button.b_select {
+        position: absolute !important;
+        left: 45px !important;
+        bottom: 0px !important;
+        width: 66px !important;
+        height: 26px !important;
+        line-height: 22px !important;
+        pointer-events: auto !important;
+      }
+      .ejs_virtualGamepad_button.b_start {
+        position: absolute !important;
+        right: 45px !important;
+        left: auto !important;
+        bottom: 0px !important;
+        width: 66px !important;
+        height: 26px !important;
+        line-height: 22px !important;
+        pointer-events: auto !important;
       }
     }
 
@@ -258,8 +305,8 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(11, 14, 20, 0.88);
-      backdrop-filter: blur(12px);
+      background: rgba(11, 14, 20, 0.92);
+      backdrop-filter: blur(14px);
       z-index: 100000;
       align-items: center;
       justify-content: center;
@@ -271,30 +318,57 @@
       border-radius: 16px;
       width: 100%;
       max-width: 380px;
-      padding: 20px;
+      padding: 18px;
       box-shadow: 0 12px 36px rgba(0,0,0,0.6);
     }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
     .modal-title {
-      font-size: 17px;
+      font-size: 16px;
       font-weight: bold;
       color: #fff;
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 6px;
+    }
+    .btn-close-modal {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      color: #ff8a80;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      font-weight: bold;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      outline: none;
+    }
+    .btn-close-modal:active {
+      transform: scale(0.92);
     }
     .modal-desc {
       font-size: 12px;
       color: #94a3b8;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       line-height: 1.4;
+    }
+    .modal-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
     .card-option {
       background: #1e2638;
       border: 1px solid #2d3748;
       border-radius: 12px;
       padding: 12px;
-      margin-bottom: 12px;
     }
     .card-title {
       font-size: 13px;
@@ -302,12 +376,17 @@
       color: #a78bfa;
       margin-bottom: 4px;
     }
+    .card-subtitle {
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.3;
+    }
     .input-code {
       width: 100%;
       background: #0b0e14;
       border: 1px solid #4a5568;
       border-radius: 8px;
-      padding: 10px;
+      padding: 9px;
       font-size: 14px;
       font-weight: bold;
       color: #00e676;
@@ -327,9 +406,12 @@
       color: white;
       font-weight: bold;
       font-size: 13px;
-      padding: 10px;
+      padding: 9px;
       margin-top: 8px;
       cursor: pointer;
+    }
+    .btn-primary:active {
+      transform: scale(0.97);
     }
     .btn-secondary {
       width: 100%;
@@ -342,6 +424,11 @@
       margin-top: 6px;
       cursor: pointer;
     }
+    .btn-return {
+      margin-top: 12px;
+      border-color: #475569;
+      color: #cbd5e1;
+    }
     .room-badge {
       display: inline-block;
       background: rgba(0, 230, 118, 0.15);
@@ -353,11 +440,41 @@
       font-weight: 700;
       margin-top: 4px;
     }
+
+    /* RESPONSIVE MODAL IN LANDSCAPE: 2 Columns, No Cut-Off */
+    @media (orientation: landscape) {
+      #mp-modal {
+        padding: 10px !important;
+      }
+      .modal-box {
+        max-width: 620px !important;
+        width: 94% !important;
+        max-height: 88vh !important;
+        padding: 14px 18px !important;
+        overflow-y: auto !important;
+      }
+      .modal-grid {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 12px !important;
+      }
+      .modal-desc {
+        margin-bottom: 8px !important;
+      }
+      .card-option {
+        margin-bottom: 0 !important;
+        padding: 10px 12px !important;
+      }
+      .btn-return {
+        margin-top: 10px !important;
+        padding: 7px !important;
+      }
+    }
   </style>
 </head>
 <body>
   <div id="container">
-    <!-- Top Header Overlay -->
+    <!-- Top Header Overlay (Hidden inside app to prevent duplication with native bar) -->
     <div id="top-bar">
       <button class="btn-action btn-exit" onclick="handleExit()">
         ✕ Sair
@@ -378,39 +495,44 @@
     <!-- EmulatorJS Screen -->
     <div id="game"></div>
 
-    <!-- Multiplayer Modal Dialog -->
-    <div id="mp-modal">
-      <div class="modal-box">
-        <div class="modal-title">
-          🎮 Multiplayer Nuvem
+    <!-- Multiplayer Modal Dialog (Responsive 2-column in Landscape, Centered & Backdrop close) -->
+    <div id="mp-modal" onclick="handleBackdropClick(event)">
+      <div class="modal-box" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <div class="modal-title">
+            🎮 Sala Multiplayer — LivreGames
+          </div>
+          <button class="btn-close-modal" onclick="closeMultiplayerModal()" title="Fechar">✕</button>
         </div>
         <div class="modal-desc">
           Jogue em tempo real com outro usuário do LivreChat sem desync e com latência ultra-baixa!
         </div>
 
-        <!-- Opção 1: Criar Sala -->
-        <div class="card-option">
-          <div class="card-title">1. Criar Sala (Você é o Player 1)</div>
-          <p style="font-size: 11px; color: #94a3b8;">Gera uma sala pública no servidor para seu amigo entrar:</p>
-          <div id="create-room-view">
-            <button class="btn-primary" onclick="createRoomNow()">⚡ Criar Nova Sala</button>
+        <div class="modal-grid">
+          <!-- Opção 1: Criar Sala -->
+          <div class="card-option">
+            <div class="card-title">1. Criar Sala (Você é o Player 1)</div>
+            <p class="card-subtitle">Gera uma sala pública no servidor para seu amigo entrar:</p>
+            <div id="create-room-view">
+              <button class="btn-primary" onclick="createRoomNow()">⚡ Criar Nova Sala</button>
+            </div>
+            <div id="created-room-info" style="display:none; margin-top:8px;">
+              <div style="font-size:11px; color:#94a3b8;">Código da sua sala:</div>
+              <div id="display-room-code" class="room-badge">BOMB-1234</div>
+              <button class="btn-secondary" onclick="shareRoomCode()">📋 Copiar / Convidar</button>
+            </div>
           </div>
-          <div id="created-room-info" style="display:none; margin-top:8px;">
-            <div style="font-size:11px; color:#94a3b8;">Código da sua sala:</div>
-            <div id="display-room-code" class="room-badge">BOMB-1234</div>
-            <button class="btn-secondary" onclick="shareRoomCode()">📋 Copiar Convite</button>
+
+          <!-- Opção 2: Entrar em Sala -->
+          <div class="card-option">
+            <div class="card-title">2. Entrar em Sala (Você é o Player 2)</div>
+            <p class="card-subtitle">Digite o código da sala criada pelo seu amigo:</p>
+            <input type="text" id="input-room-code" class="input-code" placeholder="EX: BOMB-8921" maxlength="15" />
+            <button class="btn-primary" style="background:#00e676; color:#0b0e14;" onclick="joinRoomNow()">Conectar e Jogar</button>
           </div>
         </div>
 
-        <!-- Opção 2: Entrar em Sala -->
-        <div class="card-option">
-          <div class="card-title">2. Entrar em Sala (Você é o Player 2)</div>
-          <p style="font-size: 11px; color: #94a3b8;">Digite o código da sala criada pelo seu amigo:</p>
-          <input type="text" id="input-room-code" class="input-code" placeholder="EX: BOMB-8921" maxlength="15" />
-          <button class="btn-primary" style="background:#00e676; color:#0b0e14;" onclick="joinRoomNow()">Conectar e Jogar</button>
-        </div>
-
-        <button class="btn-secondary" onclick="closeMultiplayerModal()">Voltar ao Jogo</button>
+        <button class="btn-secondary btn-return" onclick="closeMultiplayerModal()">Voltar ao Jogo</button>
       </div>
     </div>
   </div>
@@ -562,13 +684,27 @@
       }
     }
 
-    // Modal Control
+    // Modal Control with Android Bridge Sync
     function openMultiplayerModal() {
-      document.getElementById('mp-modal').style.display = 'flex';
+      const modal = document.getElementById('mp-modal');
+      if (modal) modal.style.display = 'flex';
+      if (window.Android && window.Android.setModalOpen) {
+        window.Android.setModalOpen(true);
+      }
     }
 
     function closeMultiplayerModal() {
-      document.getElementById('mp-modal').style.display = 'none';
+      const modal = document.getElementById('mp-modal');
+      if (modal) modal.style.display = 'none';
+      if (window.Android && window.Android.setModalOpen) {
+        window.Android.setModalOpen(false);
+      }
+    }
+
+    function handleBackdropClick(e) {
+      if (e.target.id === 'mp-modal') {
+        closeMultiplayerModal();
+      }
     }
 
     let activeRoomCode = null;
