@@ -248,10 +248,11 @@ interface ApiService {
         @Path("id") id: String
     ): Response<LivreTubeVideoDetailsDto>
 
-    // LivreGames (PSP Retro Catalog & Multiplayer)
+    // LivreGames (Retro Catalog & Multiplayer)
     @GET("api/games")
     suspend fun getGames(
         @retrofit2.http.Query("category") category: String? = null,
+        @retrofit2.http.Query("console") console: String? = null,
         @retrofit2.http.Query("search") search: String? = null
     ): Response<LivreGamesResponseDto>
 
@@ -337,6 +338,7 @@ data class InstantGameDto(
     val title: String = "",
     val subtitle: String = "",
     val category: String = "Arcade",
+    val console: String = "Super Nintendo (SNES)",
     val coverUrl: String = "",
     val romUrl: String = "",
     val core: String = "snes",
@@ -352,6 +354,7 @@ data class LivreGameDto(
     val title: String = "",
     val subtitle: String? = null,
     val category: String = "Ação",
+    val console: String = "PlayStation Portable (PSP)",
     val coverUrl: String = "",
     val downloadUrl: String = "",
     val size: String = "",

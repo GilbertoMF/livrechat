@@ -28,6 +28,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.livrechat.app.LivreChatApp
 import com.livrechat.app.data.remote.InstantGameDto
 import com.livrechat.app.data.remote.LivreGameDto
@@ -55,7 +57,13 @@ fun LivreGamesScreen(
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Nuvem Instantânea, 1 = PSP Clássicos
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = SNES (Nuvem), 1 = PSP (Download), 2 = Todos
+    val consoleCategories = listOf(
+        "🎮 Todos os Consoles",
+        "🕹️ Super Nintendo (SNES)",
+        "💿 PlayStation Portable (PSP)"
+    )
+    var selectedConsole by remember { mutableStateOf("🕹️ Super Nintendo (SNES)") }
     var activeInstantGame by remember { mutableStateOf<InstantGameDto?>(null) }
     var instantRoomCode by remember { mutableStateOf<String?>(null) }
     var instantMode by remember { mutableStateOf<String?>(null) }
@@ -107,25 +115,33 @@ fun LivreGamesScreen(
         loadCatalog()
     }
 
-    // Filter games
-    val filteredGames = remember(games, selectedCategory, searchQuery) {
-        games.filter { game ->
-            val matchesCategory = selectedCategory == "Todos" || game.category.equals(selectedCategory, ignoreCase = true)
-            val matchesSearch = searchQuery.isBlank() ||
-                    game.title.contains(searchQuery, ignoreCase = true) ||
-                    game.description.contains(searchQuery, ignoreCase = true)
-            matchesCategory && matchesSearch
+    // Filter games (PSP)
+    val filteredGames = remember(games, selectedCategory, searchQuery, selectedConsole) {
+        if (selectedConsole == "🕹️ Super Nintendo (SNES)") {
+            emptyList()
+        } else {
+            games.filter { game ->
+                val matchesCategory = selectedCategory == "Todos" || game.category.equals(selectedCategory, ignoreCase = true)
+                val matchesSearch = searchQuery.isBlank() ||
+                        game.title.contains(searchQuery, ignoreCase = true) ||
+                        game.description.contains(searchQuery, ignoreCase = true)
+                matchesCategory && matchesSearch
+            }
         }
     }
 
-    // Filter instant games
-    val filteredInstantGames = remember(instantGames, selectedCategory, searchQuery) {
-        instantGames.filter { game ->
-            val matchesCategory = selectedCategory == "Todos" || game.category.equals(selectedCategory, ignoreCase = true)
-            val matchesSearch = searchQuery.isBlank() ||
-                    game.title.contains(searchQuery, ignoreCase = true) ||
-                    game.description.contains(searchQuery, ignoreCase = true)
-            matchesCategory && matchesSearch
+    // Filter instant games (SNES)
+    val filteredInstantGames = remember(instantGames, selectedCategory, searchQuery, selectedConsole) {
+        if (selectedConsole == "💿 PlayStation Portable (PSP)") {
+            emptyList()
+        } else {
+            instantGames.filter { game ->
+                val matchesCategory = selectedCategory == "Todos" || game.category.equals(selectedCategory, ignoreCase = true)
+                val matchesSearch = searchQuery.isBlank() ||
+                        game.title.contains(searchQuery, ignoreCase = true) ||
+                        game.description.contains(searchQuery, ignoreCase = true)
+                matchesCategory && matchesSearch
+            }
         }
     }
 
@@ -200,7 +216,7 @@ fun LivreGamesScreen(
                 .padding(padding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Main Mode Tabs: Nuvem Instantânea vs PSP
+            // Console Mode Tabs: SNES vs PSP vs Todos
             Surface(
                 color = Color(0xFF151A23),
                 shape = RoundedCornerShape(12.dp),
@@ -210,10 +226,14 @@ fun LivreGamesScreen(
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF232B3B))
             ) {
                 Row(modifier = Modifier.padding(4.dp)) {
+                    // Tab 0: SNES
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { selectedTab = 0 },
+                            .clickable {
+                                selectedTab = 0
+                                selectedConsole = "🕹️ Super Nintendo (SNES)"
+                            },
                         shape = RoundedCornerShape(8.dp),
                         color = if (selectedTab == 0) Color(0xFF8B5CF6) else Color.Transparent
                     ) {
@@ -222,15 +242,8 @@ fun LivreGamesScreen(
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                Icons.Default.Bolt,
-                                contentDescription = null,
-                                tint = if (selectedTab == 0) Color.White else Color(0xFFA78BFA),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Nuvem Instantânea",
+                                text = "🕹️ SNES",
                                 fontSize = 12.sp,
                                 fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
                                 color = if (selectedTab == 0) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
@@ -238,10 +251,14 @@ fun LivreGamesScreen(
                         }
                     }
 
+                    // Tab 1: PSP
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { selectedTab = 1 },
+                            .clickable {
+                                selectedTab = 1
+                                selectedConsole = "💿 PlayStation Portable (PSP)"
+                            },
                         shape = RoundedCornerShape(8.dp),
                         color = if (selectedTab == 1) Color(0xFF8B5CF6) else Color.Transparent
                     ) {
@@ -250,18 +267,36 @@ fun LivreGamesScreen(
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                Icons.Default.Download,
-                                contentDescription = null,
-                                tint = if (selectedTab == 1) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "PSP (Download)",
+                                text = "💿 PSP",
                                 fontSize = 12.sp,
                                 fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
                                 color = if (selectedTab == 1) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Tab 2: Todos
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                selectedTab = 2
+                                selectedConsole = "🎮 Todos os Consoles"
+                            },
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (selectedTab == 2) Color(0xFF8B5CF6) else Color.Transparent
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "🎮 Todos",
+                                fontSize = 12.sp,
+                                fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTab == 2) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -269,7 +304,7 @@ fun LivreGamesScreen(
             }
 
             if (selectedTab == 0) {
-                // Instant Cloud Banner
+                // Instant Cloud Banner (SNES)
                 Surface(
                     color = Color(0xFF151A23),
                     modifier = Modifier
@@ -294,7 +329,7 @@ fun LivreGamesScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = "⚡ 100% Nuvem Sem Download",
+                                    text = "⚡ 100% Nuvem Sem Download • SNES",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF00E676)
@@ -323,7 +358,7 @@ fun LivreGamesScreen(
                         }
                     }
                 }
-            } else {
+            } else if (selectedTab == 1) {
                 // PSP Server Status Banner
                 Surface(
                     color = Color(0xFF151A23),
@@ -378,6 +413,48 @@ fun LivreGamesScreen(
                         }
                     }
                 }
+            } else {
+                // Todos os Consoles Banner
+                Surface(
+                    color = Color(0xFF151A23),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.35f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.SportsEsports,
+                                contentDescription = null,
+                                tint = Color(0xFFA78BFA),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Catálogo Retro LivreGames",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "13 SNES na nuvem + 7 PSP via download",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             }
 
             // Search Bar
@@ -423,11 +500,54 @@ fun LivreGamesScreen(
                     .padding(horizontal = 16.dp, vertical = 6.dp)
             )
 
-            // Category Filter Chips
+            // Console Platform Chips
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 2.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(consoleCategories) { consoleItem ->
+                    val isSelected = selectedConsole == consoleItem
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            selectedConsole = consoleItem
+                            selectedTab = when (consoleItem) {
+                                "🕹️ Super Nintendo (SNES)" -> 0
+                                "💿 PlayStation Portable (PSP)" -> 1
+                                else -> 2
+                            }
+                        },
+                        label = {
+                            Text(
+                                text = consoleItem,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF8B5CF6),
+                            selectedLabelColor = Color.White,
+                            containerColor = Color(0xFF151A23),
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = if (isSelected) Color(0xFF8B5CF6) else Color(0xFF232B3B)
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+                }
+            }
+
+            // Genre Filter Chips
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 4.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -444,7 +564,7 @@ fun LivreGamesScreen(
                             )
                         },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF8B5CF6),
+                            selectedContainerColor = Color(0xFF2979FF),
                             selectedLabelColor = Color.White,
                             containerColor = Color(0xFF151A23),
                             labelColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -452,7 +572,7 @@ fun LivreGamesScreen(
                         border = FilterChipDefaults.filterChipBorder(
                             enabled = true,
                             selected = isSelected,
-                            borderColor = if (isSelected) Color(0xFF8B5CF6) else Color(0xFF232B3B)
+                            borderColor = if (isSelected) Color(0xFF2979FF) else Color(0xFF232B3B)
                         ),
                         shape = RoundedCornerShape(20.dp)
                     )
@@ -498,7 +618,7 @@ fun LivreGamesScreen(
                     }
                 }
             } else if (selectedTab == 0) {
-                // TAB 0: JOGOS INSTANTÂNEOS (NUVEM)
+                // TAB 0: SUPER NINTENDO (SNES) - NUVEM INSTANTÂNEA
                 if (filteredInstantGames.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -510,7 +630,7 @@ fun LivreGamesScreen(
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                "Nenhum jogo instantâneo encontrado.",
+                                "Nenhum jogo de SNES encontrado.",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 14.sp
                             )
@@ -539,8 +659,8 @@ fun LivreGamesScreen(
                         }
                     }
                 }
-            } else {
-                // TAB 1: JOGOS PSP (DOWNLOAD)
+            } else if (selectedTab == 1) {
+                // TAB 1: PLAYSTATION PORTABLE (PSP) - DOWNLOAD & AD-HOC
                 if (filteredGames.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -552,7 +672,7 @@ fun LivreGamesScreen(
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                "Nenhum jogo encontrado.",
+                                "Nenhum jogo de PSP encontrado.",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 14.sp
                             )
@@ -620,9 +740,135 @@ fun LivreGamesScreen(
                         }
                     }
                 }
+            } else {
+                // TAB 2: TODOS OS CONSOLES (SNES + PSP)
+                if (filteredInstantGames.isEmpty() && filteredGames.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.SearchOff,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                "Nenhum jogo encontrado no catálogo.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        if (filteredInstantGames.isNotEmpty()) {
+                            item(key = "header_snes") {
+                                Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp)) {
+                                    Text(
+                                        text = "🕹️ Super Nintendo (SNES)",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "${filteredInstantGames.size} jogos na nuvem • Sem download",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            items(filteredInstantGames, key = { "instant_${it.id}" }) { instantGame ->
+                                InstantGameCard(
+                                    game = instantGame,
+                                    onPlaySolo = {
+                                        activeInstantGame = instantGame
+                                        instantRoomCode = null
+                                        instantMode = null
+                                    },
+                                    onPlayMultiplayer = {
+                                        activeInstantGame = instantGame
+                                        instantRoomCode = null
+                                        instantMode = "host"
+                                    }
+                                )
+                            }
+                        }
+
+                        if (filteredGames.isNotEmpty()) {
+                            item(key = "header_psp") {
+                                Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp)) {
+                                    Text(
+                                        text = "💿 PlayStation Portable (PSP)",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "${filteredGames.size} jogos com servidor Ad-Hoc multiplayer",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            items(filteredGames, key = { "psp_${it.id}" }) { game ->
+                                GameCard(
+                                    game = game,
+                                    downloadProgress = downloadStates[game.id],
+                                    isDownloaded = downloadManager.isGameDownloaded(game.fileName, game.sizeBytes),
+                                    onDownloadClick = {
+                                        downloadManager.startDownload(
+                                            gameId = game.id,
+                                            downloadUrl = game.downloadUrl,
+                                            fileName = game.fileName,
+                                            expectedSizeBytes = game.sizeBytes
+                                        )
+                                    },
+                                    onCancelDownload = {
+                                        downloadManager.cancelDownload(game.id)
+                                    },
+                                    onPlayClick = {
+                                        val gameFile = downloadManager.getGameFile(game.fileName)
+                                        if (gameFile.exists()) {
+                                            PpssppConfigManager.injectMultiplayerConfig(
+                                                context = context,
+                                                serverIp = serverInfo?.proAdhocServer ?: "164.152.40.160",
+                                                portOffset = serverInfo?.portOffset ?: 10000
+                                            )
+                                            if (!PpssppConfigManager.isPpssppInstalled(context)) {
+                                                selectedGameForGuide = game
+                                                showInstallPpssppDialog = true
+                                            } else {
+                                                val launched = PpssppConfigManager.launchGame(context, gameFile)
+                                                if (launched) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Iniciando ${game.title}! Servidor Ad-Hoc conectado.",
+                                                        Toast.LENGTH_LONG
+                                                    ).show()
+                                                } else {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Abra o PPSSPP e selecione o jogo na pasta do LivreChat.",
+                                                        Toast.LENGTH_LONG
+                                                    ).show()
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onDeleteClick = {
+                                        gameToDelete = game
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
-    }
 
     // Install PPSSPP Dialog
     if (showInstallPpssppDialog) {
@@ -868,14 +1114,65 @@ private fun InstantGameCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top
             ) {
-                AsyncImage(
-                    model = game.coverUrl,
+                SubcomposeAsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(game.coverUrl)
+                        .crossfade(true)
+                        .setHeader("User-Agent", "LivreChat-Android/1.1.33")
+                        .build(),
                     contentDescription = game.title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .size(width = 85.dp, height = 115.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF1F2937))
+                        .background(Color(0xFF1F2937)),
+                    loading = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFF1F2937)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Color(0xFF8B5CF6)
+                            )
+                        }
+                    },
+                    error = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(Color(0xFF2A1B4E), Color(0xFF151A23))
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SportsEsports,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF4081),
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = game.title,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
                 )
 
                 Spacer(modifier = Modifier.width(14.dp))
@@ -886,17 +1183,35 @@ private fun InstantGameCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFF8B5CF6).copy(alpha = 0.15f)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text(
-                                text = game.category,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFA78BFA),
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFFE91E63).copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = "🕹️ SNES",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFF4081),
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFF8B5CF6).copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = game.category,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFA78BFA),
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
                         }
 
                         Surface(
@@ -1063,14 +1378,65 @@ private fun GameCard(
                 verticalAlignment = Alignment.Top
             ) {
                 // Game Cover Image
-                AsyncImage(
-                    model = game.coverUrl,
+                SubcomposeAsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(game.coverUrl)
+                        .crossfade(true)
+                        .setHeader("User-Agent", "LivreChat-Android/1.1.33")
+                        .build(),
                     contentDescription = game.title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .size(width = 85.dp, height = 115.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF1F2937))
+                        .background(Color(0xFF1F2937)),
+                    loading = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFF1F2937)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Color(0xFF8B5CF6)
+                            )
+                        }
+                    },
+                    error = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(Color(0xFF1E293B), Color(0xFF0F172A))
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SportsEsports,
+                                    contentDescription = null,
+                                    tint = Color(0xFF64B5F6),
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = game.title,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
                 )
 
                 Spacer(modifier = Modifier.width(14.dp))
@@ -1082,17 +1448,35 @@ private fun GameCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFF8B5CF6).copy(alpha = 0.15f)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text(
-                                text = game.category,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFA78BFA),
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFF2979FF).copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = "💿 PSP",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF64B5F6),
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFF8B5CF6).copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = game.category,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFA78BFA),
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
                         }
 
                         if (isDownloaded) {

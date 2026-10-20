@@ -76,14 +76,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 42;
+  const LATEST_CODE = 43;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.32',
+    latestVersion: '1.1.33',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -91,10 +91,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.32: SNES & Novos Jogos Instantâneos + Assistir Juntos estilo Facebook Messenger + Giro de tela horizontal nos jogos sem recarregar!',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.32-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.32-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.32-universal.apk`,
+      : 'Nova versão 1.1.33: Capas oficiais em alta definição para todos os jogos do LivreGames + Categorias de consoles (SNES & PSP) + Filtros aprimorados!',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.33-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.33-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.33-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -102,26 +102,36 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.32',
-      versionCode: 42,
+      version: '1.1.33',
+      versionCode: 43,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-20',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Versão 1.1.32: Novos jogos de SNES (Mario World, Donkey Kong, Mega Man X, Zelda, Metroid, Top Gear, Chrono Trigger, Aladdin) + Assistir Juntos reformulado estilo Facebook Messenger + Rotação horizontal sem recarregar o jogo.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.32-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.32-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.32-universal.apk`,
+      message: 'Versão 1.1.33: Capas oficiais em alta resolução para todos os jogos do catálogo via Cloudflare R2 CDN + Filtros por categorias de console (SNES, PSP e Todos).',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.33-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.33-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.33-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '25.7 MB',
       sizeMbUniversal: '32.2 MB'
     },
     versions: [
       {
+        version: '1.1.33',
+        versionCode: 43,
+        releaseDate: '2026-10-20',
+        isLatest: true,
+        changelog: '1. Capas autênticas e completas de todos os 20 jogos retro (SNES e PSP) hospedadas no Cloudflare R2 com carregamento instantâneo; 2. Filtros e categorias por tipo de console (Super Nintendo SNES, PlayStation Portable PSP e Todos os Consoles) com badges visuais nos cards; 3. Suporte a transição fluida de orientação de tela e Assistir Juntos sincronizado ao vivo.',
+        apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.33-arm64.apk`,
+        apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.33-armv7.apk`,
+        apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.33-universal.apk`
+      },
+      {
         version: '1.1.32',
         versionCode: 42,
         releaseDate: '2026-10-20',
-        isLatest: true,
+        isLatest: false,
         changelog: '1. Novos jogos instantâneos de SNES (Super Mario World, Donkey Kong Country, Mega Man X, Zelda: A Link to the Past, Super Metroid, Top Gear, Chrono Trigger, Aladdin); 2. Assistir Juntos (Watch Together) estilo Facebook Messenger com player de vídeo integrado sincronizado ao vivo no topo do chat; 3. Opção de girar para tela horizontal enquanto joga sem recarregar o emulador.',
         apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.32-arm64.apk`,
         apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.32-armv7.apk`,

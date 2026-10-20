@@ -5,6 +5,7 @@ export interface GameItem {
   title: string;
   subtitle?: string;
   category: 'Luta' | 'Ação' | 'Corrida' | 'Futebol' | 'Arcade';
+  console: 'PlayStation Portable (PSP)' | 'Super Nintendo (SNES)' | string;
   coverUrl: string;
   downloadUrl: string;
   fallbackUrl?: string;
@@ -30,6 +31,7 @@ const SERVER_INFO = {
 };
 
 const CDN_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/games';
+const COVERS_CDN = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/game-covers';
 
 // Curated list of popular PSP games with high-speed Cloudflare R2 downloads and active AdHoc multiplayer
 const GAMES_CATALOG: GameItem[] = [
@@ -38,7 +40,8 @@ const GAMES_CATALOG: GameItem[] = [
     title: 'Dragon Ball Z: Shin Budokai',
     subtitle: 'Another Road',
     category: 'Luta',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/1/12/Dragon_Ball_Z_Shin_Budokai_cover.jpg',
+    console: 'PlayStation Portable (PSP)',
+    coverUrl: `${COVERS_CDN}/dbz_sb.jpg`,
     downloadUrl: `${CDN_BASE}/dbz_shin_budokai.cso`,
     fallbackUrl: 'http://164.152.40.160:3000/games/dbz_shin_budokai.cso',
     size: '209 MB',
@@ -53,7 +56,8 @@ const GAMES_CATALOG: GameItem[] = [
     title: 'GTA: Vice City Stories',
     subtitle: 'Empire & Gang Wars',
     category: 'Ação',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/3/3e/GTA_Vice_City_Stories_PSP_boxart.jpg',
+    console: 'PlayStation Portable (PSP)',
+    coverUrl: `${COVERS_CDN}/gta_vcs.jpg`,
     downloadUrl: `${CDN_BASE}/gta_vice_city_stories.cso`,
     fallbackUrl: 'http://164.152.40.160:3000/games/gta_vice_city_stories.cso',
     size: '710 MB',
@@ -68,7 +72,8 @@ const GAMES_CATALOG: GameItem[] = [
     title: 'Naruto Shippuden: Ultimate Ninja Heroes 3',
     subtitle: 'Ninjas do Mundo Shinobi',
     category: 'Luta',
-    coverUrl: 'https://images.launchbox-app.com/3470cf1d-89e7-4f64-a499-38db60e3dc96.jpg',
+    console: 'PlayStation Portable (PSP)',
+    coverUrl: `${COVERS_CDN}/naruto_unh3.jpg`,
     downloadUrl: `${CDN_BASE}/naruto_shippuden_unh3.cso`,
     fallbackUrl: 'http://164.152.40.160:3000/games/naruto_shippuden_unh3.cso',
     size: '480 MB',
@@ -83,7 +88,8 @@ const GAMES_CATALOG: GameItem[] = [
     title: 'Tekken: Dark Resurrection',
     subtitle: 'King of Iron Fist Tournament',
     category: 'Luta',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/d/d0/PSP-TekkenDarkRessurectionUSversion-FrontCover.jpg',
+    console: 'PlayStation Portable (PSP)',
+    coverUrl: `${COVERS_CDN}/tekken_dr.jpg`,
     downloadUrl: `${CDN_BASE}/tekken_dark_resurrection.cso`,
     fallbackUrl: 'http://164.152.40.160:3000/games/tekken_dark_resurrection.cso',
     size: '560 MB',
@@ -98,7 +104,8 @@ const GAMES_CATALOG: GameItem[] = [
     title: 'Need for Speed: Most Wanted 5-1-0',
     subtitle: 'Blacklist Racers',
     category: 'Corrida',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/8/8e/Need_for_Speed_Most_Wanted_Box_Art.jpg',
+    console: 'PlayStation Portable (PSP)',
+    coverUrl: `${COVERS_CDN}/nfs_mw.jpg`,
     downloadUrl: `${CDN_BASE}/need_for_speed_most_wanted.cso`,
     fallbackUrl: 'http://164.152.40.160:3000/games/need_for_speed_most_wanted.cso',
     size: '168 MB',
@@ -113,7 +120,8 @@ const GAMES_CATALOG: GameItem[] = [
     title: 'Bomberman (PSP)',
     subtitle: 'Battle Arena Clássica',
     category: 'Arcade',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/9/99/Bomberman_PSP.jpg',
+    console: 'PlayStation Portable (PSP)',
+    coverUrl: `${COVERS_CDN}/bomberman_psp.jpg`,
     downloadUrl: `${CDN_BASE}/bomberman.cso`,
     fallbackUrl: 'http://164.152.40.160:3000/games/bomberman.cso',
     size: '75 MB',
@@ -128,7 +136,8 @@ const GAMES_CATALOG: GameItem[] = [
     title: 'Pro Evolution Soccer 2014',
     subtitle: 'Futebol Clássico no Bolso',
     category: 'Futebol',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/2/2b/Pes2014eucover.png',
+    console: 'PlayStation Portable (PSP)',
+    coverUrl: `${COVERS_CDN}/pes_2014.png`,
     downloadUrl: `${CDN_BASE}/pes_2014.cso`,
     fallbackUrl: 'http://164.152.40.160:3000/games/pes_2014.cso',
     size: '515 MB',
@@ -145,6 +154,7 @@ export interface InstantGameItem {
   title: string;
   subtitle: string;
   category: 'Luta' | 'Ação' | 'Corrida' | 'Futebol' | 'Arcade';
+  console: 'Super Nintendo (SNES)' | 'PlayStation Portable (PSP)' | string;
   coverUrl: string;
   romUrl: string;
   core: string;
@@ -163,7 +173,8 @@ export const INSTANT_GAMES: InstantGameItem[] = [
     title: 'Super Bomberman 2',
     subtitle: 'Nuvem Instantânea (Sem Download)',
     category: 'Arcade',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/2/29/Super_Bomberman_2_Coverart.png',
+    console: 'Super Nintendo (SNES)',
+    coverUrl: `${COVERS_CDN}/super_bomberman_2.jpg`,
     romUrl: `${INSTANT_CDN}/super_bomberman_2.smc`,
     core: 'snes',
     size: '1.0 MB',
@@ -177,7 +188,8 @@ export const INSTANT_GAMES: InstantGameItem[] = [
     title: 'Super Mario Kart',
     subtitle: 'Nuvem Instantânea (Sem Download)',
     category: 'Corrida',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/3/38/Super_Mario_Kart_Cover.JPG',
+    console: 'Super Nintendo (SNES)',
+    coverUrl: `${COVERS_CDN}/super_mario_kart.jpg`,
     romUrl: `${INSTANT_CDN}/super_mario_kart.smc`,
     core: 'snes',
     size: '0.5 MB',
@@ -191,7 +203,8 @@ export const INSTANT_GAMES: InstantGameItem[] = [
     title: 'Mortal Kombat 3',
     subtitle: 'Nuvem Instantânea (Sem Download)',
     category: 'Luta',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/7/77/Mortal_Kombat_3_Cover.JPG',
+    console: 'Super Nintendo (SNES)',
+    coverUrl: `${COVERS_CDN}/mortal_kombat_3.jpg`,
     romUrl: `${INSTANT_CDN}/mortal_kombat_3.smc`,
     core: 'snes',
     size: '4.0 MB',
@@ -205,7 +218,8 @@ export const INSTANT_GAMES: InstantGameItem[] = [
     title: 'Super Street Fighter II',
     subtitle: 'Nuvem Instantânea (Sem Download)',
     category: 'Luta',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/1/1e/Super_Street_Fighter_II_The_New_Challengers_cover.jpg',
+    console: 'Super Nintendo (SNES)',
+    coverUrl: `${COVERS_CDN}/super_street_fighter_2.png`,
     romUrl: `${INSTANT_CDN}/super_street_fighter_2.smc`,
     core: 'snes',
     size: '4.0 MB',
@@ -219,7 +233,8 @@ export const INSTANT_GAMES: InstantGameItem[] = [
     title: 'Top Gear 2',
     subtitle: 'Nuvem Instantânea (Sem Download)',
     category: 'Corrida',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/0/07/Top_Gear_2_cover.jpg',
+    console: 'Super Nintendo (SNES)',
+    coverUrl: `${COVERS_CDN}/top_gear_2.jpg`,
     romUrl: `${INSTANT_CDN}/top_gear_2.smc`,
     core: 'snes',
     size: '1.0 MB',
@@ -233,7 +248,8 @@ export const INSTANT_GAMES: InstantGameItem[] = [
     title: 'Super Mario World',
     subtitle: 'Nuvem Instantânea (Sem Download)',
     category: 'Ação',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/3/32/Super_Mario_World_Coverart.png',
+    console: 'Super Nintendo (SNES)',
+    coverUrl: `${COVERS_CDN}/super_mario_world.png`,
     romUrl: `${INSTANT_CDN}/super_mario_world.smc`,
     core: 'snes',
     size: '0.5 MB',
@@ -247,7 +263,8 @@ export const INSTANT_GAMES: InstantGameItem[] = [
     title: 'Donkey Kong Country',
     subtitle: 'Nuvem Instantânea (Sem Download)',
     category: 'Ação',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/1/18/Donkey_Kong_Country_SNES_box_art.jpg',
+    console: 'Super Nintendo (SNES)',
+    coverUrl: `${COVERS_CDN}/donkey_kong_country.png`,
     romUrl: `${INSTANT_CDN}/donkey_kong_country.smc`,
     core: 'snes',
     size: '4.0 MB',
@@ -261,7 +278,8 @@ export const INSTANT_GAMES: InstantGameItem[] = [
     title: 'Mega Man X',
     subtitle: 'Nuvem Instantânea (Sem Download)',
     category: 'Ação',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/9/91/Mega_Man_X_Cover_Art.jpg',
+    console: 'Super Nintendo (SNES)',
+    coverUrl: `${COVERS_CDN}/mega_man_x.png`,
     romUrl: `${INSTANT_CDN}/mega_man_x.smc`,
     core: 'snes',
     size: '1.5 MB',
@@ -275,7 +293,8 @@ export const INSTANT_GAMES: InstantGameItem[] = [
     title: 'Zelda: A Link to the Past',
     subtitle: 'Nuvem Instantânea (Sem Download)',
     category: 'Ação',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/2/21/The_Legend_of_Zelda_A_Link_to_the_Past_SNES_Game_Cover.jpg',
+    console: 'Super Nintendo (SNES)',
+    coverUrl: `${COVERS_CDN}/zelda_alttp.jpg`,
     romUrl: `${INSTANT_CDN}/zelda_alttp.smc`,
     core: 'snes',
     size: '1.0 MB',
@@ -289,7 +308,8 @@ export const INSTANT_GAMES: InstantGameItem[] = [
     title: 'Super Metroid',
     subtitle: 'Nuvem Instantânea (Sem Download)',
     category: 'Ação',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/e/e4/Smetroidbox.jpg',
+    console: 'Super Nintendo (SNES)',
+    coverUrl: `${COVERS_CDN}/super_metroid.jpg`,
     romUrl: `${INSTANT_CDN}/super_metroid.smc`,
     core: 'snes',
     size: '3.0 MB',
@@ -303,7 +323,8 @@ export const INSTANT_GAMES: InstantGameItem[] = [
     title: 'Top Gear',
     subtitle: 'Nuvem Instantânea (Sem Download)',
     category: 'Corrida',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/7/7b/Top_Gear_Cover.png',
+    console: 'Super Nintendo (SNES)',
+    coverUrl: `${COVERS_CDN}/top_gear.jpg`,
     romUrl: `${INSTANT_CDN}/top_gear.smc`,
     core: 'snes',
     size: '0.5 MB',
@@ -317,7 +338,8 @@ export const INSTANT_GAMES: InstantGameItem[] = [
     title: 'Chrono Trigger',
     subtitle: 'Nuvem Instantânea (Sem Download)',
     category: 'Ação',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/a/a7/Chrono_Trigger.jpg',
+    console: 'Super Nintendo (SNES)',
+    coverUrl: `${COVERS_CDN}/chrono_trigger.jpg`,
     romUrl: `${INSTANT_CDN}/chrono_trigger.smc`,
     core: 'snes',
     size: '4.0 MB',
@@ -331,7 +353,8 @@ export const INSTANT_GAMES: InstantGameItem[] = [
     title: "Disney's Aladdin",
     subtitle: 'Nuvem Instantânea (Sem Download)',
     category: 'Arcade',
-    coverUrl: 'https://upload.wikimedia.org/wikipedia/en/b/bf/Disney%27s_Aladdin_SNES_Cover.jpg',
+    console: 'Super Nintendo (SNES)',
+    coverUrl: `${COVERS_CDN}/aladdin.jpg`,
     romUrl: `${INSTANT_CDN}/aladdin.smc`,
     core: 'snes',
     size: '1.5 MB',
@@ -344,9 +367,14 @@ export const INSTANT_GAMES: InstantGameItem[] = [
 
 // GET /api/games - List all games
 gamesRouter.get('/', (req: Request, res: Response) => {
-  const { category, search } = req.query;
+  const { category, console: consoleFilter, search } = req.query;
   let results = GAMES_CATALOG;
   let instantResults = INSTANT_GAMES;
+
+  if (consoleFilter && typeof consoleFilter === 'string' && consoleFilter !== 'Todos') {
+    results = results.filter(g => g.console?.toLowerCase().includes(consoleFilter.toLowerCase()));
+    instantResults = instantResults.filter(g => g.console?.toLowerCase().includes(consoleFilter.toLowerCase()));
+  }
 
   if (category && typeof category === 'string' && category !== 'Todos') {
     results = results.filter(g => g.category.toLowerCase() === category.toLowerCase());
@@ -395,15 +423,18 @@ gamesRouter.get('/:id', (req: Request, res: Response) => {
     });
   }
 
-  const game = GAMES_CATALOG.find(g => g.id === req.params.id);
-  if (!game) {
-    return res.status(404).json({ error: 'Jogo não encontrado' });
+  const pspGame = GAMES_CATALOG.find(g => g.id === req.params.id);
+  if (pspGame) {
+    return res.json({
+      success: true,
+      server: SERVER_INFO,
+      isInstant: false,
+      game: pspGame,
+    });
   }
-  res.json({
-    success: true,
-    server: SERVER_INFO,
-    isInstant: false,
-    game,
+
+  res.status(404).json({
+    success: false,
+    message: 'Jogo não encontrado.',
   });
 });
-
