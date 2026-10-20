@@ -29,65 +29,225 @@
       flex-direction: column;
       background-color: #000;
     }
-    /* Top Header Bar */
+    /* Top Header Overlay (Hidden inside app to prevent duplication with native bar) */
     #top-bar {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 48px;
-      background: linear-gradient(180deg, rgba(11, 14, 20, 0.95) 0%, rgba(11, 14, 20, 0.4) 80%, transparent 100%);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 12px;
-      z-index: 99999;
-      pointer-events: auto;
-    }
-    .btn-action {
-      background: rgba(30, 41, 59, 0.85);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      color: #fff;
-      padding: 6px 12px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
-      backdrop-filter: blur(8px);
-    }
-    .btn-action:active {
-      transform: scale(0.96);
-      background: rgba(139, 92, 246, 0.8);
-    }
-    .btn-netplay {
-      background: linear-gradient(135deg, #8b5cf6, #6366f1);
-      border: 1px solid rgba(167, 139, 250, 0.4);
-      color: #fff;
-      box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
-    }
-    .btn-exit {
-      background: rgba(239, 68, 68, 0.2);
-      border-color: rgba(239, 68, 68, 0.4);
-      color: #fca5a5;
-    }
-    #game-title {
-      font-size: 13px;
-      font-weight: 700;
-      color: #e2e8f0;
-      letter-spacing: 0.3px;
-      max-width: 45%;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+      display: none !important;
     }
     #game {
       width: 100%;
       height: 100%;
       flex: 1;
+    }
+
+    /* Virtual Gamepad Clean Retro Theme */
+    .ejs_virtualGamepad_parent {
+      bottom: 25px !important;
+      pointer-events: none;
+    }
+    .ejs_virtualGamepad_left,
+    .ejs_virtualGamepad_right,
+    .ejs_virtualGamepad_bottom,
+    .ejs_virtualGamepad_top {
+      pointer-events: auto;
+    }
+
+    .ejs_virtualGamepad_left {
+      bottom: 40px !important;
+      left: 15px !important;
+      width: 140px !important;
+      height: 140px !important;
+    }
+
+    .ejs_virtualGamepad_right {
+      bottom: 40px !important;
+      right: 15px !important;
+      width: 140px !important;
+      height: 140px !important;
+    }
+
+    /* D-PAD */
+    .ejs_dpad_main {
+      width: 130px !important;
+      height: 130px !important;
+      opacity: 0.85 !important;
+      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+    }
+    .ejs_dpad_vertical,
+    .ejs_dpad_horizontal {
+      background: #1e293b !important;
+      border: 1.5px solid #475569 !important;
+    }
+    .ejs_dpad_bar {
+      background: #0f172a !important;
+    }
+
+    /* SHOULDER BUTTONS L & R */
+    .ejs_virtualGamepad_button.b_l,
+    .ejs_virtualGamepad_button.b_r {
+      width: 72px !important;
+      height: 38px !important;
+      line-height: 34px !important;
+      border-radius: 12px !important;
+      background: linear-gradient(180deg, rgba(51, 65, 85, 0.8) 0%, rgba(30, 41, 59, 0.95) 100%) !important;
+      border: 1.5px solid rgba(148, 163, 184, 0.4) !important;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.2) !important;
+      color: #fff !important;
+      font-size: 0 !important; /* Hide localized ESQ/DIR */
+      z-index: 999;
+    }
+    .ejs_virtualGamepad_button.b_l::after {
+      content: "L" !important;
+      font-size: 18px !important;
+      font-weight: 900 !important;
+      color: #ffffff !important;
+    }
+    .ejs_virtualGamepad_button.b_r::after {
+      content: "R" !important;
+      font-size: 18px !important;
+      font-weight: 900 !important;
+      color: #ffffff !important;
+    }
+    .ejs_virtualGamepad_button.b_l {
+      left: 10px !important;
+      top: -55px !important;
+    }
+    .ejs_virtualGamepad_button.b_r {
+      right: 10px !important;
+      left: auto !important;
+      top: -55px !important;
+    }
+    .ejs_virtualGamepad_button.b_l:active,
+    .ejs_virtualGamepad_button.b_l.ejs_virtualGamepad_button_down,
+    .ejs_virtualGamepad_button.b_r:active,
+    .ejs_virtualGamepad_button.b_r.ejs_virtualGamepad_button_down {
+      background: linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%) !important;
+      border-color: #a78bfa !important;
+      transform: scale(0.94);
+    }
+
+    /* ACTION BUTTONS (X, Y, A, B) in SNES Diamond */
+    .ejs_virtualGamepad_button.b_x,
+    .ejs_virtualGamepad_button.b_y,
+    .ejs_virtualGamepad_button.b_a,
+    .ejs_virtualGamepad_button.b_b {
+      width: 48px !important;
+      height: 48px !important;
+      line-height: 44px !important;
+      border-radius: 50% !important;
+      font-size: 20px !important;
+      font-weight: 800 !important;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5), inset 0 2px 2px rgba(255, 255, 255, 0.25) !important;
+      transition: transform 0.08s ease, filter 0.08s ease;
+    }
+    /* X (Top - Blue) */
+    .ejs_virtualGamepad_button.b_x {
+      left: 46px !important;
+      top: 0px !important;
+      background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8) !important;
+      border: 2px solid #93c5fd !important;
+      color: #ffffff !important;
+    }
+    /* Y (Left - Green) */
+    .ejs_virtualGamepad_button.b_y {
+      left: 0px !important;
+      top: 46px !important;
+      background: radial-gradient(circle at 35% 35%, #10b981, #047857) !important;
+      border: 2px solid #a7f3d0 !important;
+      color: #ffffff !important;
+    }
+    /* A (Right - Red) */
+    .ejs_virtualGamepad_button.b_a {
+      left: 92px !important;
+      top: 46px !important;
+      background: radial-gradient(circle at 35% 35%, #ef4444, #b91c1c) !important;
+      border: 2px solid #fca5a5 !important;
+      color: #ffffff !important;
+    }
+    /* B (Bottom - Yellow) */
+    .ejs_virtualGamepad_button.b_b {
+      left: 46px !important;
+      top: 92px !important;
+      background: radial-gradient(circle at 35% 35%, #f59e0b, #b45309) !important;
+      border: 2px solid #fde68a !important;
+      color: #ffffff !important;
+    }
+    .ejs_virtualGamepad_button_down {
+      transform: scale(0.92) !important;
+      filter: brightness(1.3) !important;
+    }
+
+    /* SELECT and START BUTTONS */
+    .ejs_virtualGamepad_bottom {
+      bottom: 25px !important;
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+      width: 170px !important;
+      height: 35px !important;
+      display: flex !important;
+      justify-content: center !important;
+      gap: 16px !important;
+      margin-left: 0 !important;
+    }
+    .ejs_virtualGamepad_button.b_select,
+    .ejs_virtualGamepad_button.b_start {
+      position: relative !important;
+      left: auto !important;
+      top: auto !important;
+      width: 68px !important;
+      height: 28px !important;
+      line-height: 24px !important;
+      border-radius: 14px !important;
+      font-size: 11px !important;
+      font-weight: 800 !important;
+      letter-spacing: 0.5px !important;
+      text-transform: uppercase !important;
+      background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%) !important;
+      border: 1.5px solid #475569 !important;
+      color: #94a3b8 !important;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4) !important;
+    }
+    .ejs_virtualGamepad_button.b_select:active,
+    .ejs_virtualGamepad_button.b_start:active,
+    .ejs_virtualGamepad_button.b_select.ejs_virtualGamepad_button_down,
+    .ejs_virtualGamepad_button.b_start.ejs_virtualGamepad_button_down {
+      background: #8b5cf6 !important;
+      color: #fff !important;
+      border-color: #a78bfa !important;
+    }
+
+    /* Hide speed buttons (Rápido / Lento) */
+    .ejs_virtualGamepad_button.b_speed_fast,
+    .ejs_virtualGamepad_button.b_speed_slow,
+    .ejs_virtualGamepad_button.b_speed_rewind {
+      display: none !important;
+    }
+
+    /* Hide EmulatorJS header/settings icon */
+    #game .ejs_menu_button,
+    #game .ejs_settings_button {
+      display: none !important;
+    }
+
+    @media (orientation: landscape) {
+      .ejs_virtualGamepad_left {
+        bottom: 15px !important;
+        left: 25px !important;
+      }
+      .ejs_virtualGamepad_right {
+        bottom: 15px !important;
+        right: 25px !important;
+      }
+      .ejs_virtualGamepad_button.b_l {
+        top: -45px !important;
+        left: 10px !important;
+      }
+      .ejs_virtualGamepad_button.b_r {
+        top: -45px !important;
+        right: 10px !important;
+      }
+      .ejs_virtualGamepad_bottom {
+        bottom: 10px !important;
+      }
     }
 
     /* Modal Overlay for Multiplayer */
@@ -360,11 +520,20 @@
     window.EJS_gameID = currentGame.gameId;
     window.EJS_DEBUG_XX = true;
     window.EJS_EXPERIMENTAL_NETPLAY = true;
+    window.EJS_hideSettings = true;
 
-    // Enable touch virtual gamepad
-    window.EJS_VirtualGamepadSettings = {
-      enabled: true
-    };
+    // Structured custom virtual gamepad for SNES (eliminates awkward ESQ/DIR and ugly Fast/Slow buttons)
+    window.EJS_VirtualGamepadSettings = [
+      { type: "dpad", id: "dpad", location: "left", left: "50%", top: "50%", joystickInput: false, inputValues: [4, 5, 6, 7] },
+      { type: "button", text: "L", id: "l", location: "left", left: 10, top: -55, bold: true, block: true, input_value: 10 },
+      { type: "button", text: "X", id: "x", location: "right", left: 46, top: 0, bold: true, input_value: 9 },
+      { type: "button", text: "Y", id: "y", location: "right", left: 0, top: 46, bold: true, input_value: 1 },
+      { type: "button", text: "A", id: "a", location: "right", left: 92, top: 46, bold: true, input_value: 8 },
+      { type: "button", text: "B", id: "b", location: "right", left: 46, top: 92, bold: true, input_value: 0 },
+      { type: "button", text: "R", id: "r", location: "right", right: 10, top: -55, bold: true, block: true, input_value: 11 },
+      { type: "button", text: "Select", id: "select", location: "center", left: -40, top: 0, fontSize: 11, block: true, input_value: 2 },
+      { type: "button", text: "Start", id: "start", location: "center", left: 40, top: 0, fontSize: 11, block: true, input_value: 3 }
+    ];
 
     // Bridge with Android
     function handleExit() {
@@ -427,9 +596,10 @@
 
     function shareRoomCode() {
       if (!activeRoomCode) return;
-      const shareText = `🎮 Bora jogar ${currentGame.title} comigo no LivreChat? Entra na sala: ${activeRoomCode}`;
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(shareText).then(() => {
+      if (window.Android && window.Android.shareCode) {
+        window.Android.shareCode(activeRoomCode);
+      } else if (navigator.clipboard) {
+        navigator.clipboard.writeText(`🎮 Bora jogar ${currentGame.title} comigo no LivreChat? Entra na sala: ${activeRoomCode}`).then(() => {
           alert('Código da sala copiado! Envie para seu amigo no chat.');
         });
       } else {

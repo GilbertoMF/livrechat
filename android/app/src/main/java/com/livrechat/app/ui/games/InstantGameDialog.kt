@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -62,6 +63,11 @@ class GameJsBridge(
 
     @JavascriptInterface
     fun shareRoom(code: String) {
+        onShareCode(code)
+    }
+
+    @JavascriptInterface
+    fun shareCode(code: String) {
         onShareCode(code)
     }
 
@@ -212,117 +218,152 @@ fun InstantGameDialog(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Minimalist Top Bar Controls
-            Row(
+            // Unified Single Floating Top Bar (Clean, no overlap)
+            Surface(
+                color = Color(0xEE0B0E14),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x338B5CF6)),
+                shadowElevation = 8.dp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        top = if (isLandscape) 8.dp else 28.dp,
-                        start = 12.dp,
-                        end = 12.dp
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                        top = if (isLandscape) 8.dp else 34.dp,
+                        start = 10.dp,
+                        end = 10.dp
+                    )
             ) {
-                // Exit Button
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xCC151A23),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x44FFFFFF)),
-                    modifier = Modifier.clickable {
-                        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                        onDismiss()
-                    }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Fechar Jogo",
-                            tint = Color(0xFFFF5252),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Sair",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFF8A80)
-                        )
-                    }
-                }
-
-                // Game Title & Tag
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xCC151A23),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x338B5CF6))
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "⚡ ${game.title}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFA78BFA),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // ROTATE / ORIENTATION TOGGLE (Horizontal / Vertical without reloading)
+                    // Exit Button
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = Color(0xCC151A23),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x5538BDF8)),
-                        modifier = Modifier.clickable { toggleOrientation() }
+                        color = Color(0xFFEF4444).copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.4f)),
+                        modifier = Modifier.clickable {
+                            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                            onDismiss()
+                        }
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                         ) {
                             Icon(
-                                Icons.Default.ScreenRotation,
-                                contentDescription = "Girar Tela",
-                                tint = Color(0xFF38BDF8),
-                                modifier = Modifier.size(16.dp)
+                                Icons.Default.Close,
+                                contentDescription = "Fechar Jogo",
+                                tint = Color(0xFFFF5252),
+                                modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (isLandscape) "Vertical" else "Horizontal",
+                                text = "Sair",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF7DD3FC)
+                                color = Color(0xFFFF8A80)
                             )
                         }
                     }
 
-                    // Reload Button
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xCC151A23),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x44FFFFFF)),
-                        modifier = Modifier.clickable {
-                            isLoading = true
-                            webView.reload()
-                        }
+                    // Game Title
+                    Text(
+                        text = game.title,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .padding(horizontal = 8.dp)
+                    )
+
+                    // Right Controls: Multiplayer + Girar + Reload
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
-                        Box(
-                            modifier = Modifier.padding(8.dp),
-                            contentAlignment = Alignment.Center
+                        // Multiplayer Room Modal Button
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF8B5CF6).copy(alpha = 0.2f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.5f)),
+                            modifier = Modifier.clickable {
+                                webView.evaluateJavascript("openMultiplayerModal()", null)
+                            }
                         ) {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = "Recarregar",
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.SportsEsports,
+                                    contentDescription = "Multiplayer",
+                                    tint = Color(0xFFA78BFA),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "Sala",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFA78BFA)
+                                )
+                            }
+                        }
+
+                        // ROTATE / ORIENTATION TOGGLE (Horizontal / Vertical without reloading)
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF38BDF8).copy(alpha = 0.15f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.4f)),
+                            modifier = Modifier.clickable { toggleOrientation() }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.ScreenRotation,
+                                    contentDescription = "Girar Tela",
+                                    tint = Color(0xFF38BDF8),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = if (isLandscape) "Vertical" else "Girar",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF7DD3FC)
+                                )
+                            }
+                        }
+
+                        // Reload Button
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0x22FFFFFF),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x33FFFFFF)),
+                            modifier = Modifier.clickable {
+                                isLoading = true
+                                webView.reload()
+                            }
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(5.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Recarregar",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
                         }
                     }
                 }
