@@ -786,4 +786,20 @@ class ConnectionManager(
             listeners.forEach { it.onChatError(code, message, clientMessageId) }
         }
     }
+
+    override fun onPartySync(
+        conversationId: String,
+        action: String,
+        currentTime: Long,
+        videoId: String,
+        videoUrl: String,
+        videoTitle: String,
+        senderName: String
+    ) {
+        synchronized(listeners) {
+            listeners.forEach {
+                it.onPartySync(conversationId, action, currentTime, videoId, videoUrl, videoTitle, senderName)
+            }
+        }
+    }
 }

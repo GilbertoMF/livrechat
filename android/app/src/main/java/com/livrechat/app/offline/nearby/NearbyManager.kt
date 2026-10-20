@@ -99,12 +99,23 @@ class NearbyManager private constructor(private val context: Context) {
     private val _connectedPeers = MutableStateFlow<Map<String, ConnectedPeer>>(emptyMap())
     val connectedPeers = MutableStateFlow<List<ConnectedPeer>>(emptyList())
 
-    // Walkie-Talkie PTT em Tempo Real
+    // Walkie-Talkie PTT em Tempo Real & Canais de Frequência
     private val _incomingPttSpeaker = MutableStateFlow<String?>(null)
     val incomingPttSpeaker: StateFlow<String?> = _incomingPttSpeaker.asStateFlow()
 
     private val _pttActivityTime = MutableStateFlow(0L)
     val pttActivityTime: StateFlow<Long> = _pttActivityTime.asStateFlow()
+
+    private val _currentPttChannel = MutableStateFlow("CH_01")
+    val currentPttChannel: StateFlow<String> = _currentPttChannel.asStateFlow()
+
+    // Radar Tático & Bússola P2P (Telemetria GPS na Malha)
+    private val _peerLocations = MutableStateFlow<Map<String, PeerLocation>>(emptyMap())
+    val peerLocations: StateFlow<Map<String, PeerLocation>> = _peerLocations.asStateFlow()
+
+    fun setPttChannel(channel: String) {
+        _currentPttChannel.value = channel
+    }
 
     // Ponte de Internet Híbrida (Internet Gateway / Mesh Proxy)
     private val _isInternetGateway = MutableStateFlow(false)
@@ -610,12 +621,24 @@ class NearbyManager private constructor(private val context: Context) {
             return
         }
 
-        // Walkie-Talkie Push-to-Talk (PTT Burst) Instantâneo
+        // Walkie-Talkie Push-to-Talk (PTT Burst) Instantâneo por Frequência/Canal
         if (packet.type == "PTT_BURST") {
-            Log.i(TAG, "📢 PTT BURST recebido de ${packet.senderName} (Hops: ${packet.hops}, via: ${packet.relayedVia})")
+            val pktChannel = packet.channel ?: "CH_01"
+            val myChannel = _currentPttChannel.value
+            val isChannelMatch = myChannel == "ALL" || myChannel == pktChannel || pktChannel == "CH_09" // Canal 9 é emergência, toca em todos!
+
+            Log.i(TAG, "📢 PTT BURST no canal [$pktChannel] de ${packet.senderName} (Hops: ${packet.hops}, via: ${packet.relayedVia}) - Sintonizado: $myChannel (Match=$isChannelMatch)")
+
             val audioData = packet.mediaData ?: packet.content
-            if (audioData.isNotBlank()) {
-                _incomingPttSpeaker.value = packet.senderName
+            if (isChannelMatch && audioData.isNotBlank()) {
+                val channelLabel = when (pktChannel) {
+                    "CH_01" -> "Canal 1 (Geral)"
+                    "CH_09" -> "🚨 Canal 9 (Emergência)"
+                    "CH_19" -> "Canal 19 (Estradas)"
+                    "CH_22" -> "Canal 22 (Livre)"
+                    else -> "Canal $pktChannel"
+                }
+                _incomingPttSpeaker.value = "${packet.senderName} • $channelLabel"
                 _pttActivityTime.value = System.currentTimeMillis()
                 MeshMediaHelper.playAudioBytes(context, audioData) {
                     _incomingPttSpeaker.value = null
@@ -636,6 +659,31 @@ class NearbyManager private constructor(private val context: Context) {
                     relayedVia = updatedRelayPath
                 )
                 broadcastToOtherPeers(fromEndpointId, relayedBurst)
+            }
+            return
+        }
+
+        // Radar Tático: Telemetria GPS Beacon de Amigos na Malha
+        if (packet.type == "GPS_BEACON") {
+            if (packet.latitude != null && packet.longitude != null) {
+                Log.d(TAG, "📍 GPS_BEACON recebido de ${packet.senderName}: (${packet.latitude}, ${packet.longitude})")
+                val locs = _peerLocations.value.toMutableMap()
+                locs[packet.senderName] = PeerLocation(
+                    peerName = packet.senderName,
+                    latitude = packet.latitude,
+                    longitude = packet.longitude,
+                    accuracy = packet.accuracy ?: 10f,
+                    timestamp = packet.timestamp
+                )
+                _peerLocations.value = locs
+            }
+            // Propaga telemetria aos demais nós da malha
+            if (packet.ttl > 1) {
+                val relayedBeacon = packet.copy(
+                    hops = packet.hops + 1,
+                    ttl = packet.ttl - 1
+                )
+                broadcastToOtherPeers(fromEndpointId, relayedBeacon)
             }
             return
         }
@@ -769,6 +817,7 @@ class NearbyManager private constructor(private val context: Context) {
             }
 
             scope.launch {
+                val isDeadDrop = packet.isDeadDrop
                 val msg = Mensagem(
                     idMensagem = packet.packetId,
                     remetenteId = packet.senderId,
@@ -782,13 +831,15 @@ class NearbyManager private constructor(private val context: Context) {
                     ttl = packet.ttl,
                     relayedVia = packet.relayedVia,
                     mediaType = mediaType,
-                    mediaData = mediaData
+                    mediaData = mediaData,
+                    isDeadDrop = isDeadDrop
                 )
                 dao.insertMensagem(msg)
 
-                val mediaSnippet = when (mediaType) {
-                    "image" -> if (packet.content.isNotBlank() && packet.content != "📷 Foto") "📷 ${packet.content}" else "📷 [Foto na malha]"
-                    "audio" -> "🎤 [Áudio de voz]"
+                val mediaSnippet = when {
+                    isDeadDrop -> "🔥 [Mensagem Dead Drop Confidencial]"
+                    mediaType == "image" -> if (packet.content.isNotBlank() && packet.content != "📷 Foto") "📷 ${packet.content}" else "📷 [Foto na malha]"
+                    mediaType == "audio" -> "🎤 [Áudio de voz]"
                     else -> packet.content
                 }
 
@@ -880,7 +931,12 @@ class NearbyManager private constructor(private val context: Context) {
     /**
      * Envia mensagem para um contato na rede offline
      */
-    fun sendMessage(recipientId: String, recipientName: String, content: String): Mensagem {
+    fun sendMessage(
+        recipientId: String,
+        recipientName: String,
+        content: String,
+        isDeadDrop: Boolean = false
+    ): Mensagem {
         val messageId = UUID.randomUUID().toString()
         val targetName = recipientName.ifBlank { recipientId }
 
@@ -905,7 +961,8 @@ class NearbyManager private constructor(private val context: Context) {
             type = "TEXT",
             hops = 0,
             ttl = 5,
-            relayedVia = null
+            relayedVia = null,
+            isDeadDrop = isDeadDrop
         )
 
         val localMsg = Mensagem(
@@ -919,7 +976,8 @@ class NearbyManager private constructor(private val context: Context) {
             isMeshRoute = !isDirect,
             hops = if (!isDirect) 1 else 0,
             ttl = 5,
-            relayedVia = if (!isDirect) "malha mesh" else null
+            relayedVia = if (!isDirect) "malha mesh" else null,
+            isDeadDrop = isDeadDrop
         )
 
         scope.launch {
@@ -928,7 +986,7 @@ class NearbyManager private constructor(private val context: Context) {
                 Conversa(
                     id = targetName,
                     contatoNome = targetName,
-                    ultimaMensagem = if (!isDirect) "🌐 [via malha]: $content" else content,
+                    ultimaMensagem = if (isDeadDrop) "🔥 [Mensagem Dead Drop Confidencial]" else if (!isDirect) "🌐 [via malha]: $content" else content,
                     ultimoTimestamp = localMsg.timestamp,
                     naoLidas = 0
                 )
@@ -956,9 +1014,9 @@ class NearbyManager private constructor(private val context: Context) {
     }
 
     /**
-     * Transmissão PTT Walkie-Talkie em Tempo Real na Malha Mesh
+     * Transmissão PTT Walkie-Talkie em Tempo Real na Malha Mesh por Canal
      */
-    fun broadcastPttAudio(base64Audio: String) {
+    fun broadcastPttAudio(base64Audio: String, channel: String = _currentPttChannel.value) {
         val packetId = UUID.randomUUID().toString()
         val packet = MeshPacket(
             packetId = packetId,
@@ -972,11 +1030,37 @@ class NearbyManager private constructor(private val context: Context) {
             hops = 0,
             ttl = 4,
             mediaType = "audio",
-            mediaData = base64Audio
+            mediaData = base64Audio,
+            channel = channel
         )
         forwardedPacketIds.add(packetId)
         broadcastToAllPeers(packet)
-        Log.i(TAG, "📢 PTT BURST transmitido para a malha (${base64Audio.length} chars Base64)")
+        Log.i(TAG, "📢 PTT BURST transmitido para o canal [$channel] na malha (${base64Audio.length} chars Base64)")
+    }
+
+    /**
+     * Transmissão de Baliza de Telemetria GPS para o Radar Tático & Bússola P2P
+     */
+    fun broadcastLocationBeacon(latitude: Double, longitude: Double, accuracy: Float) {
+        val packetId = UUID.randomUUID().toString()
+        val packet = MeshPacket(
+            packetId = packetId,
+            senderId = myDeviceId,
+            senderName = myDeviceName,
+            recipientId = "*",
+            recipientName = "*",
+            content = "GPS Telemetry Beacon",
+            timestamp = System.currentTimeMillis(),
+            type = "GPS_BEACON",
+            hops = 0,
+            ttl = 4,
+            latitude = latitude,
+            longitude = longitude,
+            accuracy = accuracy
+        )
+        forwardedPacketIds.add(packetId)
+        broadcastToAllPeers(packet)
+        Log.d(TAG, "📍 Telemetria GPS transmitida na malha: ($latitude, $longitude, acc: ${accuracy}m)")
     }
 
     /**
@@ -987,7 +1071,8 @@ class NearbyManager private constructor(private val context: Context) {
         recipientName: String,
         mediaType: String,
         mediaData: String,
-        caption: String = ""
+        caption: String = "",
+        isDeadDrop: Boolean = false
     ): Mensagem {
         val messageId = UUID.randomUUID().toString()
         val targetName = recipientName.ifBlank { recipientId }
@@ -1016,7 +1101,8 @@ class NearbyManager private constructor(private val context: Context) {
             hops = 0,
             ttl = 5,
             mediaType = mediaType,
-            mediaData = mediaData
+            mediaData = mediaData,
+            isDeadDrop = isDeadDrop
         )
 
         val localMsg = Mensagem(
@@ -1032,7 +1118,8 @@ class NearbyManager private constructor(private val context: Context) {
             ttl = 5,
             relayedVia = if (!isDirect) "malha mesh" else null,
             mediaType = mediaType,
-            mediaData = mediaData
+            mediaData = mediaData,
+            isDeadDrop = isDeadDrop
         )
 
         scope.launch {
@@ -1041,7 +1128,7 @@ class NearbyManager private constructor(private val context: Context) {
                 Conversa(
                     id = targetName,
                     contatoNome = targetName,
-                    ultimaMensagem = if (!isDirect) "🌐 [via malha]: $displayContent" else displayContent,
+                    ultimaMensagem = if (isDeadDrop) "🔥 [Mensagem Dead Drop Confidencial]" else if (!isDirect) "🌐 [via malha]: $displayContent" else displayContent,
                     ultimoTimestamp = localMsg.timestamp,
                     naoLidas = 0
                 )

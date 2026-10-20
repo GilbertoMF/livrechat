@@ -10,6 +10,9 @@ interface OfflineDao {
     @Query("SELECT * FROM offline_contatos ORDER BY ultimoVisto DESC")
     fun getAllContatos(): Flow<List<Contato>>
 
+    @Query("SELECT * FROM offline_contatos ORDER BY ultimoVisto DESC")
+    suspend fun getAllContatosList(): List<Contato>
+
     @Query("SELECT * FROM offline_contatos WHERE id = :id LIMIT 1")
     suspend fun getContatoById(id: String): Contato?
 
@@ -49,13 +52,22 @@ interface OfflineDao {
     @Query("UPDATE offline_mensagens SET statusEntrega = :status WHERE idMensagem = :idMensagem")
     suspend fun updateStatusMensagem(idMensagem: String, status: StatusEntrega)
 
+    @Query("SELECT * FROM offline_mensagens ORDER BY timestamp ASC")
+    suspend fun getAllMensagensList(): List<Mensagem>
+
     @Query("SELECT * FROM offline_mensagens WHERE destinatarioId = :destinatarioId AND statusEntrega = 'PENDENTE'")
     suspend fun getMensagensPendentes(destinatarioId: String): List<Mensagem>
+
+    @Query("DELETE FROM offline_mensagens WHERE idMensagem = :idMensagem")
+    suspend fun deleteMensagem(idMensagem: String)
+
+    @Query("UPDATE offline_mensagens SET isBurned = 1, conteudo = '[Mensagem destruída]' WHERE idMensagem = :idMensagem")
+    suspend fun markMensagemBurned(idMensagem: String)
 }
 
 @Database(
     entities = [Contato::class, Conversa::class, Mensagem::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class OfflineDatabase : RoomDatabase() {
@@ -78,13 +90,20 @@ abstract class OfflineDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE offline_mensagens ADD COLUMN isDeadDrop INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE offline_mensagens ADD COLUMN isBurned INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): OfflineDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     OfflineDatabase::class.java,
                     "livrechat_offline_mesh.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                  .fallbackToDestructiveMigration()
                  .build()
                 INSTANCE = instance

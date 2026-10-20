@@ -929,6 +929,97 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
         _chatErrorMessage.value = message
     }
 
+    data class PartySession(
+        val videoId: String = "",
+        val videoUrl: String = "",
+        val videoTitle: String = "LivreParty",
+        val isPlaying: Boolean = false,
+        val currentTime: Long = 0L,
+        val updatedBy: String = ""
+    )
+
+    private val _activePartySession = MutableStateFlow<PartySession?>(null)
+    val activePartySession: StateFlow<PartySession?> = _activePartySession.asStateFlow()
+
+    fun startPartySession(videoId: String, videoUrl: String, title: String) {
+        val convId = _currentConversationId.value ?: return
+        _activePartySession.value = PartySession(
+            videoId = videoId,
+            videoUrl = videoUrl,
+            videoTitle = title,
+            isPlaying = true,
+            currentTime = 0L,
+            updatedBy = "Você"
+        )
+        connectionManager.getClient().sendPartySync(
+            conversationId = convId,
+            action = "PLAY",
+            currentTime = 0L,
+            videoId = videoId,
+            videoUrl = videoUrl,
+            videoTitle = title
+        )
+    }
+
+    fun syncPartyAction(action: String, currentTime: Long) {
+        val convId = _currentConversationId.value ?: return
+        val current = _activePartySession.value ?: return
+        _activePartySession.value = current.copy(
+            isPlaying = action == "PLAY",
+            currentTime = currentTime,
+            updatedBy = "Você"
+        )
+        connectionManager.getClient().sendPartySync(
+            conversationId = convId,
+            action = action,
+            currentTime = currentTime,
+            videoId = current.videoId,
+            videoUrl = current.videoUrl,
+            videoTitle = current.videoTitle
+        )
+    }
+
+    fun closePartySession() {
+        val convId = _currentConversationId.value
+        val current = _activePartySession.value
+        if (convId != null && current != null) {
+            connectionManager.getClient().sendPartySync(
+                conversationId = convId,
+                action = "CLOSE",
+                currentTime = 0L,
+                videoId = current.videoId,
+                videoUrl = current.videoUrl,
+                videoTitle = current.videoTitle
+            )
+        }
+        _activePartySession.value = null
+    }
+
+    override fun onPartySync(
+        conversationId: String,
+        action: String,
+        currentTime: Long,
+        videoId: String,
+        videoUrl: String,
+        videoTitle: String,
+        senderName: String
+    ) {
+        if (_currentConversationId.value == conversationId) {
+            if (action == "CLOSE") {
+                _activePartySession.value = null
+            } else {
+                _activePartySession.value = PartySession(
+                    videoId = videoId,
+                    videoUrl = videoUrl,
+                    videoTitle = videoTitle,
+                    isPlaying = action == "PLAY",
+                    currentTime = currentTime,
+                    updatedBy = senderName
+                )
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         ChatSoundManager.stopAll()

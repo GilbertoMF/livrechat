@@ -11,6 +11,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -40,6 +42,7 @@ import com.livrechat.app.offline.data.StatusEntrega
 import com.livrechat.app.offline.nearby.MeshMediaHelper
 import com.livrechat.app.offline.nearby.NearbyManager
 import com.livrechat.app.offline.nearby.NearbyPermissionHelper
+import com.livrechat.app.util.LocalAiHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -85,6 +88,8 @@ fun OfflineChatScreen(
     // Estado da Gravação de Voz
     var isRecordingVoice by remember { mutableStateOf(false) }
     var recordingDurationSeconds by remember { mutableIntStateOf(0) }
+    var isDeadDropMode by remember { mutableStateOf(false) }
+    var showAiSummaryDialog by remember { mutableStateOf(false) }
 
     // Launcher para Galeria de Imagens
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -192,6 +197,13 @@ fun OfflineChatScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showAiSummaryDialog = true }) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = "Resumo Inteligente On-Device",
+                            tint = Color(0xFFFFD54F)
+                        )
+                    }
                     IconButton(onClick = {
                         nearbyManager.restartMeshNetwork()
                         isGpsEnabled = NearbyPermissionHelper.isLocationEnabled(context)
@@ -315,12 +327,38 @@ fun OfflineChatScreen(
                             )
                         }
 
+                        // Botão de Dead Drop (Autodestruição Confidencial)
+                        IconButton(
+                            onClick = {
+                                isDeadDropMode = !isDeadDropMode
+                                Toast.makeText(
+                                    context,
+                                    if (isDeadDropMode) "🔥 Modo Dead Drop Ativado (Autodestruição ao ler)" else "Modo Normal",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            },
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.LocalFireDepartment,
+                                contentDescription = "Dead Drop",
+                                tint = if (isDeadDropMode) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
                         Spacer(modifier = Modifier.width(4.dp))
 
                         OutlinedTextField(
                             value = inputText,
                             onValueChange = { inputText = it },
-                            placeholder = { Text("Mensagem sem internet...", fontSize = 13.sp) },
+                            placeholder = {
+                                Text(
+                                    text = if (isDeadDropMode) "🔥 Mensagem Dead Drop..." else "Mensagem sem internet...",
+                                    fontSize = 13.sp,
+                                    color = if (isDeadDropMode) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(24.dp),
                             maxLines = 4
@@ -332,13 +370,14 @@ fun OfflineChatScreen(
                             onClick = {
                                 val text = inputText.trim()
                                 if (text.isNotBlank()) {
-                                    nearbyManager.sendMessage(contactId, contactName, text)
+                                    nearbyManager.sendMessage(contactId, contactName, text, isDeadDrop = isDeadDropMode)
                                     inputText = ""
+                                    if (isDeadDropMode) isDeadDropMode = false
                                 }
                             },
                             modifier = Modifier
                                 .size(42.dp)
-                                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                .background(if (isDeadDropMode) Color(0xFFEF4444) else MaterialTheme.colorScheme.primary, CircleShape)
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.Send,
@@ -419,6 +458,69 @@ fun OfflineChatScreen(
             }
         }
     }
+
+    // DIÁLOGO: RESUMO INTELIGENTE ON-DEVICE (100% LOCAL SEM NUVEM)
+    if (showAiSummaryDialog) {
+        val summary = remember(mensagens) { LocalAiHelper.summarizeMessages(mensagens) }
+        AlertDialog(
+            onDismissRequest = { showAiSummaryDialog = false },
+            icon = {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFFFFD54F))
+            },
+            title = {
+                Text("Resumo On-Device (IA Local)", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            },
+            text = {
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    item {
+                        Text(
+                            text = "Processado 100% no seu aparelho via NLP local, sem envio de dados para servidores ou internet.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    if (summary.keyTopics.isNotEmpty()) {
+                        item {
+                            Text("📌 Principais Tópicos:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            summary.keyTopics.forEach { topic ->
+                                Text("• $topic", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+                    }
+
+                    if (summary.decisions.isNotEmpty()) {
+                        item {
+                            Text("🤝 Decisões & Acordos:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF00E676))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            summary.decisions.forEach { dec ->
+                                Text("✔ $dec", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+                    }
+
+                    if (summary.pendingQuestions.isNotEmpty()) {
+                        item {
+                            Text("❓ Perguntas em Aberto:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFFFB74D))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            summary.pendingQuestions.forEach { q ->
+                                Text("? $q", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showAiSummaryDialog = false }) {
+                    Text("Entendido")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -427,8 +529,44 @@ fun OfflineMessageBubble(
     isMine: Boolean
 ) {
     val context = LocalContext.current
+    val dao = remember { OfflineDatabase.getInstance(context).offlineDao() }
+    val scope = rememberCoroutineScope()
     var isPlayingAudio by remember { mutableStateOf(false) }
+    var isTranscribingAudio by remember { mutableStateOf(false) }
+    var transcribedText by remember { mutableStateOf<String?>(null) }
     var showFullImageDialog by remember { mutableStateOf(false) }
+
+    // Estados para Mensagem Dead Drop
+    var isPressingDeadDrop by remember { mutableStateOf(false) }
+    var deadDropCountdown by remember { mutableIntStateOf(5) }
+    var hasRevealedDeadDrop by remember { mutableStateOf(false) }
+    var isBurnedLocal by remember { mutableStateOf(msg.isBurned) }
+
+    LaunchedEffect(isPressingDeadDrop) {
+        if (isPressingDeadDrop && !isBurnedLocal) {
+            hasRevealedDeadDrop = true
+            deadDropCountdown = 5
+            while (deadDropCountdown > 0 && isPressingDeadDrop) {
+                delay(1000)
+                deadDropCountdown--
+            }
+            if (deadDropCountdown == 0) {
+                isBurnedLocal = true
+                isPressingDeadDrop = false
+                scope.launch {
+                    dao.markMensagemBurned(msg.idMensagem)
+                    dao.deleteMensagem(msg.idMensagem)
+                }
+            }
+        } else if (hasRevealedDeadDrop && !isBurnedLocal) {
+            // Soltou o dedo após revelar -> autodestruição imediata!
+            isBurnedLocal = true
+            scope.launch {
+                dao.markMensagemBurned(msg.idMensagem)
+                dao.deleteMensagem(msg.idMensagem)
+            }
+        }
+    }
 
     val timeText = remember(msg.timestamp) {
         val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -505,98 +643,231 @@ fun OfflineMessageBubble(
                     }
                 }
 
-                // CONTEÚDO DEPENDENDO DO TIPO DE MÍDIA
-                when (msg.mediaType) {
-                    "image" -> {
-                        Column {
-                            if (imageBitmap != null) {
-                                Image(
-                                    bitmap = imageBitmap,
-                                    contentDescription = "Foto na malha",
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(max = 200.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { showFullImageDialog = true },
-                                    contentScale = ContentScale.Crop
+                // CONTEÚDO DA MENSAGEM: DEAD DROP OU MÍDIA NORMAL
+                if (isBurnedLocal) {
+                    // MENSAGEM AUTODESTRUÍDA (CINZAS)
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF334155),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.LocalFireDepartment,
+                                contentDescription = null,
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "🔥 Mensagem Dead Drop destruída",
+                                fontSize = 12.sp,
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
+                    }
+                } else if (msg.isDeadDrop) {
+                    // MENSAGEM DEAD DROP ATIVA: SEGURE PARA REVELAR (5s)
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isPressingDeadDrop) Color(0xFF7F1D1D) else Color(0xFF991B1B).copy(alpha = 0.45f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = {
+                                        isPressingDeadDrop = true
+                                        tryAwaitRelease()
+                                        isPressingDeadDrop = false
+                                    }
                                 )
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(100.dp)
-                                        .background(Color.Black.copy(alpha = 0.1f), RoundedCornerShape(8.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray)
-                                }
+                            }
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.LocalFireDepartment,
+                                    contentDescription = null,
+                                    tint = Color(0xFFEF4444),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isPressingDeadDrop) "🔥 Destruição em ${deadDropCountdown}s..." else "🔥 Dead Drop Confidencial",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFCA5A5)
+                                )
                             }
 
-                            if (msg.conteudo.isNotBlank() && msg.conteudo != "📷 Foto") {
-                                Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            if (isPressingDeadDrop) {
                                 Text(
                                     text = msg.conteudo,
-                                    fontSize = 13.sp,
-                                    color = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                            } else {
+                                Text(
+                                    text = "Segure pressionado para ler o segredo",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFFCA5A5).copy(alpha = 0.85f)
                                 )
                             }
                         }
                     }
-
-                    "audio" -> {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isMine) Color.Black.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = {
-                                        val data = msg.mediaData
-                                        if (!data.isNullOrBlank()) {
-                                            isPlayingAudio = true
-                                            MeshMediaHelper.playAudioBytes(context, data) {
-                                                isPlayingAudio = false
-                                            }
-                                        }
-                                    },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        if (isPlayingAudio) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                        contentDescription = "Ouvir áudio",
-                                        tint = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                } else {
+                    // MÍDIA NORMAL
+                    when (msg.mediaType) {
+                        "image" -> {
+                            Column {
+                                if (imageBitmap != null) {
+                                    Image(
+                                        bitmap = imageBitmap,
+                                        contentDescription = "Foto na malha",
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 200.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable { showFullImageDialog = true },
+                                        contentScale = ContentScale.Crop
                                     )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(100.dp)
+                                            .background(Color.Black.copy(alpha = 0.1f), RoundedCornerShape(8.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray)
+                                    }
                                 }
 
-                                Spacer(modifier = Modifier.width(6.dp))
-
-                                Column(modifier = Modifier.weight(1f)) {
+                                if (msg.conteudo.isNotBlank() && msg.conteudo != "📷 Foto") {
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = if (isPlayingAudio) "▶ Reproduzindo..." else "Nota de voz offline",
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 12.sp,
+                                        text = msg.conteudo,
+                                        fontSize = 13.sp,
                                         color = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "AMR-NB 8kHz • 12.2 kbps",
-                                        fontSize = 10.sp,
-                                        color = if (isMine) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
                         }
-                    }
 
-                    else -> {
-                        Text(
-                            text = msg.conteudo,
-                            fontSize = 14.sp,
-                            color = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                        )
+                        "audio" -> {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isMine) Color.Black.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surface,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                val data = msg.mediaData
+                                                if (!data.isNullOrBlank()) {
+                                                    isPlayingAudio = true
+                                                    MeshMediaHelper.playAudioBytes(context, data) {
+                                                        isPlayingAudio = false
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                if (isPlayingAudio) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                contentDescription = "Ouvir áudio",
+                                                tint = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(6.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = if (isPlayingAudio) "▶ Reproduzindo..." else "Nota de voz offline",
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 12.sp,
+                                                color = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = "AMR-NB 8kHz • 12.2 kbps",
+                                                fontSize = 10.sp,
+                                                color = if (isMine) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // TRANSCRIÇÃO IA ON-DEVICE
+                                if (transcribedText != null) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = if (isMine) Color.Black.copy(alpha = 0.25f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(6.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFFFFD54F), modifier = Modifier.size(12.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Transcrição On-Device:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFD54F))
+                                            }
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(transcribedText ?: "", fontSize = 12.sp, color = if (isMine) Color.White else MaterialTheme.colorScheme.onSurface)
+                                        }
+                                    }
+                                } else {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                                        horizontalArrangement = Arrangement.End
+                                    ) {
+                                        TextButton(
+                                            onClick = {
+                                                val data = msg.mediaData
+                                                if (!data.isNullOrBlank()) {
+                                                    isTranscribingAudio = true
+                                                    scope.launch {
+                                                        LocalAiHelper.transcribeAudioNote(context, data) { result ->
+                                                            isTranscribingAudio = false
+                                                            transcribedText = result
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            if (isTranscribingAudio) {
+                                                CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 1.5.dp, color = Color(0xFFFFD54F))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Transcrevendo...", fontSize = 10.sp, color = Color(0xFFFFD54F))
+                                            } else {
+                                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFFFFD54F))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Transcrever", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFD54F))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        else -> {
+                            Text(
+                                text = msg.conteudo,
+                                fontSize = 14.sp,
+                                color = if (isMine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
 

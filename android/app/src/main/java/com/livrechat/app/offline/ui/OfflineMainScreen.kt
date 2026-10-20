@@ -87,6 +87,7 @@ fun OfflineMainScreen(
 
     // Walkie-Talkie e Gateway
     val incomingSpeaker by nearbyManager.incomingPttSpeaker.collectAsState()
+    val currentPttChannel by nearbyManager.currentPttChannel.collectAsState()
     val isInternetGateway by nearbyManager.isInternetGateway.collectAsState()
     val meshGateways by nearbyManager.meshGateways.collectAsState()
     val lastProxyStatus by nearbyManager.lastProxyStatus.collectAsState()
@@ -337,22 +338,27 @@ fun OfflineMainScreen(
                 }
             }
 
-            // 5. BARRA DE ABAS: CONVERSAS / RADAR / MAPA DA MALHA
+            // 5. BARRA DE ABAS: CONVERSAS / RADAR / MAPA DA MALHA / BÚSSOLA TÁTICA
             TabRow(selectedTabIndex = selectedSubTab) {
                 Tab(
                     selected = selectedSubTab == 0,
                     onClick = { selectedSubTab = 0 },
-                    text = { Text("Conversas (${conversas.size})", fontWeight = FontWeight.SemiBold, fontSize = 12.sp) }
+                    text = { Text("Conversas (${conversas.size})", fontWeight = FontWeight.SemiBold, fontSize = 11.sp) }
                 )
                 Tab(
                     selected = selectedSubTab == 1,
                     onClick = { selectedSubTab = 1 },
-                    text = { Text("Radar (${uniqueDiscoveredPeers.size})", fontWeight = FontWeight.SemiBold, fontSize = 12.sp) }
+                    text = { Text("Radar (${uniqueDiscoveredPeers.size})", fontWeight = FontWeight.SemiBold, fontSize = 11.sp) }
                 )
                 Tab(
                     selected = selectedSubTab == 2,
                     onClick = { selectedSubTab = 2 },
-                    text = { Text("Mapa da Malha", fontWeight = FontWeight.SemiBold, fontSize = 12.sp) }
+                    text = { Text("Topologia", fontWeight = FontWeight.SemiBold, fontSize = 11.sp) }
+                )
+                Tab(
+                    selected = selectedSubTab == 3,
+                    onClick = { selectedSubTab = 3 },
+                    text = { Text("🎯 Bússola", fontWeight = FontWeight.SemiBold, fontSize = 11.sp) }
                 )
             }
 
@@ -462,6 +468,11 @@ fun OfflineMainScreen(
                             }
                         )
                     }
+
+                    3 -> {
+                        // TAB 3: BÚSSOLA TÁTICA & RADAR GPS P2P
+                        TacticalCompassRadarView(nearbyManager = nearbyManager)
+                    }
                 }
             }
 
@@ -473,9 +484,56 @@ fun OfflineMainScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // SELETOR DE FREQUÊNCIA / CANAL PX TÁTICO
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val channels = listOf(
+                            "CH_01" to "CH 1 Geral",
+                            "CH_09" to "🚨 CH 9 SOS",
+                            "CH_19" to "CH 19 Rodovia",
+                            "CH_22" to "CH 22 Livre",
+                            "ALL" to "📻 Ouvir Todos"
+                        )
+                        channels.forEach { (chKey, chLabel) ->
+                            val isSelected = currentPttChannel == chKey
+                            val chipColor = if (chKey == "CH_09") {
+                                if (isSelected) Color(0xFFDC2626) else Color(0xFFEF4444).copy(alpha = 0.25f)
+                            } else {
+                                if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                            }
+                            val textColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = chipColor,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        nearbyManager.setPttChannel(chKey)
+                                        Toast.makeText(context, "Sintonizado em: $chLabel", Toast.LENGTH_SHORT).show()
+                                    }
+                            ) {
+                                Text(
+                                    text = chLabel,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = textColor,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+
                     val pttButtonColor = if (isTransmittingPtt) Color(0xFFE53935) else MaterialTheme.colorScheme.primary
 
                     Box(

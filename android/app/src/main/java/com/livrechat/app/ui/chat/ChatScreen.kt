@@ -522,6 +522,13 @@ fun ChatScreen(
     var unlockError by remember { mutableStateOf<String?>(null) }
     var showContactProfile by remember { mutableStateOf(false) }
     var showCryptoInfoDialog by remember { mutableStateOf(false) }
+
+    // Estados LivreParty e IA Local
+    val activePartySession by viewModel.activePartySession.collectAsState()
+    var showPartyStartDialog by remember { mutableStateOf(false) }
+    var partyVideoUrlInput by remember { mutableStateOf("") }
+    var partyVideoTitleInput by remember { mutableStateOf("") }
+    var showAiSummaryDialog by remember { mutableStateOf(false) }
     var selectedMessageForAction by remember { mutableStateOf<MessageEntity?>(null) }
     var messageActionTarget by remember { mutableStateOf<MessageEntity?>(null) }
     var replyingToMessage by remember { mutableStateOf<MessageEntity?>(null) }
@@ -1031,6 +1038,135 @@ fun ChatScreen(
             confirmButton = {
                 TextButton(onClick = { showCryptoInfoDialog = false }) {
                     Text("Entendido", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    // DIÁLOGO: INICIAR SESSÃO LIVREPARTY
+    if (showPartyStartDialog) {
+        AlertDialog(
+            onDismissRequest = { showPartyStartDialog = false },
+            icon = {
+                Icon(Icons.Default.Movie, contentDescription = null, tint = Color(0xFF6366F1))
+            },
+            title = {
+                Text("Iniciar LivreParty", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Assista a vídeos sincronizados com todos neste chat! Ao pausar, dar play ou avançar, todos no grupo assistem juntos.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = partyVideoUrlInput,
+                        onValueChange = { partyVideoUrlInput = it },
+                        label = { Text("Link do Vídeo (YouTube, MP4, LivreTube)") },
+                        placeholder = { Text("https://...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    OutlinedTextField(
+                        value = partyVideoTitleInput,
+                        onValueChange = { partyVideoTitleInput = it },
+                        label = { Text("Título do Vídeo") },
+                        placeholder = { Text("Ex: Trailer, Música ou Aula") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val url = partyVideoUrlInput.trim()
+                        if (url.isNotBlank()) {
+                            val title = partyVideoTitleInput.trim().ifBlank { "Vídeo LivreParty" }
+                            val id = url.substringAfterLast("/").take(16)
+                            viewModel.startPartySession(id, url, title)
+                            showPartyStartDialog = false
+                            partyVideoUrlInput = ""
+                            partyVideoTitleInput = ""
+                            Toast.makeText(context, "Sessão LivreParty iniciada!", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Informe a URL do vídeo", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                ) {
+                    Text("Iniciar Assistir Juntos")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPartyStartDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // DIÁLOGO: RESUMO INTELIGENTE ON-DEVICE (100% LOCAL SEM NUVEM)
+    if (showAiSummaryDialog) {
+        val summary = remember(messages) { com.livrechat.app.util.LocalAiHelper.summarizeChatMessages(messages) }
+        AlertDialog(
+            onDismissRequest = { showAiSummaryDialog = false },
+            icon = {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFFFFD54F))
+            },
+            title = {
+                Text("Resumo On-Device (IA Local)", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            },
+            text = {
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    item {
+                        Text(
+                            text = "Processado 100% no seu aparelho via NLP local, sem envio de mensagens para servidores.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    if (summary.keyTopics.isNotEmpty()) {
+                        item {
+                            Text("📌 Principais Tópicos:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            summary.keyTopics.forEach { topic ->
+                                Text("• $topic", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+                    }
+
+                    if (summary.decisions.isNotEmpty()) {
+                        item {
+                            Text("🤝 Decisões & Acordos:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF00E676))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            summary.decisions.forEach { dec ->
+                                Text("✔ $dec", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+                    }
+
+                    if (summary.pendingQuestions.isNotEmpty()) {
+                        item {
+                            Text("❓ Perguntas em Aberto:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFFFB74D))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            summary.pendingQuestions.forEach { q ->
+                                Text("? $q", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showAiSummaryDialog = false }) {
+                    Text("Entendido")
                 }
             }
         )
@@ -1685,6 +1821,26 @@ fun ChatScreen(
                                 },
                                 leadingIcon = {
                                     Icon(Icons.Default.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("🍿 Assistir Juntos (LivreParty)") },
+                                onClick = {
+                                    showMenu = false
+                                    showPartyStartDialog = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Movie, contentDescription = null, tint = Color(0xFF6366F1))
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("✨ Resumo Inteligente (IA Local)") },
+                                onClick = {
+                                    showMenu = false
+                                    showAiSummaryDialog = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFFFFD54F))
                                 }
                             )
                         }
@@ -2538,6 +2694,82 @@ fun ChatScreen(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(16.dp)
                             )
+                        }
+                    }
+                }
+            }
+
+            // BARRA LIVREPARTY SINCRONIZADA
+            if (activePartySession != null) {
+                val party = activePartySession!!
+                Surface(
+                    color = Color(0xFF1E1B4B),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xFF6366F1), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Movie, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("🍿 LivreParty Sincronizada", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFA5B4FC))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = if (party.isPlaying) Color(0xFF10B981) else Color(0xFFF59E0B)
+                                ) {
+                                    Text(
+                                        text = if (party.isPlaying) "AO VIVO" else "PAUSADO",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = party.videoTitle.ifBlank { party.videoUrl },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = if (party.isPlaying) "Em sincronia • ${party.updatedBy}" else "Pausado por ${party.updatedBy}",
+                                fontSize = 10.sp,
+                                color = Color(0xFFC7D2FE)
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                viewModel.syncPartyAction(if (party.isPlaying) "PAUSE" else "PLAY", party.currentTime)
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (party.isPlaying) Icons.Default.PauseCircle else Icons.Default.PlayCircle,
+                                contentDescription = "Play/Pause",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = { viewModel.closePartySession() },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Fechar LivreParty", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
                         }
                     }
                 }

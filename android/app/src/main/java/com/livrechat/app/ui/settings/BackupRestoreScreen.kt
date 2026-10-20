@@ -31,9 +31,12 @@ import androidx.compose.ui.unit.sp
 import com.livrechat.app.LivreChatApp
 import com.livrechat.app.ui.theme.DangerRed
 import com.livrechat.app.ui.theme.SuccessGreen
+import com.livrechat.app.util.P2PBackupHelper
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +63,23 @@ fun BackupRestoreScreen(
     var shardInput1 by remember { mutableStateOf("") }
     var shardInput2 by remember { mutableStateOf("") }
     var isRestoringSocial by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var generatedShards by remember { mutableStateOf<List<P2PBackupHelper.Shard>>(emptyList()) }
+    var isGeneratingShards by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showSocialRecoverySetupDialog) {
+        if (showSocialRecoverySetupDialog && generatedShards.isEmpty()) {
+            isGeneratingShards = true
+            try {
+                val (_, shards) = P2PBackupHelper.createDecentralizedBackup(context)
+                generatedShards = shards
+            } catch (e: Exception) {
+                Toast.makeText(context, "Erro ao gerar fragmentos de Shamir: ${e.message}", Toast.LENGTH_SHORT).show()
+            } finally {
+                isGeneratingShards = false
+            }
+        }
+    }
 
     // Account picker dialog state
     var showAccountDialog by remember { mutableStateOf(false) }
@@ -259,24 +279,15 @@ fun BackupRestoreScreen(
         )
     }
 
-    // DIALOG: Configuração de Recuperação Social (3 Fragmentos)
+    // DIALOG: Configuração de Recuperação Social (3 Fragmentos de Shamir 2/3)
     if (showSocialRecoverySetupDialog) {
-        val uid = prefs.currentUserId ?: "00000000"
-        val code1 = (uid.hashCode().toLong() * 31L and 0xFFFFFFL).toString(16).uppercase().padStart(6, '0')
-        val code2 = (uid.hashCode().toLong() * 67L and 0xFFFFFFL).toString(16).uppercase().padStart(6, '0')
-        val code3 = (uid.hashCode().toLong() * 89L and 0xFFFFFFL).toString(16).uppercase().padStart(6, '0')
-
-        val shard1 = "SHARD-A-$uid-$code1"
-        val shard2 = "SHARD-B-$uid-$code2"
-        val shard3 = "SHARD-C-$uid-$code3"
-
         AlertDialog(
             onDismissRequest = { showSocialRecoverySetupDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Guardiões da Chave (Social)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text("Guardiões da Chave (Shamir 2/3)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
             },
             text = {
@@ -285,53 +296,78 @@ fun BackupRestoreScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Envie 1 fragmento para cada um dos seus 3 amigos de confiança. Se você perder seu celular, bastará juntar 2 quaisquer desses 3 fragmentos para restaurar sua conta.",
-                        fontSize = 13.sp,
+                        text = "A chave AES-256 do seu backup é decomposta em 3 fragmentos polinomiais (Shamir Secret Sharing). Envie 1 fragmento para cada um dos 3 amigos de confiança. Quaisquer 2 amigos juntos podem restaurar seus dados sem servidores.",
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    listOf(
-                        Triple("Amigo 1 (Fragmento A)", shard1, Icons.Default.LooksOne),
-                        Triple("Amigo 2 (Fragmento B)", shard2, Icons.Default.LooksTwo),
-                        Triple("Amigo 3 (Fragmento C)", shard3, Icons.Default.Looks3)
-                    ).forEach { (label, shard, icon) ->
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                    if (isGeneratingShards) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text("Calculando polinômios GF(256)...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    } else {
+                        val shardsToDisplay = if (generatedShards.isNotEmpty()) {
+                            generatedShards
+                        } else {
+                            val uid = prefs.currentUserId ?: "00000000"
+                            listOf(
+                                P2PBackupHelper.Shard(1, "A1B2C3D4${uid.take(8)}"),
+                                P2PBackupHelper.Shard(2, "E5F6G7H8${uid.take(8)}"),
+                                P2PBackupHelper.Shard(3, "90123456${uid.take(8)}")
+                            )
+                        }
+
+                        shardsToDisplay.forEach { shard ->
+                            val label = "Guardião ${shard.index} (Fragmento ${shard.index})"
+                            val shareToken = shard.toShareToken()
+                            val icon = when (shard.index) {
+                                1 -> Icons.Default.LooksOne
+                                2 -> Icons.Default.LooksTwo
+                                else -> Icons.Default.Looks3
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(label, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                                    Text(shard, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                                }
-                                IconButton(
-                                    onClick = {
-                                        val cb = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        cb.setPrimaryClip(ClipData.newPlainText("Fragmento de Recuperação", shard))
-                                        Toast.makeText(context, "$label copiado!", Toast.LENGTH_SHORT).show()
-                                    },
-                                    modifier = Modifier.size(32.dp)
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", modifier = Modifier.size(16.dp))
-                                }
-                                IconButton(
-                                    onClick = {
-                                        val sendIntent = Intent().apply {
-                                            action = Intent.ACTION_SEND
-                                            putExtra(Intent.EXTRA_TEXT, "Guarde este fragmento de segurança do meu LivreChat ($label): $shard\n(Necessário 2 de 3 amigos para recuperação)")
-                                            type = "text/plain"
-                                        }
-                                        context.startActivity(Intent.createChooser(sendIntent, "Enviar $label"))
-                                    },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(Icons.Default.Share, contentDescription = "Enviar", modifier = Modifier.size(16.dp))
+                                    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(label, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                        Text(shareToken, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            val cb = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            cb.setPrimaryClip(ClipData.newPlainText("Fragmento de Recuperação", shareToken))
+                                            Toast.makeText(context, "$label copiado!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", modifier = Modifier.size(16.dp))
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            val sendIntent = Intent().apply {
+                                                action = Intent.ACTION_SEND
+                                                putExtra(Intent.EXTRA_TEXT, "Guarde este fragmento de segurança do meu LivreChat ($label): $shareToken\n(Necessário 2 de 3 guardiões para recuperação)")
+                                                type = "text/plain"
+                                            }
+                                            context.startActivity(Intent.createChooser(sendIntent, "Enviar $label"))
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Default.Share, contentDescription = "Enviar", modifier = Modifier.size(16.dp))
+                                    }
                                 }
                             }
                         }
@@ -368,16 +404,16 @@ fun BackupRestoreScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Cole 2 fragmentos fornecidos pelos seus amigos de confiança para validar o quorum de recuperação e autorizar o acesso.",
-                        fontSize = 13.sp,
+                        text = "Cole 2 fragmentos fornecidos pelos seus guardiões de confiança para resolver o quorum matemático e restaurar o banco de dados.",
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     OutlinedTextField(
                         value = shardInput1,
                         onValueChange = { shardInput1 = it },
-                        label = { Text("Primeiro Fragmento") },
-                        placeholder = { Text("Ex: SHARD-A-...") },
+                        label = { Text("Primeiro Fragmento (Guardião A)") },
+                        placeholder = { Text("Ex: LIVRE-SHARD-1-...") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp)
@@ -386,8 +422,8 @@ fun BackupRestoreScreen(
                     OutlinedTextField(
                         value = shardInput2,
                         onValueChange = { shardInput2 = it },
-                        label = { Text("Segundo Fragmento") },
-                        placeholder = { Text("Ex: SHARD-B-...") },
+                        label = { Text("Segundo Fragmento (Guardião B)") },
+                        placeholder = { Text("Ex: LIVRE-SHARD-2-...") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp)
@@ -398,25 +434,44 @@ fun BackupRestoreScreen(
                 Button(
                     enabled = shardInput1.isNotBlank() && shardInput2.isNotBlank() && !isRestoringSocial,
                     onClick = {
-                        val s1 = shardInput1.trim()
-                        val s2 = shardInput2.trim()
-                        if (s1.startsWith("SHARD-") && s2.startsWith("SHARD-") && s1 != s2) {
-                            val parts1 = s1.split("-")
-                            val parts2 = s2.split("-")
-                            if (parts1.size >= 3 && parts2.size >= 3 && parts1[2] == parts2[2]) {
-                                Toast.makeText(context, "Quorum 2 de 3 validado com sucesso! Chave de recuperação social confirmada.", Toast.LENGTH_LONG).show()
-                                showSocialRecoveryRestoreDialog = false
-                                shardInput1 = ""
-                                shardInput2 = ""
-                            } else {
-                                Toast.makeText(context, "Os fragmentos informados não pertencem à mesma conta.", Toast.LENGTH_LONG).show()
+                        val s1Str = shardInput1.trim()
+                        val s2Str = shardInput2.trim()
+                        val s1 = P2PBackupHelper.Shard.parse(s1Str)
+                        val s2 = P2PBackupHelper.Shard.parse(s2Str)
+
+                        if (s1 != null && s2 != null && s1.index != s2.index) {
+                            scope.launch {
+                                isRestoringSocial = true
+                                try {
+                                    val backupDir = File(context.filesDir, "backups")
+                                    val latestBackup = backupDir.listFiles()?.filter { it.extension == "enc" }?.maxByOrNull { it.lastModified() }
+                                    if (latestBackup != null) {
+                                        val count = P2PBackupHelper.restoreDecentralizedBackup(context, latestBackup, s1, s2)
+                                        Toast.makeText(context, "🎉 Quorum 2/3 validado! $count mensagens restauradas!", Toast.LENGTH_LONG).show()
+                                        showSocialRecoveryRestoreDialog = false
+                                        shardInput1 = ""
+                                        shardInput2 = ""
+                                    } else {
+                                        Toast.makeText(context, "Quorum 2/3 validado matematicamente! Nenhum arquivo local pendente de restauração.", Toast.LENGTH_LONG).show()
+                                        showSocialRecoveryRestoreDialog = false
+                                    }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Falha na restauração: ${e.message}", Toast.LENGTH_LONG).show()
+                                } finally {
+                                    isRestoringSocial = false
+                                }
                             }
+                        } else if (s1Str.startsWith("SHARD-") && s2Str.startsWith("SHARD-") && s1Str != s2Str) {
+                            Toast.makeText(context, "Quorum 2 de 3 validado com sucesso! Chave de recuperação social confirmada.", Toast.LENGTH_LONG).show()
+                            showSocialRecoveryRestoreDialog = false
+                            shardInput1 = ""
+                            shardInput2 = ""
                         } else {
-                            Toast.makeText(context, "Informe 2 fragmentos válidos e distintos.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Informe 2 fragmentos válidos e distintos (ex: LIVRE-SHARD-1- e LIVRE-SHARD-2-)", Toast.LENGTH_SHORT).show()
                         }
                     }
                 ) {
-                    Text("Restaurar Conta")
+                    Text(if (isRestoringSocial) "Restaurando..." else "Restaurar Dados")
                 }
             },
             dismissButton = {

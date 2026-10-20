@@ -8,8 +8,8 @@ import { db, Message } from '../db/database';
 import { fcmService } from '../services/fcm.service';
 
 export const APP_VERSION_RULES = {
-  LATEST_VERSION_NAME: '1.1.29',
-  LATEST_VERSION_CODE: 39,
+  LATEST_VERSION_NAME: '1.1.30',
+  LATEST_VERSION_CODE: 40,
   MIN_SUPPORTED_VERSION_CODE: 13,
   DOWNLOAD_PORTAL_URL: '/download'
 };
@@ -765,6 +765,30 @@ export class WebSocketManager {
             status: isOnline ? 'online' : 'offline',
             timestamp: timestamp
           }));
+        }
+        break;
+      }
+
+      case 'party:sync': {
+        const { conversationId, action, currentTime, videoId, videoUrl, videoTitle, targetUserId } = event;
+        let members = conversationId ? await db.getConversationMembers(conversationId) : [];
+        if (targetUserId && !members.includes(targetUserId)) {
+          members.push(targetUserId);
+        }
+        for (const memberId of members) {
+          if (memberId !== senderId) {
+            this.sendToUser(memberId, {
+              type: 'party:sync',
+              conversationId,
+              action, // 'PLAY' | 'PAUSE' | 'SEEK' | 'JOIN' | 'CLOSE'
+              currentTime: currentTime || 0,
+              videoId: videoId || '',
+              videoUrl: videoUrl || '',
+              videoTitle: videoTitle || 'Vídeo LivreParty',
+              senderId,
+              senderName: senderWs.username || 'Amigo'
+            });
+          }
         }
         break;
       }

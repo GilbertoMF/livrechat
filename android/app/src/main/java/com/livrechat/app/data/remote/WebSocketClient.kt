@@ -48,6 +48,7 @@ interface WebSocketEventsListener {
     fun onUserStatus(userId: String, isOnline: Boolean, lastSeenTimestamp: Long? = null) {}
     fun onVersionStatus(isUpdateAvailable: Boolean, isMandatory: Boolean, latestVersion: String, latestVersionCode: Int, downloadUrl: String, message: String) {}
     fun onChatError(code: String, message: String, clientMessageId: String? = null) {}
+    fun onPartySync(conversationId: String, action: String, currentTime: Long, videoId: String, videoUrl: String, videoTitle: String, senderName: String) {}
 }
 
 class WebSocketClient(
@@ -365,6 +366,16 @@ class WebSocketClient(
                             val avatarUrl = json.get("avatarUrl")?.asStringOrNull()
                             listener.onStatusView(statusId, fromUserId, fromUsername, displayName, avatarUrl)
                         }
+                        "party:sync" -> {
+                            val convId = json.get("conversationId").asStringOrDefault()
+                            val action = json.get("action").asStringOrDefault()
+                            val currentTime = json.get("currentTime")?.asLong ?: 0L
+                            val videoId = json.get("videoId")?.asStringOrNull() ?: ""
+                            val videoUrl = json.get("videoUrl")?.asStringOrNull() ?: ""
+                            val videoTitle = json.get("videoTitle")?.asStringOrNull() ?: "Vídeo LivreParty"
+                            val senderName = json.get("senderName")?.asStringOrNull() ?: "Amigo"
+                            listener.onPartySync(convId, action, currentTime, videoId, videoUrl, videoTitle, senderName)
+                        }
                         "chat:cleared", "chat:clear" -> {
                             val convId = json.get("conversationId").asStringOrDefault()
                             listener.onChatCleared(convId)
@@ -550,6 +561,28 @@ class WebSocketClient(
         val payload = JsonObject().apply {
             addProperty("type", "chat:clear")
             addProperty("conversationId", conversationId)
+            targetUserId?.let { addProperty("targetUserId", it) }
+        }
+        return sendPayload(payload)
+    }
+
+    fun sendPartySync(
+        conversationId: String,
+        action: String,
+        currentTime: Long,
+        videoId: String,
+        videoUrl: String,
+        videoTitle: String,
+        targetUserId: String? = null
+    ): Boolean {
+        val payload = JsonObject().apply {
+            addProperty("type", "party:sync")
+            addProperty("conversationId", conversationId)
+            addProperty("action", action)
+            addProperty("currentTime", currentTime)
+            addProperty("videoId", videoId)
+            addProperty("videoUrl", videoUrl)
+            addProperty("videoTitle", videoTitle)
             targetUserId?.let { addProperty("targetUserId", it) }
         }
         return sendPayload(payload)
