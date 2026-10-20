@@ -1,8 +1,12 @@
 package com.livrechat.app.ui.games
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.graphics.Color as AndroidColor
 import android.view.View
 import android.view.ViewGroup
@@ -17,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,9 +41,19 @@ import androidx.compose.ui.window.DialogProperties
 import com.livrechat.app.data.remote.InstantGameDto
 import java.net.URLEncoder
 
+private fun Context.findActivity(): Activity? {
+    var ctx = this
+    while (ctx is ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
 class GameJsBridge(
     private val onCloseGame: () -> Unit,
-    private val onShareCode: (String) -> Unit
+    private val onShareCode: (String) -> Unit,
+    private val onToggleOrientation: () -> Unit
 ) {
     @JavascriptInterface
     fun closeGame() {
@@ -47,6 +63,11 @@ class GameJsBridge(
     @JavascriptInterface
     fun shareRoom(code: String) {
         onShareCode(code)
+    }
+
+    @JavascriptInterface
+    fun toggleOrientation() {
+        onToggleOrientation()
     }
 }
 
@@ -60,7 +81,10 @@ fun InstantGameDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    val activity = remember(context) { context.findActivity() }
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     var isLoading by remember { mutableStateOf(true) }
 
     val encodedPlayer = remember(playerName) {
@@ -78,12 +102,94 @@ fun InstantGameDialog(
         "$base$roomPart$modePart"
     }
 
+    val toggleOrientation = {
+        activity?.let { act ->
+            val newTarget = if (act.requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE ||
+                act.requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE ||
+                isLandscape
+            ) {
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
+            act.requestedOrientation = newTarget
+        }
+    }
+
+    // Persist WebView across recomposition / rotation changes so game does NOT reload!
+    val webView = remember {
+        WebView(context).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(AndroidColor.BLACK)
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
+
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                mediaPlaybackRequiresUserGesture = false
+                allowFileAccess = true
+                useWideViewPort = true
+                loadWithOverviewMode = true
+                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                cacheMode = WebSettings.LOAD_DEFAULT
+            }
+
+            addJavascriptInterface(
+                GameJsBridge(
+                    onCloseGame = {
+                        post { onDismiss() }
+                    },
+                    onShareCode = { code ->
+                        post {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(
+                                    Intent.EXTRA_TEXT,
+                                    "🎮 Bora jogar ${game.title} comigo no LivreChat? Entra na sala: $code"
+                                )
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Convidar no LivreChat"))
+                        }
+                    },
+                    onToggleOrientation = {
+                        post { toggleOrientation() }
+                    }
+                ),
+                "Android"
+            )
+
+            webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    if (newProgress >= 90) {
+                        isLoading = false
+                    }
+                }
+            }
+
+            webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    isLoading = false
+                }
+            }
+
+            loadUrl(gameUrl)
+        }
+    }
+
     BackHandler {
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         onDismiss()
     }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            onDismiss()
+        },
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             decorFitsSystemWindows = false
@@ -94,70 +200,14 @@ fun InstantGameDialog(
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
-            // WebGL Canvas Container
+            // WebGL Canvas Container: detach from previous parent and attach without reloading!
             AndroidView(
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                        setBackgroundColor(AndroidColor.BLACK)
-                        setLayerType(View.LAYER_TYPE_HARDWARE, null)
-
-                        settings.apply {
-                            javaScriptEnabled = true
-                            domStorageEnabled = true
-                            databaseEnabled = true
-                            mediaPlaybackRequiresUserGesture = false
-                            allowFileAccess = true
-                            useWideViewPort = true
-                            loadWithOverviewMode = true
-                            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                            cacheMode = WebSettings.LOAD_DEFAULT
-                        }
-
-                        addJavascriptInterface(
-                            GameJsBridge(
-                                onCloseGame = {
-                                    post { onDismiss() }
-                                },
-                                onShareCode = { code ->
-                                    post {
-                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(
-                                                Intent.EXTRA_TEXT,
-                                                "🎮 Bora jogar ${game.title} comigo no LivreChat? Entra na sala: $code"
-                                            )
-                                        }
-                                        context.startActivity(Intent.createChooser(shareIntent, "Convidar no LivreChat"))
-                                    }
-                                }
-                            ),
-                            "Android"
-                        )
-
-                        webChromeClient = object : WebChromeClient() {
-                            override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                                if (newProgress >= 90) {
-                                    isLoading = false
-                                }
-                            }
-                        }
-
-                        webViewClient = object : WebViewClient() {
-                            override fun onPageFinished(view: WebView?, url: String?) {
-                                isLoading = false
-                            }
-                        }
-
-                        loadUrl(gameUrl)
-                        webViewRef = this
-                    }
+                factory = {
+                    (webView.parent as? ViewGroup)?.removeView(webView)
+                    webView
                 },
                 update = {
-                    webViewRef = it
+                    // Do NOT reload here! The game state in WASM is fully retained
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -166,7 +216,11 @@ fun InstantGameDialog(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 28.dp, start = 12.dp, end = 12.dp),
+                    .padding(
+                        top = if (isLandscape) 8.dp else 28.dp,
+                        start = 12.dp,
+                        end = 12.dp
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -175,7 +229,10 @@ fun InstantGameDialog(
                     shape = RoundedCornerShape(8.dp),
                     color = Color(0xCC151A23),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x44FFFFFF)),
-                    modifier = Modifier.clickable { onDismiss() }
+                    modifier = Modifier.clickable {
+                        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        onDismiss()
+                    }
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -218,26 +275,55 @@ fun InstantGameDialog(
                     }
                 }
 
-                // Reload Button
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xCC151A23),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x44FFFFFF)),
-                    modifier = Modifier.clickable {
-                        isLoading = true
-                        webViewRef?.reload()
-                    }
-                ) {
-                    Box(
-                        modifier = Modifier.padding(8.dp),
-                        contentAlignment = Alignment.Center
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // ROTATE / ORIENTATION TOGGLE (Horizontal / Vertical without reloading)
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xCC151A23),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x5538BDF8)),
+                        modifier = Modifier.clickable { toggleOrientation() }
                     ) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Recarregar",
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.ScreenRotation,
+                                contentDescription = "Girar Tela",
+                                tint = Color(0xFF38BDF8),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isLandscape) "Vertical" else "Horizontal",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF7DD3FC)
+                            )
+                        }
+                    }
+
+                    // Reload Button
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xCC151A23),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x44FFFFFF)),
+                        modifier = Modifier.clickable {
+                            isLoading = true
+                            webView.reload()
+                        }
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Recarregar",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -277,13 +363,14 @@ fun InstantGameDialog(
 
     DisposableEffect(Unit) {
         onDispose {
-            webViewRef?.apply {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            (webView.parent as? ViewGroup)?.removeView(webView)
+            webView.apply {
                 loadUrl("about:blank")
                 stopLoading()
                 webChromeClient = null
                 destroy()
             }
-            webViewRef = null
         }
     }
 }

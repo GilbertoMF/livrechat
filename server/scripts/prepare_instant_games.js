@@ -55,6 +55,62 @@ const GAMES = [
     targetSmcRegex: /Top Gear 2 \(U\) \[!\].smc/i,
     cleanFileName: 'top_gear_2.smc',
   },
+  {
+    id: 'super_mario_world',
+    name: 'Super Mario World',
+    archiveName: 'Super Mario World.7z',
+    targetSmcRegex: /Super Mario World \(U\)/i,
+    cleanFileName: 'super_mario_world.smc',
+  },
+  {
+    id: 'donkey_kong_country',
+    name: 'Donkey Kong Country',
+    archiveName: 'Donkey Kong Country.7z',
+    targetSmcRegex: /Donkey Kong Country \(U\)/i,
+    cleanFileName: 'donkey_kong_country.smc',
+  },
+  {
+    id: 'mega_man_x',
+    name: 'Mega Man X',
+    archiveName: 'Mega Man X.7z',
+    targetSmcRegex: /Mega Man X \(U\)/i,
+    cleanFileName: 'mega_man_x.smc',
+  },
+  {
+    id: 'zelda_alttp',
+    name: 'The Legend of Zelda: A Link to the Past',
+    archiveName: 'Legend of Zelda, The - A Link to the Past.7z',
+    targetSmcRegex: /Link to the Past/i,
+    cleanFileName: 'zelda_alttp.smc',
+  },
+  {
+    id: 'super_metroid',
+    name: 'Super Metroid',
+    archiveName: 'Super Metroid.7z',
+    targetSmcRegex: /Super Metroid \(JU\) \[!\].smc/i,
+    cleanFileName: 'super_metroid.smc',
+  },
+  {
+    id: 'top_gear',
+    name: 'Top Gear',
+    archiveName: 'Top Gear.7z',
+    targetSmcRegex: /Top Gear \(U\) \[!\].smc/i,
+    cleanFileName: 'top_gear.smc',
+  },
+  {
+    id: 'chrono_trigger',
+    name: 'Chrono Trigger',
+    archiveName: 'Chrono Trigger.7z',
+    targetSmcRegex: /Chrono Trigger \(U\) \[!\].smc/i,
+    cleanFileName: 'chrono_trigger.smc',
+  },
+  {
+    id: 'aladdin',
+    name: "Disney's Aladdin",
+    archiveName: 'Aladdin.7z',
+    targetSmcRegex: /Aladdin \(U\)/i,
+    cleanFileName: 'aladdin.smc',
+  },
 ];
 
 const WORK_DIR = '/home/ubuntu/livrechat/instant-games';

@@ -1056,15 +1056,15 @@ fun ChatScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Assista a vídeos sincronizados com todos neste chat! Ao pausar, dar play ou avançar, todos no grupo assistem juntos.",
+                        "Assista a vídeos sincronizados com todos neste chat em tempo real, estilo Facebook Messenger! Ao pausar, dar play ou avançar, todos assistem juntos.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedTextField(
                         value = partyVideoUrlInput,
                         onValueChange = { partyVideoUrlInput = it },
-                        label = { Text("Link do Vídeo (YouTube, MP4, LivreTube)") },
-                        placeholder = { Text("https://...") },
+                        label = { Text("Link do Vídeo (YouTube, MP4, Web)") },
+                        placeholder = { Text("https://www.youtube.com/watch?v=...") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp)
@@ -1073,11 +1073,68 @@ fun ChatScreen(
                         value = partyVideoTitleInput,
                         onValueChange = { partyVideoTitleInput = it },
                         label = { Text("Título do Vídeo") },
-                        placeholder = { Text("Ex: Trailer, Música ou Aula") },
+                        placeholder = { Text("Ex: Trailer, Música ou Série") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp)
                     )
+
+                    Text(
+                        "Sugestões rápidas para assistir juntos:",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFA5B4FC)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF312E81),
+                            modifier = Modifier.clickable {
+                                partyVideoUrlInput = "https://www.youtube.com/watch?v=QdBZY2fkU-0"
+                                partyVideoTitleInput = "Trailer GTA VI"
+                            }
+                        ) {
+                            Text(
+                                "🎬 GTA VI",
+                                fontSize = 11.sp,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF312E81),
+                            modifier = Modifier.clickable {
+                                partyVideoUrlInput = "https://www.youtube.com/watch?v=jfKfPfyJRdk"
+                                partyVideoTitleInput = "Lofi Hip Hop Radio"
+                            }
+                        ) {
+                            Text(
+                                "🎧 Lofi Chill",
+                                fontSize = 11.sp,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF312E81),
+                            modifier = Modifier.clickable {
+                                partyVideoUrlInput = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+                                partyVideoTitleInput = "Big Buck Bunny HD"
+                            }
+                        ) {
+                            Text(
+                                "🐰 Bunny MP4",
+                                fontSize = 11.sp,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -2697,80 +2754,12 @@ fun ChatScreen(
                 }
             }
 
-            // BARRA LIVREPARTY SINCRONIZADA
+            // ASSISTIR JUNTOS SINCRONIZADO (WATCH TOGETHER ESTILO FACEBOOK MESSENGER)
             if (activePartySession != null) {
-                val party = activePartySession!!
-                Surface(
-                    color = Color(0xFF1E1B4B),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(Color(0xFF6366F1), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Movie, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("🍿 LivreParty Sincronizada", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFA5B4FC))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = if (party.isPlaying) Color(0xFF10B981) else Color(0xFFF59E0B)
-                                ) {
-                                    Text(
-                                        text = if (party.isPlaying) "AO VIVO" else "PAUSADO",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                    )
-                                }
-                            }
-                            Text(
-                                text = party.videoTitle.ifBlank { party.videoUrl },
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = if (party.isPlaying) "Em sincronia • ${party.updatedBy}" else "Pausado por ${party.updatedBy}",
-                                fontSize = 10.sp,
-                                color = Color(0xFFC7D2FE)
-                            )
-                        }
-                        IconButton(
-                            onClick = {
-                                viewModel.syncPartyAction(if (party.isPlaying) "PAUSE" else "PLAY", party.currentTime)
-                            }
-                        ) {
-                            Icon(
-                                imageVector = if (party.isPlaying) Icons.Default.PauseCircle else Icons.Default.PlayCircle,
-                                contentDescription = "Play/Pause",
-                                tint = Color.White,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                        IconButton(
-                            onClick = { viewModel.closePartySession() },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = "Fechar LivreParty", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
-                        }
-                    }
-                }
+                LivrePartyWatchTogetherPlayer(
+                    party = activePartySession!!,
+                    viewModel = viewModel
+                )
             }
 
             // Chat Messages Area inside weight(1f) Box

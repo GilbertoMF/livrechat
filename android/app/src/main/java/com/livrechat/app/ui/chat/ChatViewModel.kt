@@ -964,8 +964,9 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
     fun syncPartyAction(action: String, currentTime: Long) {
         val convId = _currentConversationId.value ?: return
         val current = _activePartySession.value ?: return
+        val isNowPlaying = if (action == "SEEK") current.isPlaying else (action == "PLAY")
         _activePartySession.value = current.copy(
-            isPlaying = action == "PLAY",
+            isPlaying = isNowPlaying,
             currentTime = currentTime,
             updatedBy = "Você"
         )
@@ -977,6 +978,12 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
             videoUrl = current.videoUrl,
             videoTitle = current.videoTitle
         )
+    }
+
+    fun seekParty(deltaSeconds: Long) {
+        val current = _activePartySession.value ?: return
+        val newTime = (current.currentTime + deltaSeconds).coerceAtLeast(0L)
+        syncPartyAction("SEEK", newTime)
     }
 
     fun closePartySession() {
@@ -1008,11 +1015,13 @@ class ChatViewModel : ViewModel(), WebSocketEventsListener {
             if (action == "CLOSE") {
                 _activePartySession.value = null
             } else {
+                val current = _activePartySession.value
+                val isNowPlaying = if (action == "SEEK") (current?.isPlaying ?: true) else (action == "PLAY")
                 _activePartySession.value = PartySession(
                     videoId = videoId,
                     videoUrl = videoUrl,
                     videoTitle = videoTitle,
-                    isPlaying = action == "PLAY",
+                    isPlaying = isNowPlaying,
                     currentTime = currentTime,
                     updatedBy = senderName
                 )

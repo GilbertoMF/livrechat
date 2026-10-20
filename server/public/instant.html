@@ -205,9 +205,14 @@
 
       <span id="game-title">Carregando...</span>
 
-      <button class="btn-action btn-netplay" onclick="openMultiplayerModal()">
-        👥 Multiplayer
-      </button>
+      <div style="display:flex; gap:6px;">
+        <button class="btn-action" onclick="toggleScreenOrientation()" title="Girar tela (Horizontal/Vertical)">
+          🔄 Girar
+        </button>
+        <button class="btn-action btn-netplay" onclick="openMultiplayerModal()">
+          👥 Multiplayer
+        </button>
+      </div>
     </div>
 
     <!-- EmulatorJS Screen -->
@@ -282,6 +287,54 @@
         core: 'snes',
         gameId: 1005,
         rom: 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/instant-games/top_gear_2.smc'
+      },
+      'super_mario_world': {
+        title: 'Super Mario World',
+        core: 'snes',
+        gameId: 1006,
+        rom: 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/instant-games/super_mario_world.smc'
+      },
+      'donkey_kong_country': {
+        title: 'Donkey Kong Country',
+        core: 'snes',
+        gameId: 1007,
+        rom: 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/instant-games/donkey_kong_country.smc'
+      },
+      'mega_man_x': {
+        title: 'Mega Man X',
+        core: 'snes',
+        gameId: 1008,
+        rom: 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/instant-games/mega_man_x.smc'
+      },
+      'zelda_alttp': {
+        title: 'Zelda: A Link to the Past',
+        core: 'snes',
+        gameId: 1009,
+        rom: 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/instant-games/zelda_alttp.smc'
+      },
+      'super_metroid': {
+        title: 'Super Metroid',
+        core: 'snes',
+        gameId: 1010,
+        rom: 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/instant-games/super_metroid.smc'
+      },
+      'top_gear': {
+        title: 'Top Gear',
+        core: 'snes',
+        gameId: 1011,
+        rom: 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/instant-games/top_gear.smc'
+      },
+      'chrono_trigger': {
+        title: 'Chrono Trigger',
+        core: 'snes',
+        gameId: 1012,
+        rom: 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/instant-games/chrono_trigger.smc'
+      },
+      'aladdin': {
+        title: "Disney's Aladdin",
+        core: 'snes',
+        gameId: 1013,
+        rom: 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/instant-games/aladdin.smc'
       }
     };
 
@@ -319,6 +372,24 @@
         window.Android.closeGame();
       } else {
         window.history.back();
+      }
+    }
+
+    function toggleScreenOrientation() {
+      if (window.Android && window.Android.toggleOrientation) {
+        window.Android.toggleOrientation();
+      } else if (screen.orientation && screen.orientation.type) {
+        // Fallback for standalone browser
+        if (screen.orientation.type.startsWith('portrait')) {
+          if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().then(() => {
+              if (screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+            }).catch(() => {});
+          }
+        } else {
+          if (screen.orientation.unlock) screen.orientation.unlock();
+          if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+        }
       }
     }
 
