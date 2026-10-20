@@ -76,14 +76,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 46;
+  const LATEST_CODE = 47;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.36',
+    latestVersion: '1.1.37',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -91,10 +91,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.36: Correção no catálogo LivreGames — O primeiro jogo não fica mais cortado/encolhido no topo, com barra de busca e filtros de console organizados!',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.36-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.36-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.36-universal.apk`,
+      : 'Nova versão 1.1.37: Barra de pesquisa integrada no topo perto do botão (?) e tela de jogos muito mais espaçosa e limpa!',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.37-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.37-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.37-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -102,26 +102,36 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.36',
-      versionCode: 46,
+      version: '1.1.37',
+      versionCode: 47,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-20',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Versão 1.1.36: Correção de layout no catálogo LivreGames — O primeiro jogo não fica mais cortado/encolhido no topo, com barra de busca e filtros de console organizados.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.36-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.36-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.36-universal.apk`,
+      message: 'Versão 1.1.37: Pesquisa integrada no topo perto do botão (?) com foco rápido, eliminação de menus duplicados e muito mais espaço vertical para navegar no catálogo de jogos.',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.37-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.37-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.37-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '25.7 MB',
       sizeMbUniversal: '32.2 MB'
     },
     versions: [
       {
+        version: '1.1.37',
+        versionCode: 47,
+        releaseDate: '2026-10-20',
+        isLatest: true,
+        changelog: '1. Busca integrada no topo: ícone de pesquisa colocado ao lado do botão (?) de ajuda, liberando mais de 150dp de espaço na tela; 2. Muito mais espaço para navegar no catálogo de jogos sem poluição visual ou aperto com teclado; 3. Banners compactos e remoção de pílulas redundantes.',
+        apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.37-arm64.apk`,
+        apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.37-armv7.apk`,
+        apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.37-universal.apk`
+      },
+      {
         version: '1.1.36',
         versionCode: 46,
         releaseDate: '2026-10-20',
-        isLatest: true,
+        isLatest: false,
         changelog: '1. Correção no layout do LivreGames: o primeiro card de jogo agora aparece completo e centralizado sem ficar encolhido ou escondido atrás da barra de título; 2. Barra de pesquisa e seletor de consoles (SNES/PSP/Todos) e gêneros integrados de forma limpa e fluida.',
         apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.36-arm64.apk`,
         apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.36-armv7.apk`,
