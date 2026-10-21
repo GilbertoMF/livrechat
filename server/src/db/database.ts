@@ -580,6 +580,113 @@ class DatabaseService {
     }));
   }
 
+  public async getCommunityStats(onlineUserIds: string[]) {
+    const onlineSet = new Set(onlineUserIds);
+
+    let allUsersWithProfiles: Array<{ user: User; profile: UserProfile | null }> = [];
+    let totalMessages = 0;
+    let totalConversations = 0;
+    let activeSessions: Array<{ user_id: string; last_active: string | Date }> = [];
+
+    if (this.pgPool) {
+      try {
+        allUsersWithProfiles = await this.getAllUsersWithProfiles();
+
+        const msgRes = await this.pgPool.query('SELECT count(*) as total FROM messages');
+        totalMessages = parseInt(msgRes.rows[0]?.total || '0', 10);
+
+        const convRes = await this.pgPool.query('SELECT count(*) as total FROM conversations');
+        totalConversations = parseInt(convRes.rows[0]?.total || '0', 10);
+
+        const sessRes = await this.pgPool.query('SELECT user_id, last_active FROM user_sessions WHERE last_active IS NOT NULL');
+        activeSessions = sessRes.rows;
+      } catch (e) {
+        console.warn('[Database] Erro PG getCommunityStats, usando fallback local:', e);
+      }
+    }
+
+    if (allUsersWithProfiles.length === 0) {
+      allUsersWithProfiles = this.memoryStore.users.map(u => ({
+        user: u,
+        profile: this.memoryStore.profiles.find(p => p.user_id === u.id) || null
+      }));
+      totalMessages = this.memoryStore.messages.length;
+      totalConversations = this.memoryStore.conversations.length;
+      activeSessions = this.memoryStore.sessions.map(s => ({ user_id: s.user_id, last_active: s.last_active }));
+    }
+
+    const filteredUsers = allUsersWithProfiles.filter(
+      item => item.user.username !== 'user_unknown' && item.user.id !== 'unknown'
+    );
+    const totalAccounts = filteredUsers.length;
+    const onlineUsers = onlineSet.size;
+    const offlineUsers = Math.max(0, totalAccounts - onlineUsers);
+
+    // Activity check
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    const sevenDaysMs = 7 * oneDayMs;
+
+    const activeTodaySet = new Set<string>();
+    const activeWeekSet = new Set<string>();
+
+    for (const uid of onlineSet) {
+      activeTodaySet.add(uid);
+      activeWeekSet.add(uid);
+    }
+
+    const lastActiveMap = new Map<string, string>();
+    for (const s of activeSessions) {
+      if (!s.last_active) continue;
+      const actTime = new Date(s.last_active).getTime();
+      if (!isNaN(actTime)) {
+        if (now - actTime <= oneDayMs) activeTodaySet.add(s.user_id);
+        if (now - actTime <= sevenDaysMs) activeWeekSet.add(s.user_id);
+
+        const prev = lastActiveMap.get(s.user_id);
+        if (!prev || actTime > new Date(prev).getTime()) {
+          lastActiveMap.set(s.user_id, new Date(actTime).toISOString());
+        }
+      }
+    }
+
+    const usersList = filteredUsers
+      .map(item => {
+        const u = item.user;
+        const p = item.profile;
+        const isOnline = onlineSet.has(u.id);
+        const lastActive = isOnline ? new Date().toISOString() : (lastActiveMap.get(u.id) || u.updated_at || u.created_at);
+
+        return {
+          id: u.id,
+          username: u.username,
+          displayName: p?.display_name || u.username,
+          avatarUrl: p?.avatar_url || null,
+          isOnline,
+          lastActive,
+          createdAt: u.created_at
+        };
+      })
+      .sort((a, b) => {
+        if (a.isOnline && !b.isOnline) return -1;
+        if (!a.isOnline && b.isOnline) return 1;
+        return new Date(b.lastActive || 0).getTime() - new Date(a.lastActive || 0).getTime();
+      });
+
+    return {
+      totalAccounts,
+      onlineUsers,
+      offlineUsers,
+      activeToday: activeTodaySet.size,
+      activeThisWeek: activeWeekSet.size,
+      totalConversations,
+      totalMessages,
+      users: usersList,
+      uptimeSeconds: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString()
+    };
+  }
+
   // ==========================================
   // SESSIONS
   // ==========================================

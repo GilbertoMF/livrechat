@@ -76,14 +76,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 47;
+  const LATEST_CODE = 48;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.37',
+    latestVersion: '1.1.38',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -91,10 +91,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.37: Barra de pesquisa integrada no topo perto do botão (?) e tela de jogos muito mais espaçosa e limpa!',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.37-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.37-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.37-universal.apk`,
+      : 'Nova versão 1.1.38: Central de Usuários & Estatísticas da Comunidade em tempo real (online, offline, contas criadas, ativos) no app e painel web!',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.38-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.38-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.38-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -102,26 +102,36 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.37',
-      versionCode: 47,
+      version: '1.1.38',
+      versionCode: 48,
       minSupportedVersionCode: 13,
-      releaseDate: '2026-10-20',
+      releaseDate: '2026-10-21',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Versão 1.1.37: Pesquisa integrada no topo perto do botão (?) com foco rápido, eliminação de menus duplicados e muito mais espaço vertical para navegar no catálogo de jogos.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.37-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.37-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.37-universal.apk`,
+      message: 'Versão 1.1.38: Nova Central de Usuários e Métricas da Comunidade em tempo real (online, offline, ativos, total de contas criadas), disponível no app e através de painel web responsivo.',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.38-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.38-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.38-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '25.7 MB',
       sizeMbUniversal: '32.2 MB'
     },
     versions: [
       {
+        version: '1.1.38',
+        versionCode: 48,
+        releaseDate: '2026-10-21',
+        isLatest: true,
+        changelog: '1. Central de Usuários & Métricas da Comunidade: visualize total de contas criadas, usuários online em tempo real, usuários offline e ativos nas últimas 24h; 2. Filtros interativos (Todos, Online, Ativos) com busca instantânea por nome ou @username; 3. Painel Web público e responsivo acessível pelo navegador em /central e /stats; 4. Acesso em 1 toque na barra superior do LivreChat ou nas Configurações.',
+        apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.38-arm64.apk`,
+        apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.38-armv7.apk`,
+        apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.38-universal.apk`
+      },
+      {
         version: '1.1.37',
         versionCode: 47,
         releaseDate: '2026-10-20',
-        isLatest: true,
+        isLatest: false,
         changelog: '1. Busca integrada no topo: ícone de pesquisa colocado ao lado do botão (?) de ajuda, liberando mais de 150dp de espaço na tela; 2. Muito mais espaço para navegar no catálogo de jogos sem poluição visual ou aperto com teclado; 3. Banners compactos e remoção de pílulas redundantes.',
         apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.37-arm64.apk`,
         apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.37-armv7.apk`,
@@ -717,6 +727,272 @@ app.use('/list', netplayRouter); // Compatibility with EmulatorJS default /list 
 // Attach WebSocket Manager & Netplay Socket.IO
 export const wsManager = new WebSocketManager(server);
 netplayManager.init(server);
+
+// ==========================================
+// COMMUNITY & SERVER STATS (Central de Usuários)
+// ==========================================
+app.get('/api/community/stats', async (req, res) => {
+  try {
+    const onlineUserIds = wsManager.getOnlineUserIds();
+    const stats = await db.getCommunityStats(onlineUserIds);
+    res.status(200).json(stats);
+  } catch (err: any) {
+    console.error('Error fetching community stats:', err);
+    res.status(500).json({ error: 'Failed to fetch community stats', details: err?.message });
+  }
+});
+
+app.get(['/central', '/stats', '/painel'], async (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LivreChat — Central da Comunidade & Usuários</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
+    body { background-color: #0B0E14; color: #F3F4F6; min-height: 100vh; padding: 24px 16px; }
+    .container { max-width: 1080px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid #1F2937; }
+    .logo-area { display: flex; align-items: center; gap: 14px; }
+    .logo-badge { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #8B5CF6, #6D28D9); display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 4px 14px rgba(139, 92, 246, 0.4); }
+    .title h1 { font-size: 24px; font-weight: 800; color: #FFFFFF; display: flex; align-items: center; gap: 8px; }
+    .title p { font-size: 13px; color: #9CA3AF; margin-top: 2px; }
+    .live-status { display: flex; align-items: center; gap: 8px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; color: #34D399; }
+    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: #10B981; animation: pulse 2s infinite; }
+    @keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+
+    /* Grid de Métricas Principais */
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .kpi-card { background: #151A23; border: 1px solid #232B3B; border-radius: 16px; padding: 20px; transition: transform 0.2s, border-color 0.2s; position: relative; overflow: hidden; }
+    .kpi-card:hover { transform: translateY(-2px); border-color: #374151; }
+    .kpi-icon { font-size: 24px; margin-bottom: 12px; }
+    .kpi-value { font-size: 36px; font-weight: 800; line-height: 1; margin-bottom: 6px; }
+    .kpi-label { font-size: 13px; font-weight: 600; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kpi-sub { font-size: 12px; color: #6B7280; margin-top: 4px; }
+    .kpi-online { border-color: rgba(16, 185, 129, 0.3); }
+    .kpi-online .kpi-value { color: #34D399; }
+    .kpi-total .kpi-value { color: #A78BFA; }
+    .kpi-offline .kpi-value { color: #9CA3AF; }
+    .kpi-active .kpi-value { color: #60A5FA; }
+
+    /* Mini Barra de Estatísticas */
+    .mini-stats { display: flex; flex-wrap: wrap; gap: 12px; background: #151A23; border: 1px solid #232B3B; border-radius: 14px; padding: 14px 18px; margin-bottom: 24px; align-items: center; justify-content: space-between; font-size: 13px; color: #9CA3AF; }
+    .mini-item { display: flex; align-items: center; gap: 6px; }
+    .mini-item strong { color: #FFFFFF; }
+
+    /* Lista de Usuários */
+    .section-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+    .section-header h2 { font-size: 18px; font-weight: 700; color: #FFFFFF; }
+    .search-box { background: #151A23; border: 1px solid #232B3B; border-radius: 12px; padding: 8px 14px; color: #FFF; font-size: 14px; outline: none; width: 100%; max-width: 320px; transition: border-color 0.2s; }
+    .search-box:focus { border-color: #8B5CF6; }
+
+    .users-table { width: 100%; border-collapse: separate; border-spacing: 0; background: #151A23; border: 1px solid #232B3B; border-radius: 16px; overflow: hidden; }
+    .users-table th { background: #1A212E; padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #232B3B; }
+    .users-table td { padding: 14px 16px; border-bottom: 1px solid #1F2937; font-size: 14px; vertical-align: middle; }
+    .users-table tr:last-child td { border-bottom: none; }
+    .users-table tr:hover { background: #1A212E; }
+
+    .user-info { display: flex; align-items: center; gap: 12px; }
+    .avatar { width: 38px; height: 38px; border-radius: 10px; background: #374151; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #FFF; font-size: 15px; overflow: hidden; }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .user-name { font-weight: 700; color: #FFFFFF; }
+    .user-handle { font-size: 12px; color: #9CA3AF; }
+
+    .badge-online { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; font-weight: 700; color: #34D399; }
+    .badge-offline { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(156, 163, 175, 0.1); border: 1px solid rgba(156, 163, 175, 0.2); font-size: 11px; font-weight: 600; color: #9CA3AF; }
+
+    .btn-refresh { background: #8B5CF6; color: #FFF; border: none; padding: 8px 16px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; gap: 6px; }
+    .btn-refresh:hover { background: #7C3AED; }
+
+    @media (max-width: 640px) {
+      .users-table th:nth-child(3), .users-table td:nth-child(3) { display: none; }
+      .search-box { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo-area">
+        <div class="logo-badge">💬</div>
+        <div class="title">
+          <h1>LivreChat <span>Central</span></h1>
+          <p>Monitoramento e estatísticas em tempo real da rede</p>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="live-status">
+          <div class="pulse-dot"></div>
+          <span>Ao Vivo</span>
+        </div>
+        <button class="btn-refresh" onclick="fetchStats()">🔄 Atualizar</button>
+      </div>
+    </header>
+
+    <div class="kpi-grid">
+      <div class="kpi-card kpi-total">
+        <div class="kpi-icon">👥</div>
+        <div class="kpi-value" id="totalAccounts">--</div>
+        <div class="kpi-label">Contas Criadas</div>
+        <div class="kpi-sub">Total de usuários cadastrados</div>
+      </div>
+      <div class="kpi-card kpi-online">
+        <div class="kpi-icon">🟢</div>
+        <div class="kpi-value" id="onlineUsers">--</div>
+        <div class="kpi-label">Online Agora</div>
+        <div class="kpi-sub">Conectados via WebSocket</div>
+      </div>
+      <div class="kpi-card kpi-offline">
+        <div class="kpi-icon">⚪</div>
+        <div class="kpi-value" id="offlineUsers">--</div>
+        <div class="kpi-label">Offline</div>
+        <div class="kpi-sub">Sem conexão ativa</div>
+      </div>
+      <div class="kpi-card kpi-active">
+        <div class="kpi-icon">⚡</div>
+        <div class="kpi-value" id="activeToday">--</div>
+        <div class="kpi-label">Usuários Ativos (Hoje)</div>
+        <div class="kpi-sub">Atividade nas últimas 24h</div>
+      </div>
+    </div>
+
+    <div class="mini-stats">
+      <div class="mini-item">💬 Total Mensagens: <strong id="totalMessages">--</strong></div>
+      <div class="mini-item">👥 Conversas Criadas: <strong id="totalConversations">--</strong></div>
+      <div class="mini-item">📅 Ativos na Semana: <strong id="activeThisWeek">--</strong></div>
+      <div class="mini-item">⏱️ Uptime Servidor: <strong id="uptime">--</strong></div>
+      <div class="mini-item">🕒 Atualizado: <strong id="lastSync">--</strong></div>
+    </div>
+
+    <div class="section-header">
+      <h2>Lista de Membros da Comunidade</h2>
+      <input type="text" id="searchInput" class="search-box" placeholder="Pesquisar por nome ou @username..." oninput="filterUsers()">
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table class="users-table">
+        <thead>
+          <tr>
+            <th>Usuário</th>
+            <th>Status</th>
+            <th>Visto por Último</th>
+            <th>Cadastrado em</th>
+          </tr>
+        </thead>
+        <tbody id="usersTableBody">
+          <tr><td colspan="4" style="text-align: center; color: #9CA3AF; padding: 30px;">Carregando usuários...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    let allUsers = [];
+
+    function formatTimeAgo(isoString) {
+      if (!isoString) return 'Nunca';
+      const diffMs = Date.now() - new Date(isoString).getTime();
+      const diffSec = Math.floor(diffMs / 1000);
+      if (diffSec < 60) return 'Agora mesmo';
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return diffMin + 'm atrás';
+      const diffHr = Math.floor(diffMin / 60);
+      if (diffHr < 24) return diffHr + 'h atrás';
+      const diffDays = Math.floor(diffHr / 24);
+      return diffDays + 'd atrás';
+    }
+
+    function formatDate(isoString) {
+      if (!isoString) return '--';
+      try {
+        const d = new Date(isoString);
+        return d.toLocaleDateString('pt-BR');
+      } catch (e) { return isoString; }
+    }
+
+    function formatUptime(seconds) {
+      if (!seconds) return '0m';
+      const d = Math.floor(seconds / 86400);
+      const h = Math.floor((seconds % 86400) / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      if (d > 0) return d + 'd ' + h + 'h';
+      if (h > 0) return h + 'h ' + m + 'm';
+      return m + 'm';
+    }
+
+    async function fetchStats() {
+      try {
+        const res = await fetch('/api/community/stats');
+        const data = await res.json();
+
+        document.getElementById('totalAccounts').textContent = data.totalAccounts ?? 0;
+        document.getElementById('onlineUsers').textContent = data.onlineUsers ?? 0;
+        document.getElementById('offlineUsers').textContent = data.offlineUsers ?? 0;
+        document.getElementById('activeToday').textContent = data.activeToday ?? 0;
+        document.getElementById('totalMessages').textContent = data.totalMessages ?? 0;
+        document.getElementById('totalConversations').textContent = data.totalConversations ?? 0;
+        document.getElementById('activeThisWeek').textContent = data.activeThisWeek ?? 0;
+        document.getElementById('uptime').textContent = formatUptime(data.uptimeSeconds);
+        document.getElementById('lastSync').textContent = new Date().toLocaleTimeString('pt-BR');
+
+        allUsers = data.users || [];
+        filterUsers();
+      } catch (err) {
+        console.error('Erro ao carregar estatísticas:', err);
+      }
+    }
+
+    function filterUsers() {
+      const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+      const filtered = allUsers.filter(u => {
+        return !q || (u.displayName && u.displayName.toLowerCase().includes(q)) ||
+               (u.username && u.username.toLowerCase().includes(q));
+      });
+
+      const tbody = document.getElementById('usersTableBody');
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #9CA3AF; padding: 24px;">Nenhum usuário encontrado.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(u => {
+        const initial = (u.displayName || u.username || '?').charAt(0).toUpperCase();
+        const avatarHtml = u.avatarUrl
+          ? '<img src="' + u.avatarUrl + '" alt="' + u.username + '">'
+          : initial;
+
+        const statusHtml = u.isOnline
+          ? '<span class="badge-online"><span class="pulse-dot"></span> Online</span>'
+          : '<span class="badge-offline">⚪ Offline</span>';
+
+        return '<tr>' +
+          '<td>' +
+            '<div class="user-info">' +
+              '<div class="avatar">' + avatarHtml + '</div>' +
+              '<div>' +
+                '<div class="user-name">' + (u.displayName || u.username) + '</div>' +
+                '<div class="user-handle">@' + u.username + '</div>' +
+              '</div>' +
+            '</div>' +
+          '</td>' +
+          '<td>' + statusHtml + '</td>' +
+          '<td style="color: #9CA3AF;">' + (u.isOnline ? '<span style="color: #34D399; font-weight: 600;">Agora</span>' : formatTimeAgo(u.lastActive)) + '</td>' +
+          '<td style="color: #9CA3AF;">' + formatDate(u.createdAt) + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    fetchStats();
+    setInterval(fetchStats, 5000);
+  </script>
+</body>
+</html>`);
+});
 
 // Start server
 async function startServer() {

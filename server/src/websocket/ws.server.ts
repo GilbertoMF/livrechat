@@ -8,8 +8,8 @@ import { db, Message } from '../db/database';
 import { fcmService } from '../services/fcm.service';
 
 export const APP_VERSION_RULES = {
-  LATEST_VERSION_NAME: '1.1.37',
-  LATEST_VERSION_CODE: 47,
+  LATEST_VERSION_NAME: '1.1.38',
+  LATEST_VERSION_CODE: 48,
   MIN_SUPPORTED_VERSION_CODE: 13,
   DOWNLOAD_PORTAL_URL: '/download'
 };
@@ -862,5 +862,22 @@ export class WebSocketManager {
         client.send(message);
       }
     });
+  }
+
+  public getOnlineUserIds(): string[] {
+    const ids: string[] = [];
+    for (const [userId, sockets] of this.userSockets.entries()) {
+      for (const ws of sockets) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ids.push(userId);
+          break;
+        }
+      }
+    }
+    return ids;
+  }
+
+  public getOnlineCount(): number {
+    return this.getOnlineUserIds().length;
   }
 }
