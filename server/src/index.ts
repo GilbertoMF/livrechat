@@ -36,18 +36,18 @@ app.get(['/', '/download', '/baixar', '/app'], (req, res) => {
 
 // Latest APK redirect
 app.get(['/apks/livrechat-latest.apk', '/download/latest'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.28-universal.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.40-universal.apk');
 });
 
 // Dedicated Architecture Download Routes (3 versions available)
 app.get(['/download/arm64', '/apks/arm64'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.28-arm64.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.40-arm64.apk');
 });
 app.get(['/download/armv7', '/apks/armv7'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.28-armv7.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.40-armv7.apk');
 });
 app.get(['/download/universal', '/apks/universal'], (req, res) => {
-  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.28-universal.apk');
+  res.redirect('https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks/livrechat-v1.1.40-universal.apk');
 });
 
 // Games static hosting (CSO / ISO files)
@@ -76,14 +76,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 49;
+  const LATEST_CODE = 50;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.39',
+    latestVersion: '1.1.40',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -91,10 +91,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.39: Melhorias de estabilidade, sincronização e privacidade.',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.39-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.39-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.39-universal.apk`,
+      : 'Nova versão 1.1.40: Sistema completo de denúncia estilo WhatsApp, envio das últimas mensagens para segurança e moderação na Central Web.',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.40-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.40-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.40-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -102,26 +102,36 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.39',
-      versionCode: 49,
+      version: '1.1.40',
+      versionCode: 50,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-21',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Versão 1.1.39: Otimizações de estabilidade, desempenho nas conexões e melhorias gerais de privacidade.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.39-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.39-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.39-universal.apk`,
+      message: 'Versão 1.1.40: Sistema de denúncia igual ao WhatsApp, moderação de mensagens e usuários na Central Web.',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.40-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.40-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.40-universal.apk`,
       downloadPortalUrl: '/download',
-      sizeMbArm64: '25.7 MB',
-      sizeMbUniversal: '32.2 MB'
+      sizeMbArm64: '25.8 MB',
+      sizeMbUniversal: '32.3 MB'
     },
     versions: [
+      {
+        version: '1.1.40',
+        versionCode: 50,
+        releaseDate: '2026-10-21',
+        isLatest: true,
+        changelog: '1. Denúncia completa igual ao WhatsApp: denuncie mensagens ou contatos enviando o snapshot das últimas 5 mensagens da conversa para moderação; 2. Opção de bloquear contato e limpar conversa ao denunciar; 3. Moderação em tempo real na Central Web com bloqueio/suspensão de usuários.',
+        apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.40-arm64.apk`,
+        apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.40-armv7.apk`,
+        apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.40-universal.apk`
+      },
       {
         version: '1.1.39',
         versionCode: 49,
         releaseDate: '2026-10-21',
-        isLatest: true,
+        isLatest: false,
         changelog: '1. Otimizações de desempenho e consumo de memória; 2. Ajustes na privacidade da rede e estabilização de conexões P2P.',
         apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.39-arm64.apk`,
         apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.39-armv7.apk`,
@@ -739,7 +749,13 @@ export const wsManager = new WebSocketManager(server);
 netplayManager.init(server);
 
 // ==========================================
-// COMMUNITY & SERVER STATS (Central de Usuários Privada - Apenas Web Admin)
+// REPORTS & MODERATION ROUTES (WhatsApp Style)
+// ==========================================
+// User submission from Android App
+app.post('/api/reports', authenticateToken, UsersController.reportUser);
+
+// ==========================================
+// COMMUNITY & SERVER STATS (Central de Usuários e Moderação - Privada Web Admin)
 // ==========================================
 const ADMIN_PIN = process.env.ADMIN_PIN || 'admin2026';
 
@@ -759,6 +775,70 @@ app.get('/api/community/stats', async (req, res) => {
   }
 });
 
+// Admin Reports List
+app.get('/api/reports', async (req, res) => {
+  const pin = (req.headers['x-admin-pin'] as string) || (req.query.key as string) || (req.query.pin as string);
+  if (pin !== ADMIN_PIN) {
+    return res.status(401).json({ error: 'Acesso restrito ao Administrador', code: 'UNAUTHORIZED' });
+  }
+
+  try {
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const reports = await db.getReports(limit, offset);
+    res.status(200).json({ reports });
+  } catch (err: any) {
+    console.error('Error fetching reports:', err);
+    res.status(500).json({ error: 'Failed to fetch reports', details: err?.message });
+  }
+});
+
+// Admin Update Report (Status, Notes, Action Taken)
+app.patch('/api/reports/:id', async (req, res) => {
+  const pin = (req.headers['x-admin-pin'] as string) || (req.query.key as string) || (req.query.pin as string);
+  if (pin !== ADMIN_PIN) {
+    return res.status(401).json({ error: 'Acesso restrito ao Administrador', code: 'UNAUTHORIZED' });
+  }
+
+  try {
+    const { id } = req.params;
+    const { status, action_taken, admin_notes } = req.body;
+    await db.updateReport(id, {
+      status,
+      action_taken,
+      admin_notes
+    });
+    res.status(200).json({ success: true, message: 'Denúncia atualizada com sucesso.' });
+  } catch (err: any) {
+    console.error('Error updating report:', err);
+    res.status(500).json({ error: 'Failed to update report', details: err?.message });
+  }
+});
+
+// Admin Ban / Unban User
+app.post('/api/admin/users/:id/ban', async (req, res) => {
+  const pin = (req.headers['x-admin-pin'] as string) || (req.query.key as string) || (req.query.pin as string);
+  if (pin !== ADMIN_PIN) {
+    return res.status(401).json({ error: 'Acesso restrito ao Administrador', code: 'UNAUTHORIZED' });
+  }
+
+  try {
+    const { id } = req.params;
+    const { banned, reason } = req.body;
+    const isBanned = !!banned;
+    await db.setUserBanned(id, isBanned);
+
+    if (isBanned) {
+      wsManager.disconnectUser(id, reason || 'Sua conta foi suspensa por violar as diretrizes da comunidade.');
+    }
+
+    res.status(200).json({ success: true, banned: isBanned });
+  } catch (err: any) {
+    console.error('Error toggling user ban status:', err);
+    res.status(500).json({ error: 'Failed to update user ban status', details: err?.message });
+  }
+});
+
 app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!DOCTYPE html>
@@ -766,14 +846,14 @@ app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LivreChat — Central do Administrador</title>
+  <title>LivreChat — Central de Administração & Moderação</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
     body { background-color: #0B0E14; color: #F3F4F6; min-height: 100vh; padding: 24px 16px; }
-    .container { max-width: 1080px; margin: 0 auto; }
+    .container { max-width: 1140px; margin: 0 auto; }
     .header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid #1F2937; }
     .logo-area { display: flex; align-items: center; gap: 14px; }
     .logo-badge { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #8B5CF6, #6D28D9); display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 4px 14px rgba(139, 92, 246, 0.4); }
@@ -784,60 +864,124 @@ app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
     @keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
 
     /* Grid de Métricas Principais */
-    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .kpi-card { background: #151A23; border: 1px solid #232B3B; border-radius: 16px; padding: 20px; transition: transform 0.2s, border-color 0.2s; position: relative; overflow: hidden; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .kpi-card { background: #151A23; border: 1px solid #232B3B; border-radius: 16px; padding: 18px; transition: transform 0.2s, border-color 0.2s; position: relative; overflow: hidden; cursor: pointer; }
     .kpi-card:hover { transform: translateY(-2px); border-color: #374151; }
-    .kpi-icon { font-size: 24px; margin-bottom: 12px; }
-    .kpi-value { font-size: 36px; font-weight: 800; line-height: 1; margin-bottom: 6px; }
-    .kpi-label { font-size: 13px; font-weight: 600; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kpi-icon { font-size: 24px; margin-bottom: 10px; }
+    .kpi-value { font-size: 34px; font-weight: 800; line-height: 1; margin-bottom: 6px; }
+    .kpi-label { font-size: 12px; font-weight: 600; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.5px; }
     .kpi-sub { font-size: 12px; color: #6B7280; margin-top: 4px; }
     .kpi-online { border-color: rgba(16, 185, 129, 0.3); }
     .kpi-online .kpi-value { color: #34D399; }
     .kpi-total .kpi-value { color: #A78BFA; }
     .kpi-offline .kpi-value { color: #9CA3AF; }
     .kpi-active .kpi-value { color: #60A5FA; }
+    .kpi-reports { border-color: rgba(239, 68, 68, 0.3); }
+    .kpi-reports .kpi-value { color: #F87171; }
+    .kpi-reports.has-pending { background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.5); }
 
     /* Mini Barra de Estatísticas */
     .mini-stats { display: flex; flex-wrap: wrap; gap: 12px; background: #151A23; border: 1px solid #232B3B; border-radius: 14px; padding: 14px 18px; margin-bottom: 24px; align-items: center; justify-content: space-between; font-size: 13px; color: #9CA3AF; }
     .mini-item { display: flex; align-items: center; gap: 6px; }
     .mini-item strong { color: #FFFFFF; }
 
-    /* Lista de Usuários */
+    /* Tabs de Navegação */
+    .tabs-bar { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid #232B3B; padding-bottom: 8px; }
+    .tab-btn { background: transparent; border: none; padding: 10px 18px; border-radius: 10px; color: #9CA3AF; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
+    .tab-btn:hover { color: #FFFFFF; background: #151A23; }
+    .tab-btn.active { color: #FFFFFF; background: #8B5CF6; box-shadow: 0 4px 14px rgba(139, 92, 246, 0.3); }
+    .tab-badge { background: #EF4444; color: #FFF; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 999px; }
+    .tab-badge.hidden { display: none; }
+
+    /* Barra de Ações & Filtros */
     .section-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
     .section-header h2 { font-size: 18px; font-weight: 700; color: #FFFFFF; }
-    .search-box { background: #151A23; border: 1px solid #232B3B; border-radius: 12px; padding: 8px 14px; color: #FFF; font-size: 14px; outline: none; width: 100%; max-width: 320px; transition: border-color 0.2s; }
+    .filter-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .filter-pill { background: #151A23; border: 1px solid #232B3B; color: #9CA3AF; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .filter-pill.active { background: #374151; color: #FFFFFF; border-color: #4B5563; }
+    .search-box { background: #151A23; border: 1px solid #232B3B; border-radius: 12px; padding: 8px 14px; color: #FFF; font-size: 14px; outline: none; width: 100%; max-width: 300px; transition: border-color 0.2s; }
     .search-box:focus { border-color: #8B5CF6; }
 
-    .users-table { width: 100%; border-collapse: separate; border-spacing: 0; background: #151A23; border: 1px solid #232B3B; border-radius: 16px; overflow: hidden; }
-    .users-table th { background: #1A212E; padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #232B3B; }
-    .users-table td { padding: 14px 16px; border-bottom: 1px solid #1F2937; font-size: 14px; vertical-align: middle; }
-    .users-table tr:last-child td { border-bottom: none; }
-    .users-table tr:hover { background: #1A212E; }
+    /* Tabelas */
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; background: #151A23; border: 1px solid #232B3B; border-radius: 16px; overflow: hidden; }
+    .data-table th { background: #1A212E; padding: 12px 14px; text-align: left; font-size: 12px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #232B3B; }
+    .data-table td { padding: 12px 14px; border-bottom: 1px solid #1F2937; font-size: 13px; vertical-align: middle; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover { background: #1A212E; }
 
-    .user-info { display: flex; align-items: center; gap: 12px; }
-    .avatar { width: 38px; height: 38px; border-radius: 10px; background: #374151; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #FFF; font-size: 15px; overflow: hidden; }
+    .user-info { display: flex; align-items: center; gap: 10px; }
+    .avatar { width: 36px; height: 36px; border-radius: 10px; background: #374151; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #FFF; font-size: 14px; overflow: hidden; flex-shrink: 0; }
     .avatar img { width: 100%; height: 100%; object-fit: cover; }
-    .user-name { font-weight: 700; color: #FFFFFF; }
-    .user-handle { font-size: 12px; color: #9CA3AF; }
+    .user-name { font-weight: 700; color: #FFFFFF; line-height: 1.2; }
+    .user-handle { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
 
-    .badge-online { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; font-weight: 700; color: #34D399; }
-    .badge-offline { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(156, 163, 175, 0.1); border: 1px solid rgba(156, 163, 175, 0.2); font-size: 11px; font-weight: 600; color: #9CA3AF; }
+    /* Badges */
+    .badge-online { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); font-size: 11px; font-weight: 700; color: #34D399; }
+    .badge-offline { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; background: rgba(156, 163, 175, 0.1); border: 1px solid rgba(156, 163, 175, 0.2); font-size: 11px; font-weight: 600; color: #9CA3AF; }
+    .badge-banned { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); font-size: 11px; font-weight: 700; color: #F87171; }
+    .badge-active-user { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); font-size: 11px; font-weight: 600; color: #93C5FD; }
 
+    .badge-reason { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #232B3B; color: #E5E7EB; border: 1px solid #374151; }
+    .reason-spam { background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.3); color: #FBBF24; }
+    .reason-fraud { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #F87171; }
+    .reason-harassment { background: rgba(236, 72, 153, 0.15); border-color: rgba(236, 72, 153, 0.3); color: #F472B6; }
+
+    .badge-status { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .status-pending { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #FBBF24; }
+    .status-resolved { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34D399; }
+    .status-dismissed { background: rgba(156, 163, 175, 0.15); border: 1px solid rgba(156, 163, 175, 0.2); color: #9CA3AF; }
+
+    /* Botões */
     .btn-refresh { background: #8B5CF6; color: #FFF; border: none; padding: 8px 16px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; gap: 6px; }
     .btn-refresh:hover { background: #7C3AED; }
     .btn-logout { background: #232B3B; color: #9CA3AF; border: 1px solid #374151; padding: 8px 14px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; }
     .btn-logout:hover { background: #374151; color: #FFF; }
 
+    .btn-action { border: none; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 4px; }
+    .btn-ban { background: rgba(239, 68, 68, 0.15); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .btn-ban:hover { background: #EF4444; color: #FFF; }
+    .btn-unban { background: rgba(16, 185, 129, 0.15); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .btn-unban:hover { background: #10B981; color: #FFF; }
+    .btn-view-msgs { background: rgba(139, 92, 246, 0.15); color: #C4B5FD; border: 1px solid rgba(139, 92, 246, 0.3); }
+    .btn-view-msgs:hover { background: #8B5CF6; color: #FFF; }
+    .btn-resolve { background: rgba(16, 185, 129, 0.12); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.25); }
+    .btn-resolve:hover { background: #10B981; color: #FFF; }
+    .btn-dismiss { background: #232B3B; color: #9CA3AF; border: 1px solid #374151; }
+    .btn-dismiss:hover { background: #374151; color: #FFF; }
+
+    /* Modal de Inspeção de Mensagens (Estilo WhatsApp) */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(11, 14, 20, 0.88); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 10000; padding: 16px; }
+    .modal-overlay.active { display: flex; }
+    .modal-card { background: #151A23; border: 1px solid #374151; border-radius: 20px; width: 100%; max-width: 580px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.7); }
+    .modal-header { padding: 18px 20px; border-bottom: 1px solid #232B3B; display: flex; justify-content: space-between; align-items: center; }
+    .modal-header h3 { font-size: 16px; font-weight: 800; color: #FFF; display: flex; align-items: center; gap: 8px; }
+    .modal-close { background: transparent; border: none; color: #9CA3AF; font-size: 20px; cursor: pointer; padding: 4px; }
+    .modal-close:hover { color: #FFF; }
+    .modal-subtitle { font-size: 12px; color: #9CA3AF; padding: 10px 20px; background: #10141D; border-bottom: 1px solid #232B3B; }
+    .modal-chat-body { padding: 20px; overflow-y: auto; flex: 1; background: #0B141A; display: flex; flex-direction: column; gap: 12px; }
+    .chat-bubble { max-width: 82%; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.45; position: relative; box-shadow: 0 1px 3px rgba(0,0,0,0.3); word-break: break-word; }
+    .bubble-outgoing { align-self: flex-end; background: #005C4B; color: #E9EDEF; border-top-right-radius: 2px; }
+    .bubble-incoming { align-self: flex-start; background: #202C33; color: #E9EDEF; border-top-left-radius: 2px; }
+    .bubble-sender { font-size: 11px; font-weight: 700; margin-bottom: 3px; }
+    .bubble-outgoing .bubble-sender { color: #53BDEB; }
+    .bubble-incoming .bubble-sender { color: #F59E0B; }
+    .bubble-time { font-size: 10px; color: rgba(255, 255, 255, 0.6); margin-top: 4px; text-align: right; }
+    .modal-footer { padding: 14px 20px; border-top: 1px solid #232B3B; display: flex; justify-content: space-between; align-items: center; gap: 10px; background: #151A23; }
+
     /* Auth Gate Modal */
-    #loginGate { position: fixed; inset: 0; background: rgba(11, 14, 20, 0.96); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 20px; }
+    #loginGate { position: fixed; inset: 0; background: rgba(11, 14, 20, 0.96); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; z-index: 10001; padding: 20px; }
     .login-card { background: #151A23; border: 1px solid #374151; border-radius: 20px; padding: 36px 28px; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 16px 40px rgba(0,0,0,0.6); }
     .pin-input { width: 100%; padding: 12px 16px; border-radius: 12px; background: #0B0E14; border: 1px solid #232B3B; color: #fff; font-size: 15px; margin-top: 18px; outline: none; text-align: center; letter-spacing: 2px; }
     .pin-input:focus { border-color: #8B5CF6; }
     .btn-login { width: 100%; margin-top: 14px; padding: 12px; border-radius: 12px; background: #8B5CF6; color: #fff; border: none; font-weight: 700; font-size: 14px; cursor: pointer; transition: background 0.2s; }
     .btn-login:hover { background: #7C3AED; }
 
-    @media (max-width: 640px) {
-      .users-table th:nth-child(3), .users-table td:nth-child(3) { display: none; }
+    /* Toast Notification */
+    #toast { position: fixed; bottom: 24px; right: 24px; background: #1E293B; border: 1px solid #334155; color: #FFF; padding: 12px 20px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); font-size: 13px; font-weight: 600; display: none; z-index: 10002; }
+
+    @media (max-width: 768px) {
+      .data-table th:nth-child(4), .data-table td:nth-child(4),
+      .data-table th:nth-child(5), .data-table td:nth-child(5) { display: none; }
       .search-box { max-width: 100%; }
     }
   </style>
@@ -848,10 +992,35 @@ app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
     <div class="login-card">
       <div style="font-size: 42px; margin-bottom: 12px;">🛡️</div>
       <h2 style="color: #FFFFFF; font-size: 20px; font-weight: 800; margin-bottom: 6px;">Central do Administrador</h2>
-      <p style="color: #9CA3AF; font-size: 13px; line-height: 1.5;">Painel privado do servidor LivreChat. Digite sua senha de Administrador para prosseguir.</p>
+      <p style="color: #9CA3AF; font-size: 13px; line-height: 1.5;">Painel privado do LivreChat. Digite sua senha de Administrador para prosseguir.</p>
       <input type="password" id="pinInput" class="pin-input" placeholder="Senha de Admin" onkeydown="if(event.key==='Enter') loginWithPin()">
       <div id="loginError" style="color: #EF4444; font-size: 12px; margin-top: 10px; display: none; font-weight: 600;">Senha incorreta. Tente novamente!</div>
       <button class="btn-login" onclick="loginWithPin()">Acessar Central</button>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast"></div>
+
+  <!-- Modal de Inspeção de Mensagens (WhatsApp Style) -->
+  <div id="messageModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>💬 Snapshot da Conversa Denunciada</h3>
+        <button class="modal-close" onclick="closeMessageModal()">✕</button>
+      </div>
+      <div class="modal-subtitle" id="modalSubtitle">
+        Últimas 5 mensagens da conversa enviadas no momento da denúncia
+      </div>
+      <div class="modal-chat-body" id="modalChatBody">
+        <!-- Balões inseridos dinamicamente -->
+      </div>
+      <div class="modal-footer" id="modalFooter">
+        <button class="btn-action btn-dismiss" onclick="closeMessageModal()">Fechar</button>
+        <div style="display: flex; gap: 8px;" id="modalActionButtons">
+          <!-- Botões rápidos de moderação -->
+        </div>
+      </div>
     </div>
   </div>
 
@@ -861,7 +1030,7 @@ app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
         <div class="logo-badge">💬</div>
         <div class="title">
           <h1>LivreChat <span>Central</span></h1>
-          <p>Painel administrativo de monitoramento em tempo real</p>
+          <p>Administração & Moderação em Tempo Real (WhatsApp Style Reporting)</p>
         </div>
       </div>
       <div style="display: flex; align-items: center; gap: 10px;">
@@ -869,70 +1038,132 @@ app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
           <div class="pulse-dot"></div>
           <span>Ao Vivo</span>
         </div>
-        <button class="btn-refresh" onclick="fetchStats()">🔄 Atualizar</button>
+        <button class="btn-refresh" onclick="fetchAll()">🔄 Atualizar</button>
         <button class="btn-logout" onclick="logoutAdmin()">🔒 Bloquear</button>
       </div>
     </header>
 
+    <!-- Grid de Métricas Principais -->
     <div class="kpi-grid">
-      <div class="kpi-card kpi-total">
+      <div class="kpi-card kpi-total" onclick="switchTab('users')">
         <div class="kpi-icon">👥</div>
         <div class="kpi-value" id="totalAccounts">--</div>
         <div class="kpi-label">Contas Criadas</div>
-        <div class="kpi-sub">Total de usuários cadastrados</div>
+        <div class="kpi-sub">Total cadastrados</div>
       </div>
-      <div class="kpi-card kpi-online">
+      <div class="kpi-card kpi-online" onclick="switchTab('users')">
         <div class="kpi-icon">🟢</div>
         <div class="kpi-value" id="onlineUsers">--</div>
         <div class="kpi-label">Online Agora</div>
         <div class="kpi-sub">Conectados via WebSocket</div>
       </div>
-      <div class="kpi-card kpi-offline">
+      <div class="kpi-card kpi-offline" onclick="switchTab('users')">
         <div class="kpi-icon">⚪</div>
         <div class="kpi-value" id="offlineUsers">--</div>
         <div class="kpi-label">Offline</div>
         <div class="kpi-sub">Sem conexão ativa</div>
       </div>
-      <div class="kpi-card kpi-active">
+      <div class="kpi-card kpi-active" onclick="switchTab('users')">
         <div class="kpi-icon">⚡</div>
         <div class="kpi-value" id="activeToday">--</div>
-        <div class="kpi-label">Usuários Ativos (Hoje)</div>
-        <div class="kpi-sub">Atividade nas últimas 24h</div>
+        <div class="kpi-label">Ativos Hoje</div>
+        <div class="kpi-sub">Últimas 24 horas</div>
+      </div>
+      <div class="kpi-card kpi-reports" id="kpiReportsCard" onclick="switchTab('reports')">
+        <div class="kpi-icon">🚨</div>
+        <div class="kpi-value" id="pendingReportsCount">0</div>
+        <div class="kpi-label">Denúncias Pendentes</div>
+        <div class="kpi-sub" id="totalReportsSub">Total: 0 recebidas</div>
       </div>
     </div>
 
+    <!-- Mini Estatísticas -->
     <div class="mini-stats">
-      <div class="mini-item">💬 Total Mensagens: <strong id="totalMessages">--</strong></div>
-      <div class="mini-item">👥 Conversas Criadas: <strong id="totalConversations">--</strong></div>
+      <div class="mini-item">💬 Mensagens: <strong id="totalMessages">--</strong></div>
+      <div class="mini-item">👥 Conversas: <strong id="totalConversations">--</strong></div>
       <div class="mini-item">📅 Ativos na Semana: <strong id="activeThisWeek">--</strong></div>
       <div class="mini-item">⏱️ Uptime Servidor: <strong id="uptime">--</strong></div>
-      <div class="mini-item">🕒 Atualizado: <strong id="lastSync">--</strong></div>
+      <div class="mini-item">🕒 Sincronizado: <strong id="lastSync">--</strong></div>
     </div>
 
-    <div class="section-header">
-      <h2>Lista de Membros Cadastrados</h2>
-      <input type="text" id="searchInput" class="search-box" placeholder="Pesquisar por nome ou @username..." oninput="filterUsers()">
+    <!-- Navegação por Abas -->
+    <div class="tabs-bar">
+      <button class="tab-btn active" id="tabBtnUsers" onclick="switchTab('users')">
+        👥 Usuários Cadastrados (<span id="tabUsersCount">0</span>)
+      </button>
+      <button class="tab-btn" id="tabBtnReports" onclick="switchTab('reports')">
+        🚨 Denúncias & Moderação
+        <span class="tab-badge hidden" id="tabPendingBadge">0</span>
+      </button>
     </div>
 
-    <div style="overflow-x: auto;">
-      <table class="users-table">
-        <thead>
-          <tr>
-            <th>Usuário</th>
-            <th>Status</th>
-            <th>Visto por Último</th>
-            <th>Cadastrado em</th>
-          </tr>
-        </thead>
-        <tbody id="usersTableBody">
-          <tr><td colspan="4" style="text-align: center; color: #9CA3AF; padding: 30px;">Carregando usuários...</td></tr>
-        </tbody>
-      </table>
+    <!-- ABA 1: USUÁRIOS CADASTRADOS -->
+    <div id="tabContentUsers">
+      <div class="section-header">
+        <h2>Membros da Comunidade</h2>
+        <input type="text" id="searchInput" class="search-box" placeholder="Pesquisar nome ou @username..." oninput="filterUsers()">
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Usuário</th>
+              <th>Conexão</th>
+              <th>Status Conta</th>
+              <th>Visto por Último</th>
+              <th>Cadastrado em</th>
+              <th style="text-align: right;">Ação</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody">
+            <tr><td colspan="6" style="text-align: center; color: #9CA3AF; padding: 30px;">Carregando usuários...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ABA 2: DENÚNCIAS & MODERAÇÃO -->
+    <div id="tabContentReports" style="display: none;">
+      <div class="section-header">
+        <div>
+          <h2>Fila de Moderação de Denúncias</h2>
+          <p style="font-size: 12px; color: #9CA3AF; margin-top: 2px;">Denúncias enviadas por usuários pelo chat com as últimas 5 mensagens da conversa</p>
+        </div>
+        <div class="filter-pills">
+          <button class="filter-pill active" id="filterAll" onclick="setReportFilter('all')">Todas</button>
+          <button class="filter-pill" id="filterPending" onclick="setReportFilter('pending')">🟡 Pendentes</button>
+          <button class="filter-pill" id="filterResolved" onclick="setReportFilter('resolved')">🟢 Resolvidas</button>
+          <button class="filter-pill" id="filterDismissed" onclick="setReportFilter('dismissed')">⚪ Descartadas</button>
+        </div>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Denunciante</th>
+              <th>Denunciado</th>
+              <th>Motivo & Detalhes</th>
+              <th>Snapshot Conversa</th>
+              <th>Status</th>
+              <th style="text-align: right;">Ações de Moderação</th>
+            </tr>
+          </thead>
+          <tbody id="reportsTableBody">
+            <tr><td colspan="7" style="text-align: center; color: #9CA3AF; padding: 30px;">Carregando denúncias...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
   <script>
     let allUsers = [];
+    let allReports = [];
+    let currentTab = 'users';
+    let currentReportFilter = 'all';
 
     const urlParams = new URLSearchParams(window.location.search);
     const keyFromUrl = urlParams.get('key') || urlParams.get('pin');
@@ -958,13 +1189,49 @@ app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
       const pin = document.getElementById('pinInput').value.trim();
       if (!pin) return;
       localStorage.setItem('admin_pin', pin);
-      fetchStats();
+      fetchAll();
     }
 
     function logoutAdmin() {
       localStorage.removeItem('admin_pin');
       document.getElementById('pinInput').value = '';
       showLogin();
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.display = 'block';
+      setTimeout(() => { t.style.display = 'none'; }, 3500);
+    }
+
+    function switchTab(tab) {
+      currentTab = tab;
+      const btnUsers = document.getElementById('tabBtnUsers');
+      const btnReports = document.getElementById('tabBtnReports');
+      const contentUsers = document.getElementById('tabContentUsers');
+      const contentReports = document.getElementById('tabContentReports');
+
+      if (tab === 'users') {
+        btnUsers.classList.add('active');
+        btnReports.classList.remove('active');
+        contentUsers.style.display = 'block';
+        contentReports.style.display = 'none';
+      } else {
+        btnUsers.classList.remove('active');
+        btnReports.classList.add('active');
+        contentUsers.style.display = 'none';
+        contentReports.style.display = 'block';
+      }
+    }
+
+    function setReportFilter(filter) {
+      currentReportFilter = filter;
+      ['all', 'pending', 'resolved', 'dismissed'].forEach(f => {
+        const btn = document.getElementById('filter' + f.charAt(0).toUpperCase() + f.slice(1));
+        if (btn) btn.classList.toggle('active', f === filter);
+      });
+      renderReports();
     }
 
     function formatTimeAgo(isoString) {
@@ -984,7 +1251,7 @@ app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
       if (!isoString) return '--';
       try {
         const d = new Date(isoString);
-        return d.toLocaleDateString('pt-BR');
+        return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       } catch (e) { return isoString; }
     }
 
@@ -998,12 +1265,13 @@ app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
       return m + 'm';
     }
 
+    async function fetchAll() {
+      await Promise.all([fetchStats(), fetchReports()]);
+    }
+
     async function fetchStats() {
       const pin = getAdminPin();
-      if (!pin) {
-        showLogin();
-        return;
-      }
+      if (!pin) { showLogin(); return; }
 
       try {
         const res = await fetch('/api/community/stats', {
@@ -1021,6 +1289,7 @@ app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
         const data = await res.json();
 
         document.getElementById('totalAccounts').textContent = data.totalAccounts ?? 0;
+        document.getElementById('tabUsersCount').textContent = data.totalAccounts ?? 0;
         document.getElementById('onlineUsers').textContent = data.onlineUsers ?? 0;
         document.getElementById('offlineUsers').textContent = data.offlineUsers ?? 0;
         document.getElementById('activeToday').textContent = data.activeToday ?? 0;
@@ -1030,10 +1299,44 @@ app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
         document.getElementById('uptime').textContent = formatUptime(data.uptimeSeconds);
         document.getElementById('lastSync').textContent = new Date().toLocaleTimeString('pt-BR');
 
+        const pending = data.pendingReports ?? 0;
+        const totalR = data.totalReports ?? 0;
+        document.getElementById('pendingReportsCount').textContent = pending;
+        document.getElementById('totalReportsSub').textContent = 'Total: ' + totalR + ' recebidas';
+
+        const kpiCard = document.getElementById('kpiReportsCard');
+        const badge = document.getElementById('tabPendingBadge');
+        if (pending > 0) {
+          kpiCard.classList.add('has-pending');
+          badge.textContent = pending;
+          badge.classList.remove('hidden');
+        } else {
+          kpiCard.classList.remove('has-pending');
+          badge.classList.add('hidden');
+        }
+
         allUsers = data.users || [];
         filterUsers();
       } catch (err) {
         console.error('Erro ao carregar estatísticas:', err);
+      }
+    }
+
+    async function fetchReports() {
+      const pin = getAdminPin();
+      if (!pin) return;
+
+      try {
+        const res = await fetch('/api/reports', {
+          headers: { 'x-admin-pin': pin }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          allReports = data.reports || [];
+          renderReports();
+        }
+      } catch (err) {
+        console.error('Erro ao carregar denúncias:', err);
       }
     }
 
@@ -1046,7 +1349,7 @@ app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
 
       const tbody = document.getElementById('usersTableBody');
       if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #9CA3AF; padding: 24px;">Nenhum usuário encontrado.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #9CA3AF; padding: 24px;">Nenhum usuário encontrado.</td></tr>';
         return;
       }
 
@@ -1056,9 +1359,17 @@ app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
           ? '<img src="' + u.avatarUrl + '" alt="' + u.username + '">'
           : initial;
 
-        const statusHtml = u.isOnline
+        const connectionHtml = u.isOnline
           ? '<span class="badge-online"><span class="pulse-dot"></span> Online</span>'
           : '<span class="badge-offline">⚪ Offline</span>';
+
+        const statusContaHtml = u.isBanned
+          ? '<span class="badge-banned">⛔ Banido</span>'
+          : '<span class="badge-active-user">Ativa</span>';
+
+        const actionBtn = u.isBanned
+          ? '<button class="btn-action btn-unban" onclick="toggleBan(\\'' + u.id + '\\', false, \\'' + (u.displayName || u.username) + '\\')">✅ Desbanir</button>'
+          : '<button class="btn-action btn-ban" onclick="toggleBan(\\'' + u.id + '\\', true, \\'' + (u.displayName || u.username) + '\\')">🚫 Banir</button>';
 
         return '<tr>' +
           '<td>' +
@@ -1070,16 +1381,224 @@ app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
               '</div>' +
             '</div>' +
           '</td>' +
-          '<td>' + statusHtml + '</td>' +
+          '<td>' + connectionHtml + '</td>' +
+          '<td>' + statusContaHtml + '</td>' +
           '<td style="color: #9CA3AF;">' + (u.isOnline ? '<span style="color: #34D399; font-weight: 600;">Agora</span>' : formatTimeAgo(u.lastActive)) + '</td>' +
           '<td style="color: #9CA3AF;">' + formatDate(u.createdAt) + '</td>' +
+          '<td style="text-align: right;">' + actionBtn + '</td>' +
         '</tr>';
       }).join('');
     }
 
-    fetchStats();
+    function renderReports() {
+      const filtered = allReports.filter(r => {
+        if (currentReportFilter === 'all') return true;
+        return (r.status || 'pending') === currentReportFilter;
+      });
+
+      const tbody = document.getElementById('reportsTableBody');
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #9CA3AF; padding: 28px;">Nenhuma denúncia nesta categoria.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(r => {
+        const reporterInitial = (r.reporter_display_name || r.reporter_username || '?').charAt(0).toUpperCase();
+        const reportedInitial = (r.reported_display_name || r.reported_username || '?').charAt(0).toUpperCase();
+
+        const msgs = Array.isArray(r.recent_messages) ? r.recent_messages : (typeof r.recent_messages === 'string' ? JSON.parse(r.recent_messages || '[]') : []);
+        const msgCount = msgs.length;
+
+        let reasonClass = 'badge-reason';
+        const reasonLower = (r.reason || '').toLowerCase();
+        if (reasonLower.includes('spam')) reasonClass += ' reason-spam';
+        else if (reasonLower.includes('golpe') || reasonLower.includes('fraude')) reasonClass += ' reason-fraud';
+        else if (reasonLower.includes('assédio') || reasonLower.includes('ofensa') || reasonLower.includes('violento')) reasonClass += ' reason-harassment';
+
+        let statusBadge = '<span class="badge-status status-pending">🟡 Pendente</span>';
+        if (r.status === 'resolved') statusBadge = '<span class="badge-status status-resolved">🟢 Resolvida</span>';
+        else if (r.status === 'dismissed') statusBadge = '<span class="badge-status status-dismissed">⚪ Descartada</span>';
+
+        const reportedStatusBadge = r.reported_is_banned
+          ? ' <span class="badge-banned" style="font-size: 10px; padding: 1px 5px;">Banido</span>'
+          : '';
+
+        const actionBanBtn = r.reported_is_banned
+          ? '<button class="btn-action btn-unban" onclick="toggleBan(\\'' + r.reported_user_id + '\\', false, \\'' + (r.reported_display_name || r.reported_username) + '\\')">✅ Desbanir</button>'
+          : '<button class="btn-action btn-ban" onclick="toggleBan(\\'' + r.reported_user_id + '\\', true, \\'' + (r.reported_display_name || r.reported_username) + '\\')">🚫 Banir</button>';
+
+        const resolveBtn = r.status !== 'resolved'
+          ? '<button class="btn-action btn-resolve" onclick="updateReportStatus(\\'' + r.id + '\\', \\'resolved\\', \\'moderated\\')">✔️ Resolver</button>'
+          : '';
+
+        const dismissBtn = r.status !== 'dismissed'
+          ? '<button class="btn-action btn-dismiss" onclick="updateReportStatus(\\'' + r.id + '\\', \\'dismissed\\', \\'dismissed\\')">✖️ Descartar</button>'
+          : '';
+
+        return '<tr>' +
+          '<td style="color: #9CA3AF; font-size: 12px; white-space: nowrap;">' + formatDate(r.created_at) + '</td>' +
+          '<td>' +
+            '<div class="user-info">' +
+              '<div class="avatar">' + (r.reporter_avatar_url ? '<img src="' + r.reporter_avatar_url + '">' : reporterInitial) + '</div>' +
+              '<div>' +
+                '<div class="user-name">' + (r.reporter_display_name || r.reporter_username || 'Desconhecido') + '</div>' +
+                '<div class="user-handle">@' + (r.reporter_username || '-') + '</div>' +
+              '</div>' +
+            '</div>' +
+          '</td>' +
+          '<td>' +
+            '<div class="user-info">' +
+              '<div class="avatar" style="border: 1px solid rgba(239, 68, 68, 0.4);">' + (r.reported_avatar_url ? '<img src="' + r.reported_avatar_url + '">' : reportedInitial) + '</div>' +
+              '<div>' +
+                '<div class="user-name">' + (r.reported_display_name || r.reported_username || 'Desconhecido') + reportedStatusBadge + '</div>' +
+                '<div class="user-handle">@' + (r.reported_username || '-') + '</div>' +
+              '</div>' +
+            '</div>' +
+          '</td>' +
+          '<td>' +
+            '<span class="' + reasonClass + '">' + (r.reason || 'Denúncia') + '</span>' +
+            (r.details ? '<div style="font-size: 12px; color: #D1D5DB; margin-top: 4px; max-width: 240px;">' + escapeHtml(r.details) + '</div>' : '') +
+          '</td>' +
+          '<td>' +
+            (msgCount > 0
+              ? '<button class="btn-action btn-view-msgs" onclick="openMessageModal(\\'' + r.id + '\\')">💬 Ver ' + msgCount + ' Mensagens</button>'
+              : '<span style="color: #6B7280; font-size: 12px;">Sem mensagens</span>') +
+          '</td>' +
+          '<td>' + statusBadge + '</td>' +
+          '<td style="text-align: right;">' +
+            '<div style="display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap;">' +
+              actionBanBtn +
+              resolveBtn +
+              dismissBtn +
+            '</div>' +
+          '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function openMessageModal(reportId) {
+      const report = allReports.find(r => r.id === reportId);
+      if (!report) return;
+
+      const msgs = Array.isArray(report.recent_messages) ? report.recent_messages : (typeof report.recent_messages === 'string' ? JSON.parse(report.recent_messages || '[]') : []);
+      const modal = document.getElementById('messageModal');
+      const chatBody = document.getElementById('modalChatBody');
+      const subtitle = document.getElementById('modalSubtitle');
+      const actionButtons = document.getElementById('modalActionButtons');
+
+      subtitle.innerHTML = '<strong>' + (report.reported_display_name || report.reported_username) + '</strong> foi denunciado por <em>' + (report.reason || 'Violação') + '</em>';
+
+      if (msgs.length === 0) {
+        chatBody.innerHTML = '<div style="text-align: center; color: #9CA3AF; padding: 40px;">Nenhuma mensagem registrada no snapshot desta denúncia.</div>';
+      } else {
+        chatBody.innerHTML = msgs.map(m => {
+          const isOutgoing = m.isOutgoing === true || m.senderId === report.reporter_id;
+          const bubbleClass = isOutgoing ? 'chat-bubble bubble-outgoing' : 'chat-bubble bubble-incoming';
+          const senderLabel = isOutgoing
+            ? (report.reporter_display_name || report.reporter_username || 'Denunciante')
+            : (report.reported_display_name || report.reported_username || 'Denunciado');
+
+          let timeText = '';
+          if (m.timestamp) {
+            try {
+              const d = new Date(m.timestamp);
+              timeText = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            } catch (e) { timeText = ''; }
+          }
+
+          let content = escapeHtml(m.content || '');
+          if (m.messageType && m.messageType !== 'TEXT') {
+            content = '<span style="font-weight: 600; opacity: 0.9;">[' + m.messageType + ']</span> ' + content;
+          }
+
+          return '<div class="' + bubbleClass + '">' +
+            '<div class="bubble-sender">' + senderLabel + '</div>' +
+            '<div>' + (content || '<em style="opacity: 0.7;">Mensagem de mídia ou vazia</em>') + '</div>' +
+            '<div class="bubble-time">' + timeText + '</div>' +
+          '</div>';
+        }).join('');
+      }
+
+      const isBanned = report.reported_is_banned;
+      const banBtn = isBanned
+        ? '<button class="btn-action btn-unban" onclick="toggleBan(\\'' + report.reported_user_id + '\\', false, \\'' + (report.reported_display_name || report.reported_username) + '\\'); closeMessageModal();">✅ Desbanir</button>'
+        : '<button class="btn-action btn-ban" onclick="toggleBan(\\'' + report.reported_user_id + '\\', true, \\'' + (report.reported_display_name || report.reported_username) + '\\'); closeMessageModal();">🚫 Banir Usuário</button>';
+
+      actionButtons.innerHTML = banBtn +
+        '<button class="btn-action btn-resolve" onclick="updateReportStatus(\\'' + report.id + '\\', \\'resolved\\', \\'moderated\\'); closeMessageModal();">✔️ Marcar Resolvido</button>';
+
+      modal.classList.add('active');
+    }
+
+    function closeMessageModal() {
+      document.getElementById('messageModal').classList.remove('active');
+    }
+
+    async function toggleBan(userId, ban, userName) {
+      const pin = getAdminPin();
+      if (!pin) return;
+
+      const confirmMsg = ban
+        ? 'Tem certeza que deseja BANIR ' + (userName || 'este usuário') + '? O usuário será desconectado e impedido de usar o app.'
+        : 'Deseja revogar o banimento de ' + (userName || 'este usuário') + '?';
+
+      if (!confirm(confirmMsg)) return;
+
+      try {
+        const res = await fetch('/api/admin/users/' + userId + '/ban', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-pin': pin
+          },
+          body: JSON.stringify({ banned: ban, reason: ban ? 'Violação dos Termos de Uso.' : undefined })
+        });
+
+        if (res.ok) {
+          showToast(ban ? '🚫 Usuário banido com sucesso!' : '✅ Usuário desbanido com sucesso!');
+          fetchAll();
+        } else {
+          showToast('Erro ao atualizar status do usuário.');
+        }
+      } catch (e) {
+        showToast('Erro na requisição.');
+      }
+    }
+
+    async function updateReportStatus(reportId, status, actionTaken) {
+      const pin = getAdminPin();
+      if (!pin) return;
+
+      try {
+        const res = await fetch('/api/reports/' + reportId, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-pin': pin
+          },
+          body: JSON.stringify({ status, action_taken: actionTaken })
+        });
+
+        if (res.ok) {
+          showToast('Denúncia atualizada com sucesso!');
+          fetchAll();
+        } else {
+          showToast('Erro ao atualizar denúncia.');
+        }
+      } catch (e) {
+        showToast('Erro na requisição.');
+      }
+    }
+
+    // Inicialização
+    fetchAll();
     setInterval(() => {
-      if (getAdminPin()) fetchStats();
+      if (getAdminPin()) fetchAll();
     }, 5000);
   </script>
 </body>

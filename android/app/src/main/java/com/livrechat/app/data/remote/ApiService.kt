@@ -232,6 +232,10 @@ interface ApiService {
     @DELETE("api/users/burner-id")
     suspend fun destroyBurnerId(): Response<BaseResponse>
 
+    // Report User / Content (WhatsApp style)
+    @POST("api/reports")
+    suspend fun createReport(@Body body: Map<String, @JvmSuppressWildcards Any?>): Response<BaseResponse>
+
     // LivreTube (Privacy Video & YouTube Frontend)
     @GET("api/livretube/trending")
     suspend fun getLivreTubeTrending(

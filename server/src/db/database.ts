@@ -9,6 +9,7 @@ export interface User {
   username: string;
   password_hash: string;
   recovery_hash: string;
+  is_banned?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -109,9 +110,25 @@ export interface Report {
   id: string;
   reporter_id: string;
   reported_user_id: string;
+  conversation_id?: string;
+  message_id?: string;
   reason: string;
   details?: string;
+  recent_messages?: any[];
+  status?: string;
+  action_taken?: string;
+  admin_notes?: string;
   created_at: string;
+}
+
+export interface ReportWithUsers extends Report {
+  reporter_username?: string;
+  reporter_display_name?: string;
+  reporter_avatar_url?: string;
+  reported_username?: string;
+  reported_display_name?: string;
+  reported_avatar_url?: string;
+  reported_is_banned?: boolean;
 }
 
 export interface UserPreferences {
@@ -377,6 +394,7 @@ class DatabaseService {
             username: row.username,
             password_hash: row.password_hash,
             recovery_hash: row.recovery_hash,
+            is_banned: !!row.is_banned,
             created_at: row.created_at?.toISOString?.() || row.created_at,
             updated_at: row.updated_at?.toISOString?.() || row.updated_at
           };
@@ -400,6 +418,7 @@ class DatabaseService {
             username: row.username,
             password_hash: row.password_hash,
             recovery_hash: row.recovery_hash,
+            is_banned: !!row.is_banned,
             created_at: row.created_at?.toISOString?.() || row.created_at,
             updated_at: row.updated_at?.toISOString?.() || row.updated_at
           };
@@ -546,7 +565,7 @@ class DatabaseService {
     if (this.pgPool) {
       try {
         const res = await this.pgPool.query(`
-          SELECT u.id, u.username, u.password_hash, u.recovery_hash, u.created_at, u.updated_at,
+          SELECT u.id, u.username, u.password_hash, u.recovery_hash, COALESCE(u.is_banned, false) as is_banned, u.created_at, u.updated_at,
                  p.display_name, p.avatar_url, p.bio, p.public_key, p.phone_number, p.updated_at as p_updated_at
           FROM users u
           LEFT JOIN user_profiles p ON u.id = p.user_id
@@ -557,6 +576,7 @@ class DatabaseService {
             username: r.username,
             password_hash: r.password_hash,
             recovery_hash: r.recovery_hash,
+            is_banned: !!r.is_banned,
             created_at: r.created_at?.toISOString?.() || r.created_at,
             updated_at: r.updated_at?.toISOString?.() || r.updated_at
           },
@@ -586,6 +606,8 @@ class DatabaseService {
     let allUsersWithProfiles: Array<{ user: User; profile: UserProfile | null }> = [];
     let totalMessages = 0;
     let totalConversations = 0;
+    let totalReports = 0;
+    let pendingReports = 0;
     let activeSessions: Array<{ user_id: string; last_active: string | Date }> = [];
 
     if (this.pgPool) {
@@ -597,6 +619,15 @@ class DatabaseService {
 
         const convRes = await this.pgPool.query('SELECT count(*) as total FROM conversations');
         totalConversations = parseInt(convRes.rows[0]?.total || '0', 10);
+
+        const repRes = await this.pgPool.query(`
+          SELECT 
+            count(*) as total_reports,
+            count(*) FILTER (WHERE status = 'pending') as pending_reports
+          FROM reports
+        `);
+        totalReports = parseInt(repRes.rows[0]?.total_reports || '0', 10);
+        pendingReports = parseInt(repRes.rows[0]?.pending_reports || '0', 10);
 
         const sessRes = await this.pgPool.query('SELECT user_id, last_active FROM user_sessions WHERE last_active IS NOT NULL');
         activeSessions = sessRes.rows;
@@ -612,6 +643,8 @@ class DatabaseService {
       }));
       totalMessages = this.memoryStore.messages.length;
       totalConversations = this.memoryStore.conversations.length;
+      totalReports = this.memoryStore.reports.length;
+      pendingReports = this.memoryStore.reports.filter(r => (r.status || 'pending') === 'pending').length;
       activeSessions = this.memoryStore.sessions.map(s => ({ user_id: s.user_id, last_active: s.last_active }));
     }
 
@@ -663,6 +696,7 @@ class DatabaseService {
           displayName: p?.display_name || u.username,
           avatarUrl: p?.avatar_url || null,
           isOnline,
+          isBanned: !!u.is_banned,
           lastActive,
           createdAt: u.created_at
         };
@@ -681,6 +715,8 @@ class DatabaseService {
       activeThisWeek: activeWeekSet.size,
       totalConversations,
       totalMessages,
+      totalReports,
+      pendingReports,
       users: usersList,
       uptimeSeconds: Math.floor(process.uptime()),
       timestamp: new Date().toISOString()
@@ -990,10 +1026,10 @@ class DatabaseService {
   }
 
   // ==========================================
-  // REPORTS
+  // REPORTS (WhatsApp Style Spam & Abuse Reporting)
   // ==========================================
   public async createReport(report: Report): Promise<Report> {
-    this.memoryStore.reports.push(report);
+    this.memoryStore.reports.unshift(report);
     this.saveToLocal();
 
     if (this.pgPool) {
@@ -1001,14 +1037,119 @@ class DatabaseService {
         await this.ensureUserExists(report.reporter_id);
         await this.ensureUserExists(report.reported_user_id);
         await this.pgPool.query(`
-          INSERT INTO reports (id, reporter_id, reported_user_id, reason, details, created_at)
-          VALUES ($1, $2, $3, $4, $5, $6)
-        `, [report.id, report.reporter_id, report.reported_user_id, report.reason, report.details || null, report.created_at]);
+          INSERT INTO reports (
+            id, reporter_id, reported_user_id, conversation_id, message_id,
+            reason, details, recent_messages, status, action_taken, admin_notes, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        `, [
+          report.id,
+          report.reporter_id,
+          report.reported_user_id,
+          report.conversation_id || null,
+          report.message_id || null,
+          report.reason,
+          report.details || null,
+          report.recent_messages ? JSON.stringify(report.recent_messages) : null,
+          report.status || 'pending',
+          report.action_taken || 'none',
+          report.admin_notes || null,
+          report.created_at
+        ]);
       } catch (e) {
         console.warn('[Database] Erro PG createReport:', e);
       }
     }
     return report;
+  }
+
+  public async getReports(limit: number = 50, offset: number = 0): Promise<ReportWithUsers[]> {
+    if (this.pgPool) {
+      try {
+        const res = await this.pgPool.query(`
+          SELECT 
+            r.*,
+            u1.username AS reporter_username,
+            p1.display_name AS reporter_display_name,
+            p1.avatar_url AS reporter_avatar_url,
+            u2.username AS reported_username,
+            p2.display_name AS reported_display_name,
+            p2.avatar_url AS reported_avatar_url,
+            COALESCE(u2.is_banned, false) AS reported_is_banned
+          FROM reports r
+          LEFT JOIN users u1 ON r.reporter_id = u1.id
+          LEFT JOIN user_profiles p1 ON r.reporter_id = p1.user_id
+          LEFT JOIN users u2 ON r.reported_user_id = u2.id
+          LEFT JOIN user_profiles p2 ON r.reported_user_id = p2.user_id
+          ORDER BY r.created_at DESC
+          LIMIT $1 OFFSET $2
+        `, [limit, offset]);
+        return res.rows.map(row => ({
+          ...row,
+          created_at: row.created_at?.toISOString?.() || row.created_at
+        }));
+      } catch (e) {
+        console.warn('[Database] Erro PG getReports:', e);
+      }
+    }
+
+    // Memory fallback
+    return this.memoryStore.reports.slice(offset, offset + limit).map(r => {
+      const u1 = this.memoryStore.users.find(u => u.id === r.reporter_id);
+      const p1 = this.memoryStore.profiles.find(p => p.user_id === r.reporter_id);
+      const u2 = this.memoryStore.users.find(u => u.id === r.reported_user_id);
+      const p2 = this.memoryStore.profiles.find(p => p.user_id === r.reported_user_id);
+      return {
+        ...r,
+        reporter_username: u1?.username,
+        reporter_display_name: p1?.display_name,
+        reporter_avatar_url: p1?.avatar_url,
+        reported_username: u2?.username,
+        reported_display_name: p2?.display_name,
+        reported_avatar_url: p2?.avatar_url,
+        reported_is_banned: u2?.is_banned || false
+      };
+    });
+  }
+
+  public async updateReport(id: string, updates: { status?: string; action_taken?: string; admin_notes?: string }): Promise<void> {
+    const r = this.memoryStore.reports.find(item => item.id === id);
+    if (r) {
+      if (updates.status) r.status = updates.status;
+      if (updates.action_taken) r.action_taken = updates.action_taken;
+      if (updates.admin_notes !== undefined) r.admin_notes = updates.admin_notes;
+      this.saveToLocal();
+    }
+
+    if (this.pgPool) {
+      try {
+        await this.pgPool.query(`
+          UPDATE reports
+          SET 
+            status = COALESCE($2, status),
+            action_taken = COALESCE($3, action_taken),
+            admin_notes = COALESCE($4, admin_notes)
+          WHERE id = $1
+        `, [id, updates.status || null, updates.action_taken || null, updates.admin_notes || null]);
+      } catch (e) {
+        console.warn('[Database] Erro PG updateReport:', e);
+      }
+    }
+  }
+
+  public async setUserBanned(userId: string, isBanned: boolean): Promise<void> {
+    const u = this.memoryStore.users.find(item => item.id === userId);
+    if (u) {
+      u.is_banned = isBanned;
+      this.saveToLocal();
+    }
+
+    if (this.pgPool) {
+      try {
+        await this.pgPool.query(`UPDATE users SET is_banned = $2 WHERE id = $1`, [userId, isBanned]);
+      } catch (e) {
+        console.warn('[Database] Erro PG setUserBanned:', e);
+      }
+    }
   }
 
   // ==========================================

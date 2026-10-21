@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(32) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     recovery_hash VARCHAR(255) NOT NULL,
+    is_banned BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -79,15 +80,23 @@ CREATE TABLE IF NOT EXISTS blocked_users (
 );
 CREATE INDEX IF NOT EXISTS idx_blocked_blocker ON blocked_users(blocker_id);
 
--- 8. Reports (Spam & abuse reporting)
+-- 8. Reports (Spam & abuse reporting, WhatsApp style)
 CREATE TABLE IF NOT EXISTS reports (
     id VARCHAR(36) PRIMARY KEY,
     reporter_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     reported_user_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    conversation_id VARCHAR(36),
+    message_id VARCHAR(36),
     reason VARCHAR(255) NOT NULL,
     details TEXT,
+    recent_messages JSONB,
+    status VARCHAR(50) DEFAULT 'pending',
+    action_taken VARCHAR(100) DEFAULT 'none',
+    admin_notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
+CREATE INDEX IF NOT EXISTS idx_reports_reported_user ON reports(reported_user_id);
 
 -- 9. Conversations
 CREATE TABLE IF NOT EXISTS conversations (

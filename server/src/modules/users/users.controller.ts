@@ -477,16 +477,28 @@ export class UsersController {
   public static async reportUser(req: AuthRequest, res: Response) {
     try {
       const reporterId = req.user!.userId;
-      const { reportedUserId, reason, details } = req.body;
+      const { reportedUserId, reason, details, conversationId, messageId, recentMessages } = req.body;
+      if (!reportedUserId) {
+        return res.status(400).json({ error: 'reportedUserId é obrigatório.' });
+      }
+      if (reporterId === reportedUserId) {
+        return res.status(400).json({ error: 'Você não pode denunciar a si mesmo.' });
+      }
+
       const report = await db.createReport({
         id: uuidv4(),
         reporter_id: reporterId,
         reported_user_id: reportedUserId,
-        reason,
+        conversation_id: conversationId,
+        message_id: messageId,
+        reason: reason || 'Outro',
         details,
+        recent_messages: Array.isArray(recentMessages) ? recentMessages : [],
+        status: 'pending',
+        action_taken: 'none',
         created_at: new Date().toISOString()
       });
-      return res.status(201).json(report);
+      return res.status(201).json({ success: true, message: 'Denúncia recebida com sucesso.', report });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }

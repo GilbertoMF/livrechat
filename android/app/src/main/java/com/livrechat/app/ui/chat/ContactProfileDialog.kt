@@ -99,6 +99,7 @@ fun ContactProfileDialog(
     var showEditNicknameDialog by remember { mutableStateOf(false) }
     var editNicknameInput by remember { mutableStateOf("") }
     var isContactBlocked by remember { mutableStateOf(app.preferencesManager.isUserBlocked(otherUserId)) }
+    var showReportDialog by remember { mutableStateOf(false) }
 
     // Group specific state
     val currentConv by remember(conversationId) {
@@ -1420,6 +1421,33 @@ fun ContactProfileDialog(
                                         color = if (isContactBlocked) MaterialTheme.colorScheme.primary else DangerRed
                                     )
                                 }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                // Denunciar Contato (WhatsApp Style)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showReportDialog = true }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Report,
+                                        contentDescription = null,
+                                        tint = DangerRed,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(14.dp))
+                                    Text(
+                                        text = "Denunciar $displayTitle",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = DangerRed
+                                    )
+                                }
                             }
                         }
                     }
@@ -1537,6 +1565,24 @@ fun ContactProfileDialog(
             dismissButton = {
                 TextButton(onClick = { showBlockConfirmDialog = false }) {
                     Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (showReportDialog) {
+        ReportDialog(
+            conversationId = conversationId,
+            otherUserId = otherUserId,
+            otherDisplayName = displayTitle,
+            messages = messages,
+            reportedMessage = null,
+            onDismiss = { showReportDialog = false },
+            onReportSubmitted = { blocked ->
+                showReportDialog = false
+                if (blocked) {
+                    onBlockContact()
+                    onDismiss()
                 }
             }
         )

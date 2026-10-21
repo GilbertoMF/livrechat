@@ -136,6 +136,10 @@ export class AuthService {
       throw new Error('Nome de usuário ou senha incorretos.');
     }
 
+    if (user.is_banned) {
+      throw new Error('Esta conta foi suspensa por violar as diretrizes da comunidade.');
+    }
+
     const profile = await db.getProfile(user.id);
 
     // Create session

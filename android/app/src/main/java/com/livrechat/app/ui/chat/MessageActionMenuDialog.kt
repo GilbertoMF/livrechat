@@ -40,7 +40,8 @@ fun MessageActionMenuDialog(
     onPostToFlash: (() -> Unit)? = null,
     onCreateSticker: (() -> Unit)? = null,
     onSaveMedia: (() -> Unit)? = null,
-    onCopy: (() -> Unit)? = null
+    onCopy: (() -> Unit)? = null,
+    onReport: (() -> Unit)? = null
 ) {
     val quickReactions = listOf("👍", "❤️", "😂", "😮", "😢", "🙏", "👏")
     var showMoreEmojis by remember { mutableStateOf(false) }
@@ -248,6 +249,18 @@ fun MessageActionMenuDialog(
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
+
+                        if (!message.isOutgoing && onReport != null) {
+                            ActionMenuItem(
+                                icon = Icons.Default.Report,
+                                text = "Denunciar mensagem",
+                                tint = DangerRed,
+                                onClick = {
+                                    onReport()
+                                    onDismiss()
+                                }
+                            )
+                        }
 
                         ActionMenuItem(
                             icon = Icons.Default.Delete,

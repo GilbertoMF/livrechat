@@ -531,6 +531,8 @@ fun ChatScreen(
     var showAiSummaryDialog by remember { mutableStateOf(false) }
     var selectedMessageForAction by remember { mutableStateOf<MessageEntity?>(null) }
     var messageActionTarget by remember { mutableStateOf<MessageEntity?>(null) }
+    var showReportDialog by remember { mutableStateOf(false) }
+    var reportedMessageTarget by remember { mutableStateOf<MessageEntity?>(null) }
     var replyingToMessage by remember { mutableStateOf<MessageEntity?>(null) }
     var showCameraDialog by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -1900,6 +1902,21 @@ fun ChatScreen(
                                     Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFFFFD54F))
                                 }
                             )
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Denunciar", color = DangerRed) },
+                                onClick = {
+                                    showMenu = false
+                                    reportedMessageTarget = null
+                                    showReportDialog = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Report, contentDescription = null, tint = DangerRed)
+                                }
+                            )
                         }
                     }
                 }
@@ -3153,6 +3170,32 @@ fun ChatScreen(
             onInfo = {
                 showCryptoInfoDialog = true
                 messageActionTarget = null
+            },
+            onReport = {
+                reportedMessageTarget = target
+                showReportDialog = true
+                messageActionTarget = null
+            }
+        )
+    }
+
+    if (showReportDialog) {
+        ReportDialog(
+            conversationId = conversationId,
+            otherUserId = otherUserId,
+            otherDisplayName = otherDisplayName,
+            messages = messages,
+            reportedMessage = reportedMessageTarget,
+            onDismiss = {
+                showReportDialog = false
+                reportedMessageTarget = null
+            },
+            onReportSubmitted = { blocked ->
+                showReportDialog = false
+                reportedMessageTarget = null
+                if (blocked) {
+                    onNavigateBack()
+                }
             }
         )
     }

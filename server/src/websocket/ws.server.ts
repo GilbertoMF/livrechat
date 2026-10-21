@@ -8,8 +8,8 @@ import { db, Message } from '../db/database';
 import { fcmService } from '../services/fcm.service';
 
 export const APP_VERSION_RULES = {
-  LATEST_VERSION_NAME: '1.1.39',
-  LATEST_VERSION_CODE: 49,
+  LATEST_VERSION_NAME: '1.1.40',
+  LATEST_VERSION_CODE: 50,
   MIN_SUPPORTED_VERSION_CODE: 13,
   DOWNLOAD_PORTAL_URL: '/download'
 };
@@ -41,7 +41,7 @@ export class WebSocketManager {
   }
 
   private setup() {
-    this.wss.on('connection', (ws: AuthenticatedSocket, req) => {
+    this.wss.on('connection', async (ws: AuthenticatedSocket, req) => {
       // 1. Authenticate via token query param or authorization header
       const parsedUrl = url.parse(req.url || '', true);
       const token = (parsedUrl.query.token as string) || req.headers['sec-websocket-protocol'];
@@ -53,6 +53,17 @@ export class WebSocketManager {
 
       try {
         const decoded = jwt.verify(token, CONFIG.JWT_SECRET) as { userId: string; username: string };
+
+        // Verify if account is suspended / banned
+        const user = await db.findUserById(decoded.userId);
+        if (user?.is_banned) {
+          try {
+            ws.send(JSON.stringify({ type: 'account_suspended', message: 'Sua conta foi suspensa por violar as diretrizes da comunidade.' }));
+          } catch (_) {}
+          ws.close(4003, 'Conta suspensa');
+          return;
+        }
+
         ws.userId = decoded.userId;
         ws.username = decoded.username;
         ws.isAlive = true;
@@ -879,5 +890,18 @@ export class WebSocketManager {
 
   public getOnlineCount(): number {
     return this.getOnlineUserIds().length;
+  }
+
+  public disconnectUser(userId: string, reason: string = 'Sua conta foi suspensa pela moderação.'): void {
+    const sockets = this.userSockets.get(userId);
+    if (sockets) {
+      for (const ws of sockets) {
+        try {
+          ws.send(JSON.stringify({ type: 'account_suspended', message: reason }));
+          ws.close(4003, reason);
+        } catch (_) {}
+      }
+      this.userSockets.delete(userId);
+    }
   }
 }
