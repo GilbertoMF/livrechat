@@ -232,10 +232,6 @@ interface ApiService {
     @DELETE("api/users/burner-id")
     suspend fun destroyBurnerId(): Response<BaseResponse>
 
-    // Community Stats & Server Central
-    @GET("api/community/stats")
-    suspend fun getCommunityStats(): Response<CommunityStatsDto>
-
     // LivreTube (Privacy Video & YouTube Frontend)
     @GET("api/livretube/trending")
     suspend fun getLivreTubeTrending(
@@ -367,29 +363,6 @@ data class LivreGameDto(
     val description: String = "",
     val maxPlayers: Int = 2,
     val gameCode: String? = null
-)
-
-data class CommunityStatsDto(
-    val totalAccounts: Int = 0,
-    val onlineUsers: Int = 0,
-    val offlineUsers: Int = 0,
-    val activeToday: Int = 0,
-    val activeThisWeek: Int = 0,
-    val totalConversations: Int = 0,
-    val totalMessages: Int = 0,
-    val users: List<CommunityUserItemDto> = emptyList(),
-    val uptimeSeconds: Long = 0L,
-    val timestamp: String = ""
-)
-
-data class CommunityUserItemDto(
-    val id: String = "",
-    val username: String = "",
-    val displayName: String = "",
-    val avatarUrl: String? = null,
-    val isOnline: Boolean = false,
-    val lastActive: String? = null,
-    val createdAt: String? = null
 )
 
 

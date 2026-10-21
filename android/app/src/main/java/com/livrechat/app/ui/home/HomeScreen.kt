@@ -198,8 +198,6 @@ fun HomeScreen(
     val isVoicePlayerPlaying by statusVoicePlayer.isPlaying.collectAsState()
     val voicePlayerProgress by statusVoicePlayer.progress.collectAsState()
 
-    var showCommunityCentralDialog by remember { mutableStateOf(false) }
-
     var showCreateImageStatusDialog by remember { mutableStateOf(false) }
     var newTextStatusContent by remember { mutableStateOf("") }
     var newStatusBgColor by remember { mutableStateOf("#1E88E5") }
@@ -2257,13 +2255,7 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { showCommunityCentralDialog = true }
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("LivreChat", fontWeight = FontWeight.Bold, fontSize = 21.sp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Surface(
@@ -2288,16 +2280,6 @@ fun HomeScreen(
                         ) {
                             Icon(Icons.Default.DeleteSweep, contentDescription = "Limpar Histórico", tint = DangerRed)
                         }
-                    }
-                    com.livrechat.app.ui.common.TooltipIconButton(
-                        tooltip = "Central de Usuários & Comunidade",
-                        onClick = { showCommunityCentralDialog = true }
-                    ) {
-                        Icon(
-                            Icons.Default.Group,
-                            contentDescription = "Central de Usuários",
-                            tint = Color(0xFFA78BFA)
-                        )
                     }
                     com.livrechat.app.ui.common.TooltipIconButton(
                         tooltip = "Pesquisar conversas e contatos",
@@ -2941,12 +2923,6 @@ fun HomeScreen(
     com.livrechat.app.ui.livretube.LivreTubePlayerOverlay(
         modifier = Modifier.fillMaxSize()
     )
-
-    if (showCommunityCentralDialog) {
-        com.livrechat.app.ui.community.CommunityCentralDialog(
-            onDismissRequest = { showCommunityCentralDialog = false }
-        )
-    }
     }
 }
 

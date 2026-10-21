@@ -76,14 +76,14 @@ const CDN_APKS_BASE = 'https://pub-425fc23f99ae41f4bf6e29d5f0d07e12.r2.dev/apks'
 // App Versions API
 app.get('/api/versions/check', (req, res) => {
   const clientVersionCode = parseInt((req.query.versionCode as string) || (req.headers['x-app-version-code'] as string) || '0', 10);
-  const LATEST_CODE = 48;
+  const LATEST_CODE = 49;
   const MIN_SUPPORTED = 13;
   const isUpdateAvailable = clientVersionCode < LATEST_CODE;
   const isMandatory = clientVersionCode < MIN_SUPPORTED;
 
   res.status(200).json({
     clientVersionCode,
-    latestVersion: '1.1.38',
+    latestVersion: '1.1.39',
     latestVersionCode: LATEST_CODE,
     minSupportedVersionCode: MIN_SUPPORTED,
     isUpdateAvailable,
@@ -91,10 +91,10 @@ app.get('/api/versions/check', (req, res) => {
     title: isMandatory ? 'Atualização Obrigatória' : 'Atualização Disponível',
     message: isMandatory
       ? 'Versões incompatíveis não podem se comunicar por segurança. Atualize para a versão mais recente.'
-      : 'Nova versão 1.1.38: Central de Usuários & Estatísticas da Comunidade em tempo real (online, offline, contas criadas, ativos) no app e painel web!',
-    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.38-arm64.apk`,
-    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.38-armv7.apk`,
-    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.38-universal.apk`,
+      : 'Nova versão 1.1.39: Melhorias de estabilidade, sincronização e privacidade.',
+    apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.39-arm64.apk`,
+    apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.39-armv7.apk`,
+    apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.39-universal.apk`,
     downloadPortalUrl: '/download'
   });
 });
@@ -102,27 +102,37 @@ app.get('/api/versions/check', (req, res) => {
 app.get('/api/versions', (req, res) => {
   res.status(200).json({
     latest: {
-      version: '1.1.38',
-      versionCode: 48,
+      version: '1.1.39',
+      versionCode: 49,
       minSupportedVersionCode: 13,
       releaseDate: '2026-10-21',
       mandatory: false,
       title: 'Atualização Disponível',
-      message: 'Versão 1.1.38: Nova Central de Usuários e Métricas da Comunidade em tempo real (online, offline, ativos, total de contas criadas), disponível no app e através de painel web responsivo.',
-      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.38-arm64.apk`,
-      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.38-armv7.apk`,
-      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.38-universal.apk`,
+      message: 'Versão 1.1.39: Otimizações de estabilidade, desempenho nas conexões e melhorias gerais de privacidade.',
+      apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.39-arm64.apk`,
+      apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.39-armv7.apk`,
+      apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.39-universal.apk`,
       downloadPortalUrl: '/download',
       sizeMbArm64: '25.7 MB',
       sizeMbUniversal: '32.2 MB'
     },
     versions: [
       {
+        version: '1.1.39',
+        versionCode: 49,
+        releaseDate: '2026-10-21',
+        isLatest: true,
+        changelog: '1. Otimizações de desempenho e consumo de memória; 2. Ajustes na privacidade da rede e estabilização de conexões P2P.',
+        apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.39-arm64.apk`,
+        apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.39-armv7.apk`,
+        apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.39-universal.apk`
+      },
+      {
         version: '1.1.38',
         versionCode: 48,
         releaseDate: '2026-10-21',
-        isLatest: true,
-        changelog: '1. Central de Usuários & Métricas da Comunidade: visualize total de contas criadas, usuários online em tempo real, usuários offline e ativos nas últimas 24h; 2. Filtros interativos (Todos, Online, Ativos) com busca instantânea por nome ou @username; 3. Painel Web público e responsivo acessível pelo navegador em /central e /stats; 4. Acesso em 1 toque na barra superior do LivreChat ou nas Configurações.',
+        isLatest: false,
+        changelog: 'Melhorias internas no sistema de métricas do servidor.',
         apkArm64Url: `${CDN_APKS_BASE}/livrechat-v1.1.38-arm64.apk`,
         apkArmv7Url: `${CDN_APKS_BASE}/livrechat-v1.1.38-armv7.apk`,
         apkUniversalUrl: `${CDN_APKS_BASE}/livrechat-v1.1.38-universal.apk`
@@ -729,9 +739,16 @@ export const wsManager = new WebSocketManager(server);
 netplayManager.init(server);
 
 // ==========================================
-// COMMUNITY & SERVER STATS (Central de Usuários)
+// COMMUNITY & SERVER STATS (Central de Usuários Privada - Apenas Web Admin)
 // ==========================================
+const ADMIN_PIN = process.env.ADMIN_PIN || 'admin2026';
+
 app.get('/api/community/stats', async (req, res) => {
+  const pin = (req.headers['x-admin-pin'] as string) || (req.query.key as string) || (req.query.pin as string);
+  if (pin !== ADMIN_PIN) {
+    return res.status(401).json({ error: 'Acesso restrito ao Administrador', code: 'UNAUTHORIZED' });
+  }
+
   try {
     const onlineUserIds = wsManager.getOnlineUserIds();
     const stats = await db.getCommunityStats(onlineUserIds);
@@ -742,14 +759,14 @@ app.get('/api/community/stats', async (req, res) => {
   }
 });
 
-app.get(['/central', '/stats', '/painel'], async (req, res) => {
+app.get(['/central', '/stats', '/painel', '/admin'], async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LivreChat — Central da Comunidade & Usuários</title>
+  <title>LivreChat — Central do Administrador</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -808,6 +825,16 @@ app.get(['/central', '/stats', '/painel'], async (req, res) => {
 
     .btn-refresh { background: #8B5CF6; color: #FFF; border: none; padding: 8px 16px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; gap: 6px; }
     .btn-refresh:hover { background: #7C3AED; }
+    .btn-logout { background: #232B3B; color: #9CA3AF; border: 1px solid #374151; padding: 8px 14px; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+    .btn-logout:hover { background: #374151; color: #FFF; }
+
+    /* Auth Gate Modal */
+    #loginGate { position: fixed; inset: 0; background: rgba(11, 14, 20, 0.96); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 20px; }
+    .login-card { background: #151A23; border: 1px solid #374151; border-radius: 20px; padding: 36px 28px; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 16px 40px rgba(0,0,0,0.6); }
+    .pin-input { width: 100%; padding: 12px 16px; border-radius: 12px; background: #0B0E14; border: 1px solid #232B3B; color: #fff; font-size: 15px; margin-top: 18px; outline: none; text-align: center; letter-spacing: 2px; }
+    .pin-input:focus { border-color: #8B5CF6; }
+    .btn-login { width: 100%; margin-top: 14px; padding: 12px; border-radius: 12px; background: #8B5CF6; color: #fff; border: none; font-weight: 700; font-size: 14px; cursor: pointer; transition: background 0.2s; }
+    .btn-login:hover { background: #7C3AED; }
 
     @media (max-width: 640px) {
       .users-table th:nth-child(3), .users-table td:nth-child(3) { display: none; }
@@ -816,21 +843,34 @@ app.get(['/central', '/stats', '/painel'], async (req, res) => {
   </style>
 </head>
 <body>
+  <!-- Modal de Autenticação Admin -->
+  <div id="loginGate" style="display: none;">
+    <div class="login-card">
+      <div style="font-size: 42px; margin-bottom: 12px;">🛡️</div>
+      <h2 style="color: #FFFFFF; font-size: 20px; font-weight: 800; margin-bottom: 6px;">Central do Administrador</h2>
+      <p style="color: #9CA3AF; font-size: 13px; line-height: 1.5;">Painel privado do servidor LivreChat. Digite sua senha de Administrador para prosseguir.</p>
+      <input type="password" id="pinInput" class="pin-input" placeholder="Senha de Admin" onkeydown="if(event.key==='Enter') loginWithPin()">
+      <div id="loginError" style="color: #EF4444; font-size: 12px; margin-top: 10px; display: none; font-weight: 600;">Senha incorreta. Tente novamente!</div>
+      <button class="btn-login" onclick="loginWithPin()">Acessar Central</button>
+    </div>
+  </div>
+
   <div class="container">
     <header class="header">
       <div class="logo-area">
         <div class="logo-badge">💬</div>
         <div class="title">
           <h1>LivreChat <span>Central</span></h1>
-          <p>Monitoramento e estatísticas em tempo real da rede</p>
+          <p>Painel administrativo de monitoramento em tempo real</p>
         </div>
       </div>
-      <div style="display: flex; align-items: center; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
         <div class="live-status">
           <div class="pulse-dot"></div>
           <span>Ao Vivo</span>
         </div>
         <button class="btn-refresh" onclick="fetchStats()">🔄 Atualizar</button>
+        <button class="btn-logout" onclick="logoutAdmin()">🔒 Bloquear</button>
       </div>
     </header>
 
@@ -870,7 +910,7 @@ app.get(['/central', '/stats', '/painel'], async (req, res) => {
     </div>
 
     <div class="section-header">
-      <h2>Lista de Membros da Comunidade</h2>
+      <h2>Lista de Membros Cadastrados</h2>
       <input type="text" id="searchInput" class="search-box" placeholder="Pesquisar por nome ou @username..." oninput="filterUsers()">
     </div>
 
@@ -893,6 +933,39 @@ app.get(['/central', '/stats', '/painel'], async (req, res) => {
 
   <script>
     let allUsers = [];
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const keyFromUrl = urlParams.get('key') || urlParams.get('pin');
+    if (keyFromUrl) {
+      localStorage.setItem('admin_pin', keyFromUrl);
+    }
+
+    function getAdminPin() {
+      return localStorage.getItem('admin_pin') || '';
+    }
+
+    function showLogin() {
+      document.getElementById('loginGate').style.display = 'flex';
+      setTimeout(() => document.getElementById('pinInput').focus(), 100);
+    }
+
+    function hideLogin() {
+      document.getElementById('loginGate').style.display = 'none';
+      document.getElementById('loginError').style.display = 'none';
+    }
+
+    function loginWithPin() {
+      const pin = document.getElementById('pinInput').value.trim();
+      if (!pin) return;
+      localStorage.setItem('admin_pin', pin);
+      fetchStats();
+    }
+
+    function logoutAdmin() {
+      localStorage.removeItem('admin_pin');
+      document.getElementById('pinInput').value = '';
+      showLogin();
+    }
 
     function formatTimeAgo(isoString) {
       if (!isoString) return 'Nunca';
@@ -926,8 +999,25 @@ app.get(['/central', '/stats', '/painel'], async (req, res) => {
     }
 
     async function fetchStats() {
+      const pin = getAdminPin();
+      if (!pin) {
+        showLogin();
+        return;
+      }
+
       try {
-        const res = await fetch('/api/community/stats');
+        const res = await fetch('/api/community/stats', {
+          headers: { 'x-admin-pin': pin }
+        });
+
+        if (res.status === 401) {
+          localStorage.removeItem('admin_pin');
+          document.getElementById('loginError').style.display = 'block';
+          showLogin();
+          return;
+        }
+
+        hideLogin();
         const data = await res.json();
 
         document.getElementById('totalAccounts').textContent = data.totalAccounts ?? 0;
@@ -988,7 +1078,9 @@ app.get(['/central', '/stats', '/painel'], async (req, res) => {
     }
 
     fetchStats();
-    setInterval(fetchStats, 5000);
+    setInterval(() => {
+      if (getAdminPin()) fetchStats();
+    }, 5000);
   </script>
 </body>
 </html>`);

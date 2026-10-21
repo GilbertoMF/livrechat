@@ -155,7 +155,6 @@ fun SettingsScreen(
     var showBlockedDialog by remember { mutableStateOf(false) }
     var showRecoveryPhraseDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
-    var showCommunityCentralDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     var activeSessionsList by remember { mutableStateOf<List<SessionDto>>(emptyList()) }
@@ -2152,12 +2151,6 @@ fun SettingsScreen(
         )
     }
 
-    if (showCommunityCentralDialog) {
-        com.livrechat.app.ui.community.CommunityCentralDialog(
-            onDismissRequest = { showCommunityCentralDialog = false }
-        )
-    }
-
     // MAIN UI: Modern Futuristic Settings Design
     Scaffold(
         topBar = {
@@ -2443,13 +2436,6 @@ fun SettingsScreen(
 
             item {
                 SettingsCard {
-                    SettingsRowItem(
-                        icon = Icons.Default.Groups,
-                        title = "Central de Usuários & Estatísticas",
-                        subtitle = "Usuários online, contas criadas, ativos hoje e painel web",
-                        onClick = { showCommunityCentralDialog = true }
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     SettingsRowItem(
                         icon = Icons.Default.SystemUpdate,
                         title = "Atualizações do Aplicativo",
